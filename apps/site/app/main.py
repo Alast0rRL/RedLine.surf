@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from . import models, database, utils
-from .paths import SITE_DIR
+from .paths import SITE_DIR, UI_DIR
 
 # 1. Инициализация БД (создает таблицы при запуске)
 models.Base.metadata.create_all(bind=database.engine)
@@ -15,6 +15,8 @@ app = FastAPI(title="Redline Server")
 # 2. Подключение папок (пути от apps/site, а не от текущей директории)
 STATIC_DIR = SITE_DIR / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Общая дизайн-система (packages/redline-ui/src): токены, красные линии
+app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")
 
 # Шаблоны (твои HTML файлы)
 templates = Jinja2Templates(directory=SITE_DIR / "templates")

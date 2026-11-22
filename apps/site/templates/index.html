@@ -13,7 +13,12 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
-    
+
+    <!-- Дизайн-система Redline (packages/redline-ui) -->
+    <link rel="stylesheet" href="/ui/tokens.css">
+    <link rel="stylesheet" href="/ui/red-lines.css">
+    <script type="module" src="/ui/red-lines.js"></script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/studio-freight/lenis@1.0.29/bundled/lenis.min.js"></script>
@@ -23,14 +28,15 @@
             darkMode: 'class',
             theme: {
                 extend: {
+                    // Цвета из tokens.css; <alpha-value> сохраняет модификаторы вида bg-redline-red/50
                     colors: {
-                        'redline-red': '#C4001D',
-                        'dark-bg': '#0a0a0a',
-                        'dark-gray': '#121212',
+                        'redline-red': 'rgb(var(--rl-red-500-rgb) / <alpha-value>)',
+                        'dark-bg': 'rgb(var(--rl-ink-950-rgb) / <alpha-value>)',
+                        'dark-gray': 'rgb(var(--rl-ink-900-rgb) / <alpha-value>)',
                     },
                     fontFamily: {
-                        montserrat: ['Montserrat', 'sans-serif'],
-                        'open-sans': ['Open Sans', 'sans-serif'],
+                        montserrat: ['var(--rl-font-display)'],
+                        'open-sans': ['var(--rl-font-body)'],
                     }
                 }
             }
@@ -38,8 +44,8 @@
     </script>
 
     <style>
-        body { font-family: 'Open Sans', sans-serif; overflow-x: hidden; }
-        h1, h2, h3, h4 { font-family: 'Montserrat', sans-serif; }
+        body { font-family: var(--rl-font-body); overflow-x: hidden; }
+        h1, h2, h3, h4 { font-family: var(--rl-font-display); }
         
         /* --- LENIS SMOOTH SCROLL STYLES --- */
         html.lenis, html.lenis body { height: auto; }
@@ -53,40 +59,40 @@
             position: fixed;
             inset: 0;
             pointer-events: none;
-            z-index: 40;
+            z-index: var(--rl-z-glow);
             will-change: background;
         }
 
         .dark #glow-overlay {
             background: radial-gradient(
-                600px circle at var(--mouse-x, -100%) var(--mouse-y, -100%), 
-                rgba(196, 0, 29, 0.12) 0%, 
-                rgba(196, 0, 29, 0.04) 30%,
+                600px circle at var(--mouse-x, -100%) var(--mouse-y, -100%),
+                rgb(var(--rl-red-500-rgb) / 0.12) 0%,
+                rgb(var(--rl-red-500-rgb) / 0.04) 30%,
                 transparent 70%
             );
         }
         .dark.is-hovering #glow-overlay {
             background: radial-gradient(
-                800px circle at var(--mouse-x) var(--mouse-y), 
-                rgba(196, 0, 29, 0.2) 0%, 
-                rgba(196, 0, 29, 0.06) 35%,
+                800px circle at var(--mouse-x) var(--mouse-y),
+                rgb(var(--rl-red-500-rgb) / 0.2) 0%,
+                rgb(var(--rl-red-500-rgb) / 0.06) 35%,
                 transparent 80%
             );
         }
 
         html:not(.dark) #glow-overlay {
             background: radial-gradient(
-                500px circle at var(--mouse-x, -100%) var(--mouse-y, -100%), 
-                rgba(196, 0, 29, 0.14) 0%,
-                rgba(196, 0, 29, 0.04) 40%,
+                500px circle at var(--mouse-x, -100%) var(--mouse-y, -100%),
+                rgb(var(--rl-red-500-rgb) / 0.14) 0%,
+                rgb(var(--rl-red-500-rgb) / 0.04) 40%,
                 transparent 80%
             );
         }
         html:not(.dark).is-hovering #glow-overlay {
             background: radial-gradient(
-                600px circle at var(--mouse-x) var(--mouse-y), 
-                rgba(196, 0, 29, 0.22) 0%,
-                rgba(196, 0, 29, 0.06) 45%,
+                600px circle at var(--mouse-x) var(--mouse-y),
+                rgb(var(--rl-red-500-rgb) / 0.22) 0%,
+                rgb(var(--rl-red-500-rgb) / 0.06) 45%,
                 transparent 85%
             );
         }
@@ -105,42 +111,24 @@
 
         .blob {
             position: absolute; width: 600px; height: 600px;
-            background: radial-gradient(circle, rgba(196, 0, 29, 0.08) 0%, transparent 70%);
-            filter: blur(80px); border-radius: 50%; z-index: -1; pointer-events: none;
+            background: radial-gradient(circle, rgb(var(--rl-red-500-rgb) / 0.08) 0%, transparent 70%);
+            filter: blur(var(--rl-blur-blob)); border-radius: 50%; z-index: -1; pointer-events: none;
             animation: blob-float 25s infinite alternate;
         }
         @keyframes blob-float { 0% { transform: translate(-50px, -50px); } 100% { transform: translate(100px, 100px); } }
 
-        .animated-lines {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: hidden;
-        }
-        .animated-lines::before, .animated-lines::after {
-            content: ''; position: absolute; width: 2px; height: 250%;
-            background: linear-gradient(transparent, #C4001D, transparent);
-            top: -75%; transform: rotate(45deg); opacity: 0;
-        }
-        .dark .animated-lines::before, .dark .animated-lines::after { box-shadow: 0 0 30px rgba(196, 0, 29, 0.4); }
-        .animated-lines.initial-state::before { animation: enterLeft 1.5s forwards; }
-        .animated-lines.initial-state::after { animation: enterRight 1.5s forwards; }
-        .animated-lines.loop-state::before { opacity: 1; animation: breatheLeft 12s infinite; }
-        .animated-lines.loop-state::after { opacity: 1; animation: breatheRight 12s infinite; }
+        /* Красные линии — <rl-red-lines> из /ui/red-lines.css */
 
-        .reveal { opacity: 0; transform: translateY(30px); transition: all 1s cubic-bezier(0.16, 1, 0.3, 1); }
+        .reveal { opacity: 0; transform: translateY(30px); transition: all var(--rl-duration-reveal) var(--rl-ease-out-expo); }
         .reveal.active { opacity: 1; transform: translateY(0); }
 
         .waves { position: absolute; bottom: 0; width: 100%; height: 80px; z-index: 10; pointer-events: none; }
-        .parallax > use { animation: move-forever 25s cubic-bezier(.55,.5,.45,.5) infinite; }
+        .parallax > use { animation: move-forever 25s var(--rl-ease-wave) infinite; }
         @keyframes move-forever { 0% { transform: translate3d(-90px,0,0); } 100% { transform: translate3d(85px,0,0); } }
 
         #toast.show { opacity: 1; transform: translate(-50%, -20px); }
 
-        @keyframes enterLeft { 0% { left: -50%; opacity: 0; } 100% { left: 10%; opacity: 1; } }
-        @keyframes enterRight { 0% { left: 150%; opacity: 0; } 100% { left: 90%; opacity: 1; } }
-        @keyframes breatheLeft { 0%, 100% { left: 10%; } 50% { left: 25%; } }
-        @keyframes breatheRight { 0%, 100% { left: 90%; } 50% { left: 75%; } }
-
-        .skeleton { background: linear-gradient(90deg, #222 25%, #333 50%, #222 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; }
+        .skeleton { background: linear-gradient(90deg, var(--rl-ink-800) 25%, var(--rl-ink-700) 50%, var(--rl-ink-800) 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; }
         @keyframes skeleton-loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
     </style>
 </head>
@@ -189,7 +177,7 @@
         <div class="blob top-20 left-10 opacity-40"></div>
         <div class="blob bottom-20 right-10 opacity-40"></div>
         
-        <div id="lines-container" class="animated-lines initial-state"></div>
+        <rl-red-lines id="lines-container"></rl-red-lines>
         
         <div class="relative z-20 px-4 mt-16">
             <div class="reveal inline-block mb-4 px-4 py-1 border border-redline-red text-redline-red text-[10px] font-black uppercase tracking-[0.3em] rounded-full">Season 1: No Wipe</div>
@@ -201,10 +189,10 @@
             </div>
 
             <div class="reveal flex flex-col md:flex-row items-center justify-center gap-6 relative z-50">
-                <button onclick="toggleModal('rules-modal')" class="group relative flex items-center justify-center w-full md:w-80 h-24 bg-redline-red text-white rounded-3xl shadow-[0_20px_50px_rgba(196,0,29,0.3)] transition-all duration-500 hover:-translate-y-2 active:scale-95 overflow-hidden">
+                <button onclick="toggleModal('rules-modal')" class="group relative flex items-center justify-center w-full md:w-80 h-24 bg-redline-red text-white rounded-3xl shadow-[0_20px_50px_rgb(var(--rl-red-500-rgb)/0.3)] transition-all duration-500 hover:-translate-y-2 active:scale-95 overflow-hidden">
                     <span class="text-lg font-black uppercase tracking-[0.2em]">Играть сейчас</span>
                 </button>
-                <a href="https://discord.gg/F9JJpa5VsE" target="_blank" class="group relative flex items-center justify-center w-full md:w-80 h-24 bg-[#5865F2] text-white rounded-3xl hover:-translate-y-2 transition-all duration-500 shadow-xl overflow-hidden">
+                <a href="https://discord.gg/F9JJpa5VsE" target="_blank" class="group relative flex items-center justify-center w-full md:w-80 h-24 bg-[color:var(--rl-discord)] text-white rounded-3xl hover:-translate-y-2 transition-all duration-500 shadow-xl overflow-hidden">
                     <span class="text-lg font-black uppercase tracking-[0.2em]">Наш Discord</span>
                 </a>
             </div>
@@ -526,15 +514,6 @@
                 updateIcons(); 
             });
 
-            // Animated lines
-            const linesContainer = document.getElementById('lines-container');
-            setTimeout(() => { 
-                if(linesContainer) { 
-                    linesContainer.classList.remove('initial-state'); 
-                    linesContainer.classList.add('loop-state'); 
-                } 
-            }, 1500);
-
             // Back to top
             const backToTop = document.getElementById('back-to-top');
             window.addEventListener('scroll', () => {
@@ -610,7 +589,8 @@ setInterval(updateOnlineStatus, 120000);
         function confirmAndCopyIP() {
             copyToClipboard('redline.necr0manth.dev');
             toggleModal('rules-modal');
-            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#C4001D', '#ffffff'] });
+            const red = getComputedStyle(document.documentElement).getPropertyValue('--rl-red-500').trim();
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: [red, '#ffffff'] });
         }
 
         function copySocial(text) {
