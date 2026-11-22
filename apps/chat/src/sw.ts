@@ -1,0 +1,98 @@
+/// <reference lib="webworker" />
+import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
+import { NavigationRoute, registerRoute } from 'workbox-routing';
+
+declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> };
+
+/* ---------- офлайн-оболочка ---------- */
+cleanupOutdatedCaches();
+precacheAndRoute(self.__WB_MANIFEST);
+// config.json не кешируем — он должен меняться вместе с .env на сервере
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/config\.json$/] }));
+
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'SKIP_WAITING') void self.skipWaiting();
+});
+
+/* ---------- push ---------- */
+interface PushPayload {
+  event_id?: string;
+  room_id?: string;
+  type?: string;
+  sender?: string;
+  sender_display_name?: string;
+  room_name?: string;
+  msgtype?: string;
+  voice?: boolean;
+  body?: string;
+  unread?: number;
+}
+
+function describe(p: PushPayload): string {
+  // в E2E-комнатах сервер не знает текста — показываем общий
+  if (p.type === 'm.room.encrypted') return 'Новое сообщение';
+  if (p.voice) return '🎤 Голосовое сообщение';
+  switch (p.msgtype) {
+    case 'm.image': return '📷 Фото';
+    case 'm.audio': return '🎵 Аудио';
+    case 'm.file': return '📎 Файл';
+    case 'm.video': return '🎬 Видео';
+    default: return p.body || 'Новое сообщение';
+  }
+}
+
+self.addEventListener('push', (event) => {
+  let p: PushPayload = {};
+  try {
+    p = event.data?.json() ?? {};
+  } catch {
+    /* пустой push — просто покажем общее уведомление */
+  }
+
+  event.waitUntil(
+    (async () => {
+      const nav = self.navigator as WorkerNavigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+      if (typeof p.unread === 'number') {
+        await (p.unread > 0 ? nav.setAppBadge?.(p.unread) : nav.clearAppBadge?.())?.catch(() => {});
+      }
+      // счётчик обнулился (прочитали на другом устройстве) — убираем уведомления
+      if (!p.event_id) {
+        if (p.unread === 0) (await self.registration.getNotifications()).forEach((n) => n.close());
+        return;
+      }
+      // приложение открыто и видно — оно само покажет новое
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      if (windows.some((w) => w.visibilityState === 'visible' && w.focused)) return;
+
+      const isGroup = p.room_name && p.sender_display_name && p.room_name !== p.sender_display_name;
+      const title = (isGroup ? p.room_name : p.sender_display_name || p.room_name) || 'Redline';
+      const body = isGroup ? `${p.sender_display_name}: ${describe(p)}` : describe(p);
+      await self.registration.showNotification(title, {
+        body,
+        tag: p.room_id,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/badge-96.png',
+        data: { room_id: p.room_id },
+        // renotify есть в браузерах, но не в типах TS
+        ...({ renotify: true } as object),
+      });
+    })(),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const roomId: string | undefined = event.notification.data?.room_id;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const win = windows[0];
+      if (win) {
+        await win.focus();
+        if (roomId) win.postMessage({ type: 'open-room', roomId });
+        return;
+      }
+      await self.clients.openWindow(roomId ? `/#/room/${encodeURIComponent(roomId)}` : '/');
+    })(),
+  );
+});
