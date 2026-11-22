@@ -45,7 +45,11 @@ export function usePinUnlock(
     }
     if (security !== 'needs-unlock' || running.current) return;
     const n = attempts.get(client) ?? 0;
-    if (n >= MAX_AUTO_ATTEMPTS) return;
+    if (n >= MAX_AUTO_ATTEMPTS) {
+      // попытки кончились, а ключи так и не открылись: показываем «повторить»
+      setFailed(true);
+      return;
+    }
     attempts.set(client, n + 1);
     void run();
   }, [silent, security, client, run]);

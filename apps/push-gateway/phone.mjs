@@ -204,6 +204,9 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
     send(res, 200, { mask });
   }
 
+  /** Блокировки входа по номеру: в памяти, по ключу номера (есть он в базе или нет). */
+  const locks = new Map();
+
   async function login(req, res) {
     if (!ipAllowed(clientIp(req))) {
       return send(res, 429, { error: 'Слишком много попыток, попробуйте через 15 минут' });
@@ -216,24 +219,27 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
     const key = recordKey(phone);
     const rec = db[key];
     const now = Date.now();
-    if (rec && rec.lockedUntil > now) {
+    // Счётчик ошибок ведём для любого номера, есть он в базе или нет:
+    // иначе по 429 можно было бы узнать, какие номера зарегистрированы.
+    const st = locks.get(key);
+    if (st && st.until > now) {
       return send(res, 429, { error: 'Слишком много попыток, попробуйте через 15 минут' });
     }
     const match = safeEqualHex(sha256hex('check\n' + body.proof), rec ? rec.check : dummyCheck);
     if (!rec || !match) {
-      if (rec) {
-        rec.fails = (rec.fails ?? 0) + 1;
-        if (rec.fails >= MAX_FAILS) {
-          rec.fails = 0;
-          rec.lockedUntil = now + LOCK_MS;
-          save();
-          log('warn', 'phone record locked');
-          return send(res, 429, { error: 'Слишком много попыток, попробуйте через 15 минут' });
-        }
-        save();
+      const next = st && st.until <= now && st.until !== 0 ? { fails: 0, until: 0 } : (st ?? { fails: 0, until: 0 });
+      next.fails += 1;
+      if (next.fails >= MAX_FAILS) {
+        next.fails = 0;
+        next.until = now + LOCK_MS;
+        log('warn', 'phone login locked');
       }
+      if (locks.size > 10000) for (const [k, v] of locks) if (v.until <= now) locks.delete(k);
+      locks.set(key, next);
+      if (next.until > now) return send(res, 429, { error: 'Слишком много попыток, попробуйте через 15 минут' });
       return send(res, 401, { error: 'Неверный номер или PIN' });
     }
+    locks.delete(key);
     let payload;
     try {
       payload = decryptBlob(body.proof, rec.blob);

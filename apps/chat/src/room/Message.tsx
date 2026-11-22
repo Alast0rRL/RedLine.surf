@@ -4,6 +4,7 @@ import { formatTime, isPendingDecryption, isUndecryptable, isVoice, previewText 
 import { sanitizeMatrixHtml, stripReplyFallback } from '../lib/html';
 import type { MediaSource } from '../lib/media';
 import { isPinUser } from '../lib/pin';
+import { navigate } from '../hooks/useHashRoute';
 import { canAct, getReactions, toggleReaction } from '../lib/messageActions';
 import { findRenderer, isBotStyled, isBotUser } from '../bots/registry';
 import { Avatar, Icon, toast } from '../components/ui';
@@ -175,7 +176,7 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
   const actionable = canAct(ev);
   const senderId = ev.getSender() ?? '';
   const openUser = () => {
-    if (senderId) location.hash = `#/user/${encodeURIComponent(senderId)}`;
+    if (senderId) navigate.user(senderId);
   };
 
   // долгое нажатие (touch/pen); мышь — правая кнопка и кнопка «⋯»
