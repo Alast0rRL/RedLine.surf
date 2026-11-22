@@ -2,6 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useSyncExternalStore } fr
 import { EventType, NotificationCountType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useTimeline, isReadByOthers } from '../hooks/useTimeline';
 import { formatDay, formatDuration, isStateNotice, sameDay } from '../lib/events';
+import { isPinUser } from '../lib/pin';
 import { uploadStore } from '../lib/uploads';
 import { Button, Icon } from '../components/ui';
 import { Message, messageStamp } from './Message';
@@ -9,8 +10,8 @@ import { Message, messageStamp } from './Message';
 const GROUP_GAP_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 120;
 
-function stateText(ev: MatrixEvent): string | null {
-  const name = ev.sender?.name ?? ev.getSender();
+function stateText(ev: MatrixEvent, pin: boolean): string | null {
+  const name = ev.sender?.name ?? (pin ? 'Участник' : ev.getSender());
   const c = ev.getContent();
   switch (ev.getType()) {
     case EventType.RoomCreate:
@@ -21,7 +22,7 @@ function stateText(ev: MatrixEvent): string | null {
       return c.name ? `${name} переименовал(а) чат в «${c.name}»` : null;
     case EventType.RoomMember: {
       const prev = ev.getPrevContent().membership;
-      const target = c.displayname ?? ev.getStateKey();
+      const target = c.displayname ?? (pin ? 'участник' : ev.getStateKey());
       if (c.membership === 'invite') return `${name} пригласил(а) ${target}`;
       if (c.membership === 'join' && prev !== 'join') return `${target} в чате`;
       if (c.membership === 'leave' && ev.getStateKey() === ev.getSender()) return prev === 'invite' ? `${target} отклонил(а) приглашение` : `${target} вышел(а)`;
@@ -76,6 +77,7 @@ function Uploads({ roomId }: { roomId: string }) {
 export function Timeline({ client, room }: { client: MatrixClient; room: Room }) {
   const { events, loadOlder, loadingOlder, canLoadOlder, version } = useTimeline(client, room);
   const me = client.getUserId()!;
+  const pin = isPinUser(me);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true); // прилипать к низу при новых сообщениях
   const prevHeight = useRef(0);
@@ -168,7 +170,7 @@ export function Timeline({ client, room }: { client: MatrixClient; room: Room })
           const dayEl = newDay ? <div className="day-sep"><span>{formatDay(ev.getTs())}</span></div> : null;
 
           if (isStateNotice(ev)) {
-            const text = stateText(ev);
+            const text = stateText(ev, pin);
             return text ? <Fragment key={ev.getId() ?? i}>{dayEl}<div className="state-notice">{text}</div></Fragment> : dayEl && <Fragment key={ev.getId() ?? i}>{dayEl}</Fragment>;
           }
 

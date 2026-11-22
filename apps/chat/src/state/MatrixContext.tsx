@@ -1,23 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ClientEvent, HttpApiEvent, SyncState, type MatrixClient } from 'matrix-js-sdk';
-import { toast } from '@redline/ui';
 import { loadConfig } from '../config';
-import { registerWithInvite } from '../lib/account';
+import { loginWithPin, preparePinSession, saveLink, type PersonalLink } from '../lib/pin';
 import { loadSession } from '../lib/session';
 import { loginWithPassword, logout as doLogout, startMatrix, wipeLocalData } from '../lib/matrix';
 import { attachForegroundNotifications } from '../lib/notifications';
-import { setupRecovery } from '../lib/security';
 
 export type AppStatus = 'boot' | 'logged-out' | 'starting' | 'ready' | 'fatal';
-
-interface RegisterOptions {
-  token: string;
-  roomId: string | null;
-  displayName?: string;
-  username: string;
-  password: string;
-  phrase: string;
-}
 
 interface MatrixState {
   status: AppStatus;
@@ -25,10 +14,10 @@ interface MatrixState {
   /** null — синхронизация в норме; иначе состояние проблемы */
   syncProblem: 'reconnecting' | 'error' | null;
   error: string | null;
-  /** Текст шага регистрации, который надо показать после экрана входа. */
+  /** Текст шага открытия чата, который надо показать после входа. */
   progress: string | null;
   login: (username: string, password: string) => Promise<void>;
-  register: (opts: RegisterOptions) => Promise<void>;
+  enterPin: (link: PersonalLink, pin: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -63,7 +52,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
         await wipeLocalData(c);
         clientRef.current = null;
         setClient(null);
-        setError('Сессия завершена. Войдите снова');
+        setError('Вход сброшен. Войди снова');
         setStatus('logged-out');
       });
 
@@ -137,43 +126,29 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     [start],
   );
 
-  const register = useCallback(
-    async (opts: RegisterOptions) => {
+  const enterPin = useCallback(
+    async (link: PersonalLink, pin: string) => {
       setError(null);
       setProgress(null);
       const { homeserverUrl } = await loadConfig();
-      // пока статус logged-out, форма регистрации сохраняет введённые данные и показывает ошибку
-      const session = await registerWithInvite(homeserverUrl, opts);
-
-      history.replaceState(null, '', '/#/');
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      // ошибки входа остаются на форме: статус не меняется, сессия не создаётся
+      const r = await loginWithPin(homeserverUrl, link, pin);
+      saveLink(link);
       try {
-        await start(session, async (c) => {
-          try {
-            if (opts.displayName) await c.setDisplayName(opts.displayName);
-          } catch {
-            console.warn('Не удалось задать имя');
-          }
-          try {
-            setProgress('Настраиваем шифрование…');
-            await setupRecovery(c, opts.password, opts.phrase);
-          } catch {
-            console.warn('Не удалось настроить шифрование');
-            toast('Не удалось настроить шифрование. Завершите настройку в «Настройках»', { variant: 'error' });
-          }
-          try {
-            if (opts.roomId) {
-              setProgress('Присоединяемся к комнате «Семья»…');
-              await c.joinRoom(opts.roomId);
-            }
-          } catch {
-            console.warn('Не удалось присоединиться к комнате');
-            toast('Не удалось присоединиться к комнате «Семья»', { variant: 'error' });
-          }
+        await start(r.session, async (c) => {
+          setProgress('Открываем чат…');
+          await preparePinSession(c, link, r);
+          history.replaceState(null, '', '/#/');
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
         });
       } catch (e) {
         console.error(e);
-        setError('Аккаунт создан. Войдите со своим логином и паролем');
+        const c = clientRef.current;
+        if (c) await doLogout(c);
+        else await wipeLocalData(null);
+        clientRef.current = null;
+        setClient(null);
+        setError('Не удалось открыть чат. Введи PIN ещё раз');
         setStatus('logged-out');
       } finally {
         setProgress(null);
@@ -191,7 +166,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ status, client, syncProblem, error, progress, login, register, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ status, client, syncProblem, error, progress, login, enterPin, logout }}>{children}</Ctx.Provider>
   );
 }
 

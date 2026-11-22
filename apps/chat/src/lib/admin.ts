@@ -1,5 +1,6 @@
 import { Direction, MsgType, type MatrixClient } from 'matrix-js-sdk';
 import { getConfig } from '../config';
+import { isPersonalLink, resetSecret, type PersonalLink } from './pin';
 
 const COMMAND_TIMEOUT_MS = 20_000;
 const POLL_INTERVAL_MS = 700;
@@ -30,15 +31,24 @@ function isReplyTo(event: unknown, eventId: string): event is { event_id: string
   );
 }
 
-async function sendAndWait(client: MatrixClient, roomId: string, command: string) {
+interface AdminReply {
+  body: string;
+  /** событие с ответом conduit (может содержать секрет) */
+  eventId: string;
+  /** сама команда — её тоже надо скрыть, если в ней был секрет */
+  commandId: string;
+}
+
+async function sendAndWait(client: MatrixClient, roomId: string, command: string): Promise<AdminReply> {
   if (/[\r\n]/.test(command)) throw new Error('Команда не должна содержать переводы строк');
   const sent = await client.sendMessage(roomId, { msgtype: MsgType.Text, body: command });
   const deadline = Date.now() + COMMAND_TIMEOUT_MS;
   for (;;) {
     const response = await client.createMessagesRequest(roomId, null, 30, Direction.Backward);
     for (const event of response.chunk) {
-      // eventId — событие ответа, а не команды: именно его скрываем, если в нём секрет
-      if (isReplyTo(event, sent.event_id)) return { body: event.content.body, eventId: event.event_id };
+      if (isReplyTo(event, sent.event_id)) {
+        return { body: event.content.body, eventId: event.event_id, commandId: sent.event_id };
+      }
     }
     if (Date.now() >= deadline) break;
     await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
@@ -60,11 +70,7 @@ export async function findAdminRoom(client: MatrixClient): Promise<string | null
 }
 
 /** Отправка команды и ожидание ответа от conduit; ошибка не ломает очередь. */
-export function runAdminCommand(
-  client: MatrixClient,
-  roomId: string,
-  command: string,
-): Promise<{ body: string; eventId: string }> {
+export function runAdminCommand(client: MatrixClient, roomId: string, command: string): Promise<AdminReply> {
   const result = commandQueue.then(
     () => sendAndWait(client, roomId, command),
     () => sendAndWait(client, roomId, command),
@@ -115,4 +121,17 @@ export async function resetPassword(
     console.warn('Не удалось скрыть событие с новым паролем');
   }
   return match[1];
+}
+
+/** Сброс PIN: временный пароль в команде и ответ скрываем сразу после ответа. */
+export async function resetPin(client: MatrixClient, room: string, link: PersonalLink): Promise<void> {
+  if (!isPersonalLink(link)) throw new Error('Некорректная личная ссылка');
+  const secret = await resetSecret(link);
+  const reply = await runAdminCommand(client, room, `!admin users reset-password --logout ${link.user} ${secret}`);
+  const redactions = await Promise.allSettled([
+    client.redactEvent(room, reply.commandId),
+    client.redactEvent(room, reply.eventId),
+  ]);
+  if (redactions.some((r) => r.status === 'rejected')) console.warn('Не удалось скрыть события сброса PIN');
+  if (!reply.body.trim().startsWith('Successfully reset the password for user')) throw new Error('Не удалось сбросить PIN');
 }

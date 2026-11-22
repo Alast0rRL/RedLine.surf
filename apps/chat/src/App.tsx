@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
 import { useMatrix } from './state/MatrixContext';
 import { navigate, useHashRoute } from './hooks/useHashRoute';
-import { Button, Card, Icon } from './components/ui';
+import { Button, Card, Icon, RedLines } from './components/ui';
+import { loadLink } from './lib/pin';
 import { Splash } from './screens/Splash';
 import { Login } from './screens/Login';
-import { Register } from './screens/Register';
+import { PinEntry } from './screens/PinEntry';
 import { ChatList } from './screens/ChatList';
 import { RoomView } from './screens/RoomView';
 import { Settings } from './screens/Settings';
@@ -23,28 +24,53 @@ export function App() {
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
   }, []);
 
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const ownLocalpart = client?.getUserId()?.replace(/^@/, '').split(':')[0];
+    if (route.name === 'old-invite' || (route.name === 'personal' && ownLocalpart === route.link.user)) {
+      history.replaceState(null, '', '/#/');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
+  }, [status, route, client]);
+
   if (status === 'boot') return <Splash />;
   if (status === 'fatal') return <Splash error={error} />;
   if (status === 'logged-out') {
-    if (route.name === 'invite') return <Register token={route.token} roomId={route.roomId} />;
+    if (route.name === 'personal') return <PinEntry key={route.link.user + route.link.key} link={route.link} />;
+    if (route.name === 'old-invite') {
+      return (
+        <main className="screen login">
+          <RedLines />
+          <div className="login__glow" aria-hidden="true" />
+          <Card solid className="login__card">
+            <p className="login__note">Ссылка устарела. Попроси новую</p>
+          </Card>
+        </main>
+      );
+    }
+    const saved = loadLink();
+    if (saved) return <PinEntry key={saved.user + saved.key} link={saved} />;
     return <Login />;
   }
   if (status === 'starting') return <Splash text={progress ?? 'Синхронизация…'} />;
+  if (route.name === 'old-invite') return null;
 
-  if (route.name === 'invite') {
+  if (route.name === 'personal') {
+    const userId = client?.getUserId();
+    const ownName = userId ? client?.getUser(userId)?.displayName : null;
     return (
       <div className="app" data-view="detail">
         <ChatList />
-        <section className="pane pane--room" aria-label="Приглашение">
+        <section className="pane pane--room" aria-label="Ссылка">
           <header className="topbar topbar--room">
             <Button variant="ghost" icon aria-label="Назад" onClick={() => { location.hash = '#/'; }}>
               <Icon name="back" />
             </Button>
-            <span className="topbar__title"><span className="topbar__name">Приглашение</span></span>
+            <span className="topbar__title"><span className="topbar__name">Ссылка</span></span>
           </header>
           <div className="settings">
             <Card solid className="settings-card">
-              <p className="settings-card__text">Вы уже вошли как {client?.getUserId()}</p>
+              <p className="settings-card__text">На этом устройстве уже открыт чат: {ownName ?? ''}</p>
               <Button variant="primary" onClick={() => { location.hash = '#/'; }}>Перейти к чатам</Button>
             </Card>
           </div>

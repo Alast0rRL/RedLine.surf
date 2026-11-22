@@ -58,14 +58,6 @@ export function slugUsername(displayName: string): string {
     .replace(/[^a-z0-9]+$/g, '');
 }
 
-export function usernameProblem(v: string): string | null {
-  if (!/^[a-z0-9][a-z0-9._=-]{0,31}$/.test(v)) {
-    return 'Логин: до 32 символов, латинские буквы, цифры и . _ = -';
-  }
-  if (v === 'conduit') return 'Этот логин зарезервирован';
-  return null;
-}
-
 export function passwordProblem(v: string): string | null {
   if (v.length < MIN_PASSWORD) return `Пароль короче ${MIN_PASSWORD} символов`;
   return null;

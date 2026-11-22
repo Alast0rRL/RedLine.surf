@@ -6,6 +6,7 @@ import { useSecurityState } from '../hooks/useSecurityState';
 import { navigate } from '../hooks/useHashRoute';
 import { formatListTime, previewText } from '../lib/events';
 import { sweepExpiredInvites } from '../lib/invites';
+import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { Avatar, Button, Icon, RedLines, toast } from '../components/ui';
 import { NewChatModal } from './NewChat';
@@ -20,8 +21,11 @@ export function roomAvatarMxc(room: Room, isDm: boolean): string | null {
 function RoomRow({ client, s, active }: { client: MatrixClient; s: RoomSummary; active: boolean }) {
   const { room, lastEvent, unread, highlight, isDm } = s;
   const me = client.getUserId();
+  const pin = isPinUser(me);
   const sender = lastEvent?.getSender();
-  const prefix = lastEvent && !isDm ? (sender === me ? 'Вы: ' : `${room.getMember(sender!)?.name ?? sender}: `) : sender === me && lastEvent ? 'Вы: ' : '';
+  const senderName = room.getMember(sender!)?.name;
+  const from = pin ? (senderName && senderName !== sender ? senderName : 'Участник') : (senderName ?? sender ?? 'Участник');
+  const prefix = lastEvent && !isDm ? (sender === me ? 'Вы: ' : `${from}: `) : sender === me && lastEvent ? 'Вы: ' : '';
   const dmPeer = isDm ? room.getAvatarFallbackMember()?.userId : undefined;
   const pending = room.getPendingEvents().length > 0;
 
@@ -59,6 +63,9 @@ function RoomRow({ client, s, active }: { client: MatrixClient; s: RoomSummary; 
 function InviteRow({ client, room }: { client: MatrixClient; room: Room }) {
   const [busy, setBusy] = useState<'join' | 'leave' | null>(null);
   const inviter = room.getDMInviter() ?? room.currentState.getMember(client.getUserId()!)?.events.member?.getSender();
+  const pin = isPinUser(client.getUserId());
+  const inviterName = inviter ? room.getMember(inviter)?.name : null;
+  const from = pin ? (inviterName && inviterName !== inviter ? inviterName : 'участника') : (inviterName ?? inviter);
   const act = async (kind: 'join' | 'leave') => {
     setBusy(kind);
     try {
@@ -79,7 +86,7 @@ function InviteRow({ client, room }: { client: MatrixClient; room: Room }) {
       <Avatar client={client} name={room.name} seed={room.roomId} mxc={room.getMxcAvatarUrl()} />
       <span className="chat-row__main">
         <span className="chat-row__name">{room.name}</span>
-        <span className="chat-row__preview">Приглашение{inviter ? ` от ${room.getMember(inviter)?.name ?? inviter}` : ''}</span>
+        <span className="chat-row__preview">Приглашение{inviter ? ` от ${from}` : ''}</span>
       </span>
       <span className="invite-row__actions">
         <Button size="sm" variant="primary" busy={busy === 'join'} disabled={!!busy} onClick={() => act('join')}>Принять</Button>
@@ -93,7 +100,8 @@ function InviteRow({ client, room }: { client: MatrixClient; room: Room }) {
 
 export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const client = useClient();
-  const { syncProblem } = useMatrix();
+  const { syncProblem, logout } = useMatrix();
+  const pin = isPinUser(client.getUserId());
   const { rooms, invites, totalUnread } = useRoomList(client);
   const [security] = useSecurityState(client);
   const [newChat, setNewChat] = useState(false);
@@ -129,12 +137,14 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
         </div>
       )}
       {(security === 'needs-setup' || security === 'needs-unlock') && (
-        <button className="banner banner--action" onClick={() => navigate.settings()}>
+        <button className="banner banner--action" onClick={() => (pin ? void logout() : navigate.settings())}>
           <Icon name="key" size={18} />
           <span>
-            {security === 'needs-setup'
-              ? 'Задайте фразу восстановления, чтобы не потерять переписку'
-              : 'Введите фразу восстановления, чтобы читать старые сообщения'}
+            {pin
+              ? 'Нажми, чтобы заново ввести PIN'
+              : security === 'needs-setup'
+                ? 'Задайте фразу восстановления, чтобы не потерять переписку'
+                : 'Введите фразу восстановления, чтобы читать старые сообщения'}
           </span>
         </button>
       )}

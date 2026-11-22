@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { findAdminRoom, listUsers, resetPassword } from '../lib/admin';
-import { createInvite, ensureFamilyRoom, inviteLink, loadInvites, revokeInvite, type Invite } from '../lib/invites';
+import { findAdminRoom, listUsers, resetPassword, resetPin } from '../lib/admin';
+import { createInvite, ensureFamilyRoom, loadInvites, loadLinks, revokeInvite, type Invite } from '../lib/invites';
+import { formatLink, isPinUser, type PersonalLink } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { navigate } from '../hooks/useHashRoute';
 import { useClient } from '../state/MatrixContext';
@@ -30,6 +31,7 @@ export function People() {
   const client = useClient();
   const [adminRoom, setAdminRoom] = useState<string | null | undefined>(undefined);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [links, setLinks] = useState<PersonalLink[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,7 @@ export function People() {
   const [shownLink, setShownLink] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<Invite | null>(null);
   const [resetTarget, setResetTarget] = useState<Person | null>(null);
+  const [pinResetTarget, setPinResetTarget] = useState<{ person: Person; link: PersonalLink } | null>(null);
   const [logoutDevices, setLogoutDevices] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const inflight = useRef<Promise<void> | null>(null);
@@ -57,18 +60,23 @@ export function People() {
             setAdminRoom(null);
             return;
           }
-          const [liveInvites, ids] = await Promise.all([loadInvites(client, room), listUsers(client, room)]);
+          const [liveInvites, ids, storedLinks] = await Promise.all([
+            loadInvites(client, room),
+            listUsers(client, room),
+            loadLinks(client),
+          ]);
           const users = await Promise.all(
             ids.map(async (id) => {
               const name = await client.getProfileInfo(id)
-                .then((info) => info.displayname || id)
-                .catch(() => id);
+                .then((info) => info.displayname || (isPinUser(id) ? 'Участник' : id))
+                .catch(() => (isPinUser(id) ? 'Участник' : id));
               return { id, name };
             }),
           );
           if (!alive.current) return;
           setAdminRoom(room);
           setInvites(liveInvites);
+          setLinks(storedLinks);
           setPeople(users);
         } catch (e) {
           console.warn('Не удалось загрузить раздел «Семья»', e);
@@ -91,12 +99,12 @@ export function People() {
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
-    if (!adminRoom) return;
+    if (!adminRoom || !label.trim()) return;
     setAction('create');
     try {
-      const roomId = await ensureFamilyRoom(client);
-      const invite = await createInvite(client, adminRoom, label.trim());
-      setShownLink(inviteLink(invite.token, roomId));
+      await ensureFamilyRoom(client);
+      const { link } = await createInvite(client, adminRoom, label.trim());
+      setShownLink(formatLink(link));
       setLabel('');
       reload();
     } catch {
@@ -106,17 +114,7 @@ export function People() {
     }
   };
 
-  const showLink = async (invite: Invite) => {
-    setAction(`show:${invite.token}`);
-    try {
-      const roomId = await ensureFamilyRoom(client);
-      setShownLink(inviteLink(invite.token, roomId));
-    } catch {
-      toast('Не удалось подготовить ссылку', { variant: 'error' });
-    } finally {
-      setAction(null);
-    }
-  };
+  const showLink = (link: PersonalLink) => setShownLink(formatLink(link));
 
   const copyLink = async () => {
     if (!shownLink) return;
@@ -131,7 +129,7 @@ export function People() {
   const share = async () => {
     if (!shownLink || !navigator.share) return;
     try {
-      await navigator.share({ title: 'Приглашение в семью', text: 'Приглашение в семейный чат', url: shownLink });
+      await navigator.share({ title: 'Личная ссылка', text: 'Личная ссылка для входа в семейный чат', url: shownLink });
     } catch (e) {
       if ((e as Error).name !== 'AbortError') console.warn('Не удалось отправить ссылку');
     }
@@ -176,6 +174,21 @@ export function People() {
     }
   };
 
+  const confirmPinReset = async () => {
+    if (!adminRoom || !pinResetTarget) return;
+    setAction(`pin-reset:${pinResetTarget.link.user}`);
+    try {
+      await resetPin(client, adminRoom, pinResetTarget.link);
+      toast('PIN сброшен', { variant: 'success' });
+      setPinResetTarget(null);
+      setShownLink(formatLink(pinResetTarget.link));
+    } catch {
+      toast('Не удалось сбросить PIN', { variant: 'error' });
+    } finally {
+      setAction(null);
+    }
+  };
+
   const copyPassword = async () => {
     if (!newPassword) return;
     try {
@@ -212,54 +225,60 @@ export function People() {
       {adminRoom && !error && (
         <>
           <Card solid className="settings-card">
-            <h2 className="settings-card__title"><Icon name="plus" size={18} /> Пригласить</h2>
+            <h2 className="settings-card__title"><Icon name="plus" size={18} /> Добавить человека</h2>
             <p className="settings-card__text">Отправьте ссылку тому, кого хотите добавить в семейный чат.</p>
             <form className="stack" onSubmit={(e) => void create(e)}>
               <Field
-                label="Для кого (видно только вам)"
+                label="Как зовут"
                 name="label"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="например, маме"
-                maxLength={80}
+                placeholder="Мама"
+                maxLength={40}
+                disabled={!!action}
+                required
               />
-              <Button type="submit" variant="primary" busy={action === 'create'} disabled={!!action}>
+              <Button type="submit" variant="primary" busy={action === 'create'} disabled={!label.trim() || !!action}>
                 Создать ссылку
               </Button>
             </form>
           </Card>
 
           <Card solid className="settings-card">
-            <h2 className="settings-card__title"><Icon name="key" size={18} /> Приглашения</h2>
+            <h2 className="settings-card__title"><Icon name="key" size={18} /> Ждут входа</h2>
             <p className="settings-card__text">Ссылки старше 7 дней отзываются, когда вы открываете приложение</p>
             {invites.length ? (
               <ul className="people-list">
-                {invites.map((invite) => (
-                  <li className="people-row" key={invite.token}>
-                    <span className="people-row__main">
-                      <span className="people-row__name">{invite.label || 'Без подписи'}</span>
-                      <span className="people-row__meta">
-                        {invite.createdAt
-                          ? new Date(invite.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-                          : 'Дата неизвестна'}
+                {invites.map((invite) => {
+                  const stored = links.find((l) => l.token === invite.token);
+                  return (
+                    <li className="people-row" key={invite.token}>
+                      <span className="people-row__main">
+                        <span className="people-row__name">{invite.label || 'Без подписи'}</span>
+                        <span className="people-row__meta">
+                          {invite.createdAt
+                            ? new Date(invite.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+                            : 'Дата неизвестна'}
+                        </span>
                       </span>
-                    </span>
-                    <span className="people-row__actions">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        busy={action === `show:${invite.token}`}
-                        disabled={!!action}
-                        onClick={() => void showLink(invite)}
-                      >
-                        Показать
-                      </Button>
-                      <Button size="sm" variant="ghost" disabled={!!action} onClick={() => setRevokeTarget(invite)}>
-                        Отозвать
-                      </Button>
-                    </span>
-                  </li>
-                ))}
+                      <span className="people-row__actions">
+                        {stored && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={!!action}
+                            onClick={() => showLink(stored)}
+                          >
+                            Показать
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" disabled={!!action} onClick={() => setRevokeTarget(invite)}>
+                          Отозвать
+                        </Button>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="settings-card__text">Активных ссылок нет</p>
@@ -272,6 +291,10 @@ export function People() {
               {people.map((person) => {
                 const self = person.id === client.getUserId();
                 const bot = isBotUser(person.id);
+                const pinUser = isPinUser(person.id);
+                const pinLink = pinUser
+                  ? links.find((l) => l.user === person.id.replace(/^@/, '').split(':')[0])
+                  : undefined;
                 return (
                   <li className="people-row" key={person.id}>
                     <Avatar name={person.name} seed={person.id} size="sm" />
@@ -281,13 +304,30 @@ export function People() {
                         {self && <span className="person-tag">вы</span>}
                         {bot && <span className="bot-tag">бот</span>}
                       </span>
-                      <span className="people-row__meta">{person.id}</span>
+                      {!pinUser && <span className="people-row__meta">{person.id}</span>}
                     </span>
                     {!self && !bot && (
                       <span className="people-row__actions">
-                        <Button size="sm" variant="secondary" onClick={() => openReset(person)}>
-                          Сбросить пароль
-                        </Button>
+                        {pinUser ? (
+                          pinLink && (
+                            <>
+                              <Button size="sm" variant="secondary" onClick={() => showLink(pinLink)}>Ссылка</Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                busy={action === `pin-reset:${pinLink.user}`}
+                                disabled={!!action}
+                                onClick={() => setPinResetTarget({ person, link: pinLink })}
+                              >
+                                Сбросить PIN
+                              </Button>
+                            </>
+                          )
+                        ) : (
+                          <Button size="sm" variant="secondary" onClick={() => openReset(person)}>
+                            Сбросить пароль
+                          </Button>
+                        )}
                       </span>
                     )}
                   </li>
@@ -302,7 +342,7 @@ export function People() {
         <div className="stack">
           {shownLink && <QrCode value={shownLink} />}
           <code className="invite-link">{shownLink}</code>
-          <p>Ссылка работает один раз. Не публикуйте её.</p>
+          <p>Это личная ссылка: она нужна и для нового телефона. Не пересылай её другим.</p>
           <Button variant="secondary" onClick={() => void copyLink()}>Скопировать</Button>
           {canShare && <Button variant="primary" onClick={() => void share()}>Отправить</Button>}
         </div>
@@ -326,6 +366,28 @@ export function People() {
         }
       >
         <p>Ссылку «{revokeTarget?.label || 'Без подписи'}» больше нельзя будет использовать.</p>
+      </Modal>
+
+      <Modal
+        open={!!pinResetTarget}
+        onClose={() => setPinResetTarget(null)}
+        title="Сбросить PIN?"
+        actions={
+          <>
+            <Button
+              variant="primary"
+              busy={action === `pin-reset:${pinResetTarget?.link.user ?? ''}`}
+              onClick={() => void confirmPinReset()}
+            >
+              Сбросить
+            </Button>
+            <Button variant="ghost" onClick={() => setPinResetTarget(null)}>Отмена</Button>
+          </>
+        }
+      >
+        {pinResetTarget && (
+          <p>{pinResetTarget.person.name} выйдет на всех устройствах и задаст новый PIN по той же ссылке. Переписка сохранится.</p>
+        )}
       </Modal>
 
       <Modal

@@ -3,6 +3,7 @@ import { EventStatus, EventType, MsgType, type MatrixClient, type MatrixEvent, t
 import { formatTime, isPendingDecryption, isUndecryptable, isVoice, previewText } from '../lib/events';
 import { sanitizeMatrixHtml, stripReplyFallback } from '../lib/html';
 import type { MediaSource } from '../lib/media';
+import { isPinUser } from '../lib/pin';
 import { findRenderer, isBotStyled, isBotUser } from '../bots/registry';
 import { Avatar, Icon } from '../components/ui';
 import { ImageMessage } from './ImageMessage';
@@ -26,7 +27,7 @@ function Linkified({ text }: { text: string }) {
   );
 }
 
-function Body({ ev }: { ev: MatrixEvent }) {
+function Body({ ev, name }: { ev: MatrixEvent; name: string }) {
   const content = ev.getContent();
   const html = useMemo(
     () => (content.format === 'org.matrix.custom.html' && typeof content.formatted_body === 'string'
@@ -40,19 +41,19 @@ function Body({ ev }: { ev: MatrixEvent }) {
   const onlyEmoji = /^(\p{Extended_Pictographic}|\p{Emoji_Component}|\s){1,8}$/u.test(body) && !/\d/.test(body);
   return (
     <div className={`msg-text${onlyEmoji ? ' msg-text--emoji' : ''}`}>
-      {content.msgtype === MsgType.Emote && <em>* {ev.sender?.name} </em>}
+      {content.msgtype === MsgType.Emote && <em>* {name} </em>}
       <Linkified text={body} />
     </div>
   );
 }
 
-function ReplyQuote({ room, ev }: { room: Room; ev: MatrixEvent }) {
+function ReplyQuote({ room, ev, pin }: { room: Room; ev: MatrixEvent; pin: boolean }) {
   const replyTo = ev.replyEventId;
   if (!replyTo) return null;
   const target = room.findEventById(replyTo);
   return (
     <div className="msg-reply">
-      <span className="msg-reply__who">{target ? target.sender?.name ?? target.getSender() : 'Сообщение'}</span>
+      <span className="msg-reply__who">{target ? (target.sender?.name ?? (pin ? 'Участник' : target.getSender())) : 'Сообщение'}</span>
       <span className="msg-reply__text">{target ? previewText(target) : 'не загружено'}</span>
     </div>
   );
@@ -81,12 +82,12 @@ function Status({ client, room, ev, readByOthers }: { client: MatrixClient; room
   );
 }
 
-function Content({ ev }: { ev: MatrixEvent }): ReactNode {
+function Content({ ev, name }: { ev: MatrixEvent; name: string }): ReactNode {
   if (ev.isRedacted()) return <div className="msg-text msg-text--muted">Сообщение удалено</div>;
   if (isUndecryptable(ev)) {
     return (
       <div className="msg-text msg-text--muted">
-        <Icon name="lock" size={14} /> Не удалось расшифровать. Введите фразу восстановления в настройках
+        <Icon name="lock" size={14} /> Старое сообщение пока недоступно
       </div>
     );
   }
@@ -110,7 +111,7 @@ function Content({ ev }: { ev: MatrixEvent }): ReactNode {
   if (c.msgtype === MsgType.File || c.msgtype === MsgType.Video) {
     return <div className="msg-text">📎 {c.body ?? 'Файл'} <span className="msg-text--muted">(откройте в Element)</span></div>;
   }
-  return <Body ev={ev} />;
+  return <Body ev={ev} name={name} />;
 }
 
 export interface MessageProps {
@@ -137,8 +138,11 @@ export function messageStamp(ev: MatrixEvent): string {
 
 export const Message = memo(function Message({ client, room, ev, own, first, last, showSenderName, readByOthers }: MessageProps) {
   const bot = !own && isBotStyled(ev);
+  const pin = isPinUser(client.getUserId());
   const sender = ev.sender;
-  const name = sender?.name ?? ev.getSender() ?? '';
+  const name = sender?.name && sender.name !== ev.getSender()
+    ? sender.name
+    : pin ? 'Участник' : ev.getSender() ?? '';
   const isMedia = !ev.isRedacted() && [MsgType.Image].includes(ev.getContent().msgtype as MsgType);
   const isAudio = !ev.isRedacted() && ev.getContent().msgtype === MsgType.Audio;
   const edited = !!ev.replacingEventId();
@@ -159,8 +163,8 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
             {isBotUser(ev.getSender()) && <span className="bot-tag"><Icon name="bot" size={11} /> бот</span>}
           </div>
         )}
-        <ReplyQuote room={room} ev={ev} />
-        <Content ev={ev} />
+        <ReplyQuote room={room} ev={ev} pin={pin} />
+        <Content ev={ev} name={name} />
         <div className="bubble__meta">
           {edited && <span className="bubble__edited">изм.</span>}
           <time dateTime={new Date(ev.getTs()).toISOString()}>{formatTime(ev.getTs())}</time>

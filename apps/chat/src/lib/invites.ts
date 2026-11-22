@@ -2,6 +2,7 @@ import { type MatrixClient } from 'matrix-js-sdk';
 import { Preset, Visibility } from 'matrix-js-sdk/lib/@types/partials.js';
 import { getConfig } from '../config';
 import { findAdminRoom, runAdminCommand } from './admin';
+import { isPersonalLink, newPerson, type PersonalLink } from './pin';
 
 export interface Invite {
   token: string;
@@ -9,9 +10,16 @@ export interface Invite {
   label: string;
 }
 
+/** Результат создания: приглашение для списка и личная ссылка для человека. */
+export interface CreatedInvite {
+  invite: Invite;
+  link: PersonalLink;
+}
+
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const INVITE_DATA_TYPE = 'surf.redline.invites';
+const LINKS_DATA_TYPE = 'surf.redline.links';
 const TOKEN_RE = /^[A-Za-z0-9]{16}$/;
 const OWNER_POWER = 100;
 
@@ -59,20 +67,40 @@ async function saveMetadata(client: MatrixClient, items: Invite[]): Promise<void
   await client.setAccountData(INVITE_DATA_TYPE as never, { items } as never);
 }
 
+/** Личные ссылки не зависят от срока токена: они нужны для нового телефона и сброса PIN. */
+export async function loadLinks(client: MatrixClient): Promise<PersonalLink[]> {
+  let raw: unknown;
+  try {
+    raw = await client.getAccountDataFromServer(LINKS_DATA_TYPE as never);
+  } catch (e) {
+    if (isNotFound(e)) return [];
+    throw e;
+  }
+  const items = (raw as { items?: unknown } | null)?.items;
+  if (!Array.isArray(items)) return [];
+  return items.filter(isPersonalLink);
+}
+
+async function saveLinks(client: MatrixClient, items: PersonalLink[]): Promise<void> {
+  await client.setAccountData(LINKS_DATA_TYPE as never, { items } as never);
+}
+
 async function doRevokeInvite(client: MatrixClient, adminRoom: string, token: string): Promise<void> {
   if (!TOKEN_RE.test(token)) throw new Error('Некорректный токен приглашения');
   const { body } = await runAdminCommand(client, adminRoom, `!admin token revoke ${token}`);
   if (!body.trim().startsWith('Token revoked successfully.')) throw new Error('Не удалось отозвать приглашение');
 }
 
-async function doCreateInvite(client: MatrixClient, adminRoom: string, label: string): Promise<Invite> {
+async function doCreateInvite(client: MatrixClient, adminRoom: string, name: string): Promise<CreatedInvite> {
   const { body } = await runAdminCommand(client, adminRoom, '!admin token issue --once');
   const match = /New registration token issued:\s*`([A-Za-z0-9]{16})`/.exec(body);
   if (!match) throw new Error('Не удалось получить токен приглашения');
-  const invite: Invite = { token: match[1], createdAt: Date.now(), label };
+  const invite: Invite = { token: match[1], createdAt: Date.now(), label: name };
+  const link: PersonalLink = { ...newPerson(name), token: invite.token };
   try {
-    const current = await readMetadata(client);
-    await saveMetadata(client, [...current.filter((i) => i.token !== invite.token), invite]);
+    const [currentInvites, currentLinks] = await Promise.all([readMetadata(client), loadLinks(client)]);
+    await saveMetadata(client, [...currentInvites.filter((i) => i.token !== invite.token), invite]);
+    await saveLinks(client, [...currentLinks.filter((l) => l.token !== link.token && l.user !== link.user), link]);
   } catch (e) {
     try {
       await doRevokeInvite(client, adminRoom, invite.token);
@@ -81,7 +109,7 @@ async function doCreateInvite(client: MatrixClient, adminRoom: string, label: st
     }
     throw e;
   }
-  return invite;
+  return { invite, link };
 }
 
 async function doLoadInvites(client: MatrixClient, adminRoom: string): Promise<Invite[]> {
@@ -113,8 +141,8 @@ export function loadInvites(client: MatrixClient, adminRoom: string): Promise<In
   return serialized(() => doLoadInvites(client, adminRoom));
 }
 
-export function createInvite(client: MatrixClient, adminRoom: string, label: string): Promise<Invite> {
-  return serialized(() => doCreateInvite(client, adminRoom, label));
+export function createInvite(client: MatrixClient, adminRoom: string, name: string): Promise<CreatedInvite> {
+  return serialized(() => doCreateInvite(client, adminRoom, name));
 }
 
 export function revokeInvite(client: MatrixClient, adminRoom: string, token: string): Promise<void> {
@@ -188,22 +216,6 @@ export async function ensureFamilyRoom(client: MatrixClient): Promise<string> {
     ],
   });
   return roomId;
-}
-
-export function inviteLink(token: string, familyRoomId: string): string {
-  return `${location.origin}/#/invite/${token}/${encodeURIComponent(familyRoomId)}`;
-}
-
-/** Разбор #/invite/<token>/<room id>; битый URI не должен бросать исключение. */
-export function parseInviteHash(hash: string): { token: string; roomId: string | null } | null {
-  const match = /^#?\/?invite\/([A-Za-z0-9]{16})\/([^/]+)\/?$/.exec(hash.trim());
-  if (!match) return null;
-  try {
-    const roomId = decodeURIComponent(match[2]);
-    return { token: match[1], roomId: roomId.startsWith('!') ? roomId : null };
-  } catch {
-    return null;
-  }
 }
 
 const sweptClients = new WeakSet<MatrixClient>();

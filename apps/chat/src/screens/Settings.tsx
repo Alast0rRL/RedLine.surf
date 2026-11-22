@@ -4,6 +4,7 @@ import { navigate } from '../hooks/useHashRoute';
 import { useSecurityState } from '../hooks/useSecurityState';
 import { changePassword, passwordProblem } from '../lib/account';
 import { findAdminRoom } from '../lib/admin';
+import { isPinUser } from '../lib/pin';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
 import {
   changeRecoveryPhrase,
@@ -309,7 +310,8 @@ export function Settings() {
   const { logout } = useMatrix();
   const me = client.getUser(client.getUserId()!);
   const [confirm, setConfirm] = useState(false);
-  const name = me?.displayName ?? client.getUserId()!;
+  const pin = isPinUser(client.getUserId());
+  const name = me?.displayName ?? (pin ? 'Вы' : client.getUserId()!);
 
   return (
     <section className="pane pane--room" aria-label="Настройки">
@@ -322,16 +324,20 @@ export function Settings() {
           <Avatar client={client} name={name} seed={client.getUserId()!} mxc={me?.avatarUrl} size="lg" />
           <div>
             <div className="profile__name">{name}</div>
-            <div className="profile__id">{client.getUserId()}</div>
+            {!pin && <div className="profile__id">{client.getUserId()}</div>}
           </div>
         </div>
         <AdminSection />
         <PushSection />
-        <SecuritySection />
-        <PasswordSection />
+        {!pin && (
+          <>
+            <SecuritySection />
+            <PasswordSection />
+          </>
+        )}
         <Card solid className="settings-card">
           <h2 className="settings-card__title"><Icon name="logout" size={18} /> Сеанс</h2>
-          <p className="settings-card__text">Устройство: <code>{client.getDeviceId()}</code></p>
+          {!pin && <p className="settings-card__text">Устройство: <code>{client.getDeviceId()}</code></p>}
           <Button variant="outline" onClick={() => setConfirm(true)}>Выйти</Button>
         </Card>
         <p className="settings__version">Redline Chat · {__APP_VERSION__}</p>
@@ -347,7 +353,7 @@ export function Settings() {
           </>
         }
       >
-        <p>Если фраза восстановления не сохранена, зашифрованные сообщения на этом устройстве будут потеряны.</p>
+        <p>{pin ? 'Чтобы войти снова, понадобится PIN.' : 'Если фраза восстановления не сохранена, зашифрованные сообщения на этом устройстве будут потеряны.'}</p>
       </Modal>
     </section>
   );

@@ -1,0 +1,179 @@
+/**
+ * Вход по личной ссылке и PIN.
+ *
+ * Ссылка: #/p/<логин>/<ключ>/<токен регистрации>/<имя>. Ключ (128 бит) живёт во фрагменте адреса
+ * и в nginx не попадает. Из него выводятся:
+ *  - пароль Matrix = H(ключ, логин, PIN): без ссылки PIN по сети не подобрать;
+ *  - ключ переписки = H(ключ, логин), от PIN не зависит: сброс PIN не теряет историю;
+ *  - пароль «PIN сброшен» = H(ключ, логин, reset): его ставит админ, дальше человек задаёт новый PIN.
+ */
+import { createClient, type MatrixClient } from 'matrix-js-sdk';
+import { getConfig } from '../config';
+import { changePassword, checkInvite, registerWithInvite, slugUsername } from './account';
+import { loginWithPassword } from './matrix';
+import { getSecurityState, setupRecovery, unlockWithRecovery } from './security';
+import { clearSession, type StoredSession } from './session';
+
+export const PIN_LENGTH = 6;
+
+export interface PersonalLink {
+  user: string;
+  key: string;
+  token: string;
+  name: string;
+}
+
+export type LinkState = 'create' | 'enter' | 'invalid';
+
+const SAVED_LINK = 'rl.link';
+const USER_RE = /^[a-z0-9][a-z0-9._=-]{0,18}\.[0-9a-f]{12}$/;
+const KEY_RE = /^[0-9a-f]{32}$/;
+const TOKEN_RE = /^[A-Za-z0-9]{16}$/;
+
+function randomHex(bytes: number): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Случайный хвост логина: имена не пересекаются и не угадываются. */
+export function newPerson(name: string): Omit<PersonalLink, 'token'> {
+  const slug = slugUsername(name).slice(0, 19).replace(/[^a-z0-9]+$/, '') || 'user';
+  return { user: `${slug}.${randomHex(6)}`, key: randomHex(16), name };
+}
+
+export function isPinUser(userId: string | null | undefined): boolean {
+  return !!userId && USER_RE.test(userId.replace(/^@/, '').split(':')[0]);
+}
+
+export function isPersonalLink(value: unknown): value is PersonalLink {
+  const v = value as Partial<PersonalLink> | null;
+  return (
+    typeof v?.user === 'string' && USER_RE.test(v.user) &&
+    typeof v.key === 'string' && KEY_RE.test(v.key) &&
+    typeof v.token === 'string' && TOKEN_RE.test(v.token) &&
+    typeof v.name === 'string' && v.name.length > 0 && v.name.length <= 80
+  );
+}
+
+export function formatLink({ user, key, token, name }: PersonalLink): string {
+  // скобки и ! мессенджеры иногда отрезают от ссылки
+  const safeName = encodeURIComponent(name).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16)}`);
+  return `${location.origin}/#/p/${user}/${key}/${token}/${safeName}`;
+}
+
+/** Принимает и hash, и целую ссылку, вставленную в поле. */
+export function parseLink(input: string): PersonalLink | null {
+  const m = /#\/p\/([^/\s]+)\/([^/\s]+)\/([^/\s]+)\/([^/\s]+)/.exec(input);
+  if (!m) return null;
+  try {
+    const link = { user: m[1], key: m[2], token: m[3], name: decodeURIComponent(m[4]) };
+    return isPersonalLink(link) ? link : null;
+  } catch {
+    return null;
+  }
+}
+
+/** iOS-приложение с экрана «Домой» открывается без hash, поэтому ссылку помним на устройстве. */
+export function loadLink(): PersonalLink | null {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(SAVED_LINK) ?? 'null');
+    return isPersonalLink(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLink({ user, key, token, name }: PersonalLink): void {
+  try {
+    localStorage.setItem(SAVED_LINK, JSON.stringify({ user, key, token, name }));
+  } catch {
+    console.warn('Не удалось запомнить ссылку');
+  }
+}
+
+export function forgetLink(): void {
+  try {
+    localStorage.removeItem(SAVED_LINK);
+  } catch {
+    console.warn('Не удалось забыть ссылку');
+  }
+}
+
+async function derive(link: PersonalLink, ...parts: string[]): Promise<string> {
+  const data = new TextEncoder().encode(['redline-pin-v1', link.key, link.user, ...parts].join('\n'));
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+}
+
+export const resetSecret = (link: PersonalLink) => derive(link, 'reset');
+
+export async function linkState(baseUrl: string, link: PersonalLink): Promise<LinkState> {
+  const probe = createClient({ baseUrl });
+  // логин занят — человек уже заходил по этой ссылке
+  if (!(await probe.isUsernameAvailable(link.user))) return 'enter';
+  return (await checkInvite(baseUrl, link.token)) ? 'create' : 'invalid';
+}
+
+export interface PinLogin {
+  session: StoredSession;
+  created: boolean;
+  password: string;
+}
+
+function isForbidden(e: unknown): boolean {
+  return (e as { errcode?: string } | null)?.errcode === 'M_FORBIDDEN';
+}
+
+export async function loginWithPin(baseUrl: string, link: PersonalLink, pin: string): Promise<PinLogin> {
+  const password = await derive(link, 'pin', pin);
+  const state = await linkState(baseUrl, link);
+  if (state === 'invalid') throw new Error('Ссылка больше не действует. Попросите новую');
+  if (state === 'create') {
+    const session = await registerWithInvite(baseUrl, { token: link.token, username: link.user, password });
+    return { session, created: true, password };
+  }
+
+  try {
+    return { session: await loginWithPassword(baseUrl, link.user, password), created: false, password };
+  } catch (e) {
+    if (!isForbidden(e)) throw e;
+  }
+
+  // PIN не подошёл: либо он неверный, либо админ его сбросил
+  const temporary = await resetSecret(link);
+  let session: StoredSession;
+  try {
+    session = await loginWithPassword(baseUrl, link.user, temporary);
+  } catch (e) {
+    if (isForbidden(e)) throw new Error('Неверный PIN');
+    throw e;
+  }
+  const client = createClient(session);
+  try {
+    await changePassword(client, temporary, password, false);
+  } catch (e) {
+    await client.logout(true).catch(() => console.warn('Не удалось закрыть временный сеанс'));
+    clearSession();
+    throw e;
+  }
+  return { session, created: false, password };
+}
+
+/** Всё, что раньше спрашивали у человека: шифрование, история, семейный чат. */
+export async function preparePinSession(client: MatrixClient, link: PersonalLink, login: PinLogin): Promise<void> {
+  if (login.created) {
+    await client.setDisplayName(link.name).catch(() => console.warn('Не удалось задать имя'));
+  }
+  const secret = await derive(link, 'storage');
+  const state = await getSecurityState(client);
+  if (state === 'needs-setup') await setupRecovery(client, login.password, secret);
+  else if (state === 'needs-unlock') await unlockWithRecovery(client, secret);
+
+  try {
+    const alias = `#family:${getConfig().serverName}`;
+    const { room_id: roomId } = await client.getRoomIdForAlias(alias);
+    if (client.getRoom(roomId)?.getMyMembership() !== 'join') await client.joinRoom(roomId);
+  } catch {
+    console.warn('Не удалось присоединиться к комнате «Семья»');
+  }
+}

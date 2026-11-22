@@ -7,6 +7,7 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { isMessageLike, previewText } from './events';
+import { isPinUser } from './pin';
 import { getPushState } from './push';
 
 /**
@@ -27,7 +28,11 @@ async function show(client: MatrixClient, ev: MatrixEvent, room: Room) {
   if ((await getPushState()) === 'on') return;
   if (!client.getPushActionsForEvent(ev)?.notify) return;
 
-  const sender = room.getMember(ev.getSender()!)?.name ?? ev.getSender()!;
+  const senderId = ev.getSender()!;
+  const memberName = room.getMember(senderId)?.name;
+  const sender = memberName && memberName !== senderId
+    ? memberName
+    : isPinUser(client.getUserId()) ? 'Участник' : senderId;
   const isDm = room.getJoinedMemberCount() <= 2;
   const reg = await navigator.serviceWorker?.getRegistration();
   const title = isDm ? sender : room.name;

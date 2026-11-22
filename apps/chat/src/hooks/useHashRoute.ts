@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { parseInviteHash } from '../lib/invites';
+import { parseLink, type PersonalLink } from '../lib/pin';
 
 export type Route =
   | { name: 'list' }
   | { name: 'room'; roomId: string }
   | { name: 'settings' }
   | { name: 'people' }
-  | { name: 'invite'; token: string; roomId: string | null };
+  | { name: 'personal'; link: PersonalLink }
+  | { name: 'old-invite' };
 
 function parse(hash: string): Route {
-  const invite = parseInviteHash(hash);
-  if (invite) return { name: 'invite', token: invite.token, roomId: invite.roomId };
+  const link = parseLink(hash);
+  if (link) return { name: 'personal', link };
+  if (/^#?\/?invite\//.test(hash.trim())) return { name: 'old-invite' };
   const m = hash.match(/^#\/room\/(.+)$/);
   if (m) return { name: 'room', roomId: decodeURIComponent(m[1]) };
   if (hash === '#/settings') return { name: 'settings' };

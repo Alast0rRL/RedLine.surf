@@ -4,6 +4,7 @@ import { useClient } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
 import { isDirectRoom } from '../hooks/useRoomList';
 import { setCurrentRoom } from '../lib/notifications';
+import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { Avatar, Button, Icon } from '../components/ui';
 import { Timeline } from '../room/Timeline';
@@ -16,7 +17,9 @@ function useTyping(client: MatrixClient, room: Room | null): string[] {
     if (!room) return;
     const update = () => {
       const me = client.getUserId();
-      setNames(room.getMembers().filter((m) => m.typing && m.userId !== me).map((m) => m.name));
+      const pin = isPinUser(me);
+      setNames(room.getMembers().filter((m) => m.typing && m.userId !== me).map((m) =>
+        pin && m.name === m.userId ? 'Участник' : m.name));
     };
     client.on(RoomMemberEvent.Typing, update);
     update();
