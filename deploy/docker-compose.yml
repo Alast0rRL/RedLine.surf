@@ -27,6 +27,9 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?}
       PUSH_PROXY: ${PUSH_PROXY:-}
+      HOMESERVER_INTERNAL_URL: http://continuwuity:8008
+    volumes:
+      - push-data:/data
     # портов нет: шлюз зовёт только homeserver по внутренней сети
     networks: [redline]
 
@@ -55,3 +58,4 @@ networks:
 
 volumes:
   continuwuity-data:
+  push-data:

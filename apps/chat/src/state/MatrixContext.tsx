@@ -3,6 +3,8 @@ import { ClientEvent, HttpApiEvent, SyncState, type MatrixClient } from 'matrix-
 import { loadConfig } from '../config';
 import { loginWithPin, preparePinSession, saveLink, type PersonalLink } from '../lib/pin';
 import { loadSession } from '../lib/session';
+import { getBoundPhone } from '../lib/phone';
+import { PhoneOffer, type PhoneOfferData } from '../screens/PhoneOffer';
 import { loginWithPassword, logout as doLogout, startMatrix, wipeLocalData } from '../lib/matrix';
 import { attachForegroundNotifications } from '../lib/notifications';
 
@@ -38,6 +40,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   const [syncProblem, setSyncProblem] = useState<MatrixState['syncProblem']>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
+  const [phoneOffer, setPhoneOffer] = useState<PhoneOfferData | null>(null);
   const clientRef = useRef<MatrixClient | null>(null);
 
   const start = useCallback(
@@ -141,6 +144,11 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
           history.replaceState(null, '', '/#/');
           window.dispatchEvent(new HashChangeEvent('hashchange'));
         });
+        // PIN ещё в памяти: если номер не привязан, предлагаем привязать (ошибки не мешают входу)
+        const token = r.session.accessToken;
+        getBoundPhone(token)
+          .then((mask) => mask === null && setPhoneOffer({ link, pin, token }))
+          .catch(() => console.warn('Не удалось проверить привязку номера'));
       } catch (e) {
         console.error(e);
         const c = clientRef.current;
@@ -161,12 +169,16 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     const c = clientRef.current;
     clientRef.current = null;
     setClient(null);
+    setPhoneOffer(null);
     setStatus('logged-out');
     await doLogout(c);
   }, []);
 
   return (
-    <Ctx.Provider value={{ status, client, syncProblem, error, progress, login, enterPin, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ status, client, syncProblem, error, progress, login, enterPin, logout }}>
+      {children}
+      {phoneOffer && status === 'ready' && <PhoneOffer offer={phoneOffer} onClose={() => setPhoneOffer(null)} />}
+    </Ctx.Provider>
   );
 }
 

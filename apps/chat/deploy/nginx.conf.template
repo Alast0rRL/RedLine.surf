@@ -1,4 +1,10 @@
 # Шаблон: при старте envsubst подставляет HOMESERVER_URL (см. NGINX_ENVSUBST_FILTER в Dockerfile).
+# Адрес клиента: Caddy дописывает его последним в X-Forwarded-For (иначе — адрес соединения)
+map $http_x_forwarded_for $rl_client_ip {
+    ~([^,\s]+)\s*$ $1;
+    default $remote_addr;
+}
+
 server {
     listen 8080;
     server_name _;
@@ -12,6 +18,19 @@ server {
     gzip_types text/css application/javascript application/json application/wasm image/svg+xml application/manifest+json;
 
     set $csp "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; font-src 'self'; connect-src 'self' ${HOMESERVER_URL} blob: data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
+    # вход по номеру: тот же процесс, что и push-шлюз. Переменная + resolver: nginx стартует, даже если push недоступен
+    resolver 127.0.0.11 valid=30s;
+    location /api/phone/ {
+        include /etc/nginx/redline-headers.conf;
+        add_header Cache-Control "no-store" always;
+        client_max_body_size 4k;
+        set $phone_upstream http://push:8080;
+        proxy_set_header X-Real-IP $rl_client_ip;
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header Host $host;
+        proxy_pass $phone_upstream;
+    }
 
     # файлы с хешем в имени — навсегда
     location /assets/ {

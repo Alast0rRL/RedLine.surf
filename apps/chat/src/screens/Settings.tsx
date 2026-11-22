@@ -15,6 +15,7 @@ import {
   unlockWithRecovery,
 } from '../lib/security';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
+import { PhoneSection } from './PhoneSection';
 
 const PUSH_TEXT: Record<PushState, string> = {
   unsupported: 'Этот браузер не поддерживает push. На iPhone добавьте приложение на экран «Домой».',
@@ -450,6 +451,7 @@ export function Settings() {
         <ProfileSection fallbackName={name} />
         <AdminSection />
         <PushSection />
+        {pin && <PhoneSection />}
         {!pin && (
           <>
             <SecuritySection />

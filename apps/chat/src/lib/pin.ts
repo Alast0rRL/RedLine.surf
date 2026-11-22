@@ -107,6 +107,20 @@ async function derive(link: PersonalLink, ...parts: string[]): Promise<string> {
 
 export const resetSecret = (link: PersonalLink) => derive(link, 'reset');
 
+/** Пароль Matrix для этой ссылки и PIN. */
+export const pinPassword = (link: PersonalLink, pin: string) => derive(link, 'pin', pin);
+
+/**
+ * Тихое открытие старых сообщений на этом устройстве: ключ хранилища выводится из ссылки,
+ * PIN для этого не нужен. Бросает, если ссылки нет или не получилось.
+ */
+export async function unlockSilently(client: MatrixClient): Promise<void> {
+  const link = loadLink();
+  const own = client.getUserId()?.replace(/^@/, '').split(':')[0];
+  if (!link || link.user !== own) throw new Error('Нет ссылки на этом устройстве');
+  await unlockWithRecovery(client, await derive(link, 'storage'));
+}
+
 export async function linkState(baseUrl: string, link: PersonalLink): Promise<LinkState> {
   const probe = createClient({ baseUrl });
   // логин занят — человек уже заходил по этой ссылке
