@@ -8,6 +8,7 @@ server {
     client_max_body_size 1k;
 
     gzip on;
+    gzip_proxied any;
     gzip_types text/css application/javascript application/json application/wasm image/svg+xml application/manifest+json;
 
     set $csp "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; font-src 'self'; connect-src 'self' ${HOMESERVER_URL} blob: data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
