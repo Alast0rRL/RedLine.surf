@@ -1,0 +1,11 @@
+{
+  "name": "redline",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "demo": "pnpm --filter @redline/ui demo"
+  }
+}
