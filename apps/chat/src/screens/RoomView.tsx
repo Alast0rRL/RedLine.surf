@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { KnownMembership, RoomMemberEvent, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
+import { ClientEvent, KnownMembership, RoomEvent, RoomMemberEvent, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useClient } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
 import { isDirectRoom } from '../hooks/useRoomList';
@@ -45,6 +45,20 @@ function subtitle(room: Room, typing: string[], isDm: boolean, encrypted: boolea
 
 export function RoomView({ roomId }: { roomId: string }) {
   const client = useClient();
+  // комната и наше членство приходят синком: после «Принять» экран должен обновиться сам
+  const [, bump] = useState(0);
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const onChange = () => bump((n) => n + 1);
+    client.on(ClientEvent.Room, onChange);
+    client.on(RoomEvent.MyMembership, onChange);
+    const t = window.setTimeout(() => setWaited(true), 20000);
+    return () => {
+      client.off(ClientEvent.Room, onChange);
+      client.off(RoomEvent.MyMembership, onChange);
+      window.clearTimeout(t);
+    };
+  }, [client, roomId]);
   const room = client.getRoom(roomId);
   const [encrypted, setEncrypted] = useState(false);
   const typing = useTyping(client, room);
@@ -74,7 +88,9 @@ export function RoomView({ roomId }: { roomId: string }) {
         <header className="topbar">
           <Button variant="ghost" icon aria-label="Назад" onClick={() => navigate.list()}><Icon name="back" /></Button>
         </header>
-        <div className="empty"><p>Чат не найден или вы в нём не состоите</p></div>
+        <div className="empty">
+          <p>{waited || room?.getMyMembership() === KnownMembership.Leave ? 'Чат не найден или вы в нём не состоите' : 'Открываем чат…'}</p>
+        </div>
       </section>
     );
   }
