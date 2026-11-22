@@ -3,6 +3,7 @@ import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { useClient, useMatrix } from '../state/MatrixContext';
 import { useRoomList, type RoomSummary } from '../hooks/useRoomList';
 import { useSecurityState } from '../hooks/useSecurityState';
+import { usePinUnlock } from '../hooks/usePinUnlock';
 import { navigate } from '../hooks/useHashRoute';
 import { formatListTime, previewText } from '../lib/events';
 import { sweepExpiredInvites } from '../lib/invites';
@@ -104,7 +105,8 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const { syncProblem, logout } = useMatrix();
   const pin = isPinUser(client.getUserId());
   const { rooms, invites, totalUnread } = useRoomList(client);
-  const [security] = useSecurityState(client);
+  const [security, refreshSecurity] = useSecurityState(client);
+  const unlock = usePinUnlock(client, security, refreshSecurity);
   const [newChat, setNewChat] = useState(false);
 
   useEffect(() => {
@@ -137,13 +139,20 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
           <span className="rl-spinner" /> {syncProblem === 'error' ? 'Нет связи с сервером' : 'Переподключение…'}
         </div>
       )}
-      {(security === 'needs-setup' || security === 'needs-unlock') && (
-        <button className="banner banner--action" onClick={() => (pin ? void logout() : navigate.settings())}>
+      {(unlock.silent
+        ? unlock.failed && security === 'needs-unlock'
+        : security === 'needs-setup' || security === 'needs-unlock') && (
+        <button
+          className="banner banner--action"
+          onClick={() => (unlock.silent ? unlock.retry() : pin ? void logout() : navigate.settings())}
+        >
           <Icon name="key" size={18} />
           <span>
-            {pin
-              ? 'Нажми, чтобы заново ввести PIN'
-              : security === 'needs-setup'
+            {unlock.silent
+              ? 'Не удалось открыть старые сообщения — повторить'
+              : pin
+                ? 'Нажми, чтобы заново ввести PIN'
+                : security === 'needs-setup'
                 ? 'Задайте фразу восстановления, чтобы не потерять переписку'
                 : 'Введите фразу восстановления, чтобы читать старые сообщения'}
           </span>
