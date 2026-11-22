@@ -1,0 +1,15 @@
+{
+  "name": "@redline/push-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Matrix Push Gateway → Web Push (VAPID) для Redline Chat",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "vapid": "web-push generate-vapid-keys --json"
+  },
+  "dependencies": {
+    "web-push": "^4.0.0"
+  }
+}
