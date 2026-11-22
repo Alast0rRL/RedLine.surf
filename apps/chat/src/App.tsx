@@ -11,6 +11,11 @@ import { RoomView } from './screens/RoomView';
 import { Settings } from './screens/Settings';
 import { People } from './screens/People';
 
+/** Один фон на весь экран: у панелей своих линий нет. */
+function AppLines() {
+  return <RedLines noIntro speed={0.5} brightness={0.22} className="app__lines" />;
+}
+
 export function App() {
   const { status, error, progress, client } = useMatrix();
   const route = useHashRoute();
@@ -60,6 +65,7 @@ export function App() {
     const ownName = userId ? client?.getUser(userId)?.displayName : null;
     return (
       <div className="app" data-view="detail">
+        <AppLines />
         <ChatList />
         <section className="pane pane--room" aria-label="Ссылка">
           <header className="topbar topbar--room">
@@ -82,6 +88,7 @@ export function App() {
   const view = route.name === 'list' ? 'list' : 'detail';
   return (
     <div className="app" data-view={view}>
+      <AppLines />
       <ChatList activeRoomId={route.name === 'room' ? route.roomId : undefined} />
       {route.name === 'room' && <RoomView key={route.roomId} roomId={route.roomId} />}
       {route.name === 'settings' && <Settings />}

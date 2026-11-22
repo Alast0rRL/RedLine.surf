@@ -8,7 +8,7 @@ import { formatListTime, previewText } from '../lib/events';
 import { sweepExpiredInvites } from '../lib/invites';
 import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
-import { Avatar, Button, Icon, RedLines, toast } from '../components/ui';
+import { Avatar, Button, Icon, toast } from '../components/ui';
 import { NewChatModal } from './NewChat';
 
 export function roomAvatarMxc(room: Room, isDm: boolean): string | null {
@@ -118,7 +118,6 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
 
   return (
     <section className="pane pane--list" aria-label="Чаты">
-      <RedLines noIntro lines={3} speed={0.5} brightness={0.22} className="pane__lines" />
       <header className="topbar">
         <span className="topbar__logo">Redline</span>
         <span className="topbar__actions">

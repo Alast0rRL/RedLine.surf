@@ -8,7 +8,6 @@
   --chat-bubble-other: #171717;
   --chat-bubble-bot: #131313;
   --chat-bg: var(--rl-ink-950);
-  --chat-pane: #0d0d0d;
   --chat-topbar-h: 3.5rem;
   --chat-safe-top: env(safe-area-inset-top, 0px);
   --chat-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -99,6 +98,9 @@ a { color: inherit; }
 
 /* ============ Оболочка ============ */
 .app {
+  position: relative;
+  isolation: isolate;
+  background: var(--chat-bg);
   display: grid;
   height: 100dvh;
   grid-template-columns: 1fr;
@@ -110,7 +112,6 @@ a { color: inherit; }
   min-width: 0;
   min-height: 0;
   height: 100dvh;
-  background: var(--chat-bg);
 }
 .app[data-view="list"] .pane--room,
 .app[data-view="detail"] .pane--list { display: none; }
@@ -125,8 +126,8 @@ a { color: inherit; }
 .pane--placeholder { display: grid !important; place-items: center; color: var(--rl-color-text-subtle); }
 @media (max-width: 899px) { .pane--placeholder { display: none !important; } }
 
-.pane__lines { z-index: 0; }
-.pane--list > :not(.pane__lines):not(dialog) { position: relative; z-index: 1; }
+/* ниже всех панелей: сами панели без заливки, чтобы линии шли через весь экран */
+.app__lines { z-index: -1; }
 .pane__scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: var(--rl-space-2) var(--rl-space-2) calc(var(--chat-safe-bottom) + var(--rl-space-4)); }
 
 /* ============ Верхняя панель ============ */
@@ -248,9 +249,7 @@ a { color: inherit; }
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background:
-    radial-gradient(60rem 40rem at 100% 0%, rgb(var(--rl-red-500-rgb) / 0.05), transparent 60%),
-    var(--chat-pane);
+  background: radial-gradient(60rem 40rem at 100% 0%, rgb(var(--rl-red-500-rgb) / 0.05), transparent 60%);
 }
 .timeline__inner {
   display: flex;
