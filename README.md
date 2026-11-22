@@ -4,8 +4,10 @@
 
 ```
 apps/site/            сайт Minecraft-сервера (FastAPI + Jinja + Tailwind CDN)
-apps/chat/            семейный мессенджер — клиент Matrix (в работе)
+apps/chat/            семейный мессенджер — PWA-клиент Matrix (React + matrix-js-sdk)
+apps/push-gateway/    push-шлюз Matrix → Web Push
 packages/redline-ui/  дизайн-система: токены, красные линии, компоненты
+deploy/               docker-compose: Continuwuity + push-шлюз + клиент
 ```
 
 ## Сайт
@@ -18,6 +20,23 @@ python -m venv .venv
 
 Сайт отдаёт `packages/redline-ui/src` по пути `/ui`. Если пакет лежит в другом месте
 (например, в Docker-образе) — задай `REDLINE_UI_DIR`. Базу можно переопределить через `DATABASE_URL`.
+
+## Чат
+
+```bash
+pnpm install
+cp apps/chat/public/config.example.json apps/chat/public/config.json   # адрес своего homeserver
+pnpm --filter @redline/chat dev      # http://localhost:5173
+pnpm --filter @redline/chat build    # typecheck + сборка в apps/chat/dist
+```
+
+Что умеет: вход по логину и паролю (регистрации нет), список чатов с непрочитанными, личные и
+групповые чаты, текст и фото со статусом отправки, голосовые (удержание — запись, влево — отмена,
+вверх — зафиксировать; Ogg/Opus, совместимы с Element), E2E-шифрование (rust-crypto, ключ
+восстановления), push-уведомления и бейдж на иконке, сообщения ботов (`m.notice` + HTML) карточкой.
+Звонков нет.
+
+Развёртывание — [deploy/README.md](deploy/README.md).
 
 ## Дизайн-система
 

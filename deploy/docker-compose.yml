@@ -1,0 +1,57 @@
+# Redline Chat: homeserver Continuwuity + push gateway + веб-клиент.
+# Запуск из каталога deploy/:  cp .env.example .env  →  заполнить  →  docker compose up -d --build
+# Наружу ничего не торчит: порты только на 127.0.0.1, TLS и домены — на обратном прокси (Caddy).
+name: redline-chat
+
+services:
+  continuwuity:
+    image: forgejo.ellis.link/continuwuation/continuwuity:${CONTINUWUITY_VERSION:?укажите версию в .env}
+    restart: unless-stopped
+    environment:
+      CONTINUWUITY_CONFIG: /etc/continuwuity.toml
+      CONTINUWUITY_SERVER_NAME: ${SERVER_NAME:?}
+    volumes:
+      - ./continuwuity.toml:/etc/continuwuity.toml:ro
+      - continuwuity-data:/var/lib/continuwuity
+    ports:
+      - "127.0.0.1:${HOMESERVER_PORT:-8008}:8008"
+    networks: [redline]
+
+  push:
+    build:
+      context: ..
+      dockerfile: apps/push-gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?}
+      PUSH_PROXY: ${PUSH_PROXY:-}
+    # портов нет: шлюз зовёт только homeserver по внутренней сети
+    networks: [redline]
+
+  chat:
+    build:
+      context: ..
+      dockerfile: apps/chat/Dockerfile
+    restart: unless-stopped
+    environment:
+      HOMESERVER_URL: ${HOMESERVER_URL:?}
+      SERVER_NAME: ${SERVER_NAME:?}
+      PUSH_GATEWAY_URL: http://push:8080/_matrix/push/v1/notify
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?}
+      BOT_USERS: ${BOT_USERS:-}
+    ports:
+      - "127.0.0.1:${CHAT_PORT:-8090}:8080"
+    networks: [redline]
+
+networks:
+  redline:
+    # Подсеть зафиксирована: continuwuity.toml разрешает исходящие запросы (к push-шлюзу)
+    # только в неё, остальные частные адреса закрыты (защита от SSRF).
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
+
+volumes:
+  continuwuity-data:

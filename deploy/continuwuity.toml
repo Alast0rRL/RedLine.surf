@@ -1,0 +1,54 @@
+# Continuwuity для семейного чата. server_name задаётся из .env (CONTINUWUITY_SERVER_NAME).
+# Полный список опций: https://continuwuity.org/reference/config
+[global]
+database_path = "/var/lib/continuwuity"
+address = ["0.0.0.0"]
+port = 8008
+
+# Аккаунты создаёт администратор (!admin users create …). Открытой регистрации нет.
+allow_registration = false
+# Сервер замкнутый: без федерации с остальным Matrix.
+allow_federation = false
+allow_public_room_directory_over_federation = false
+allow_public_room_directory_without_auth = false
+trusted_servers = []
+# Профили и аватары — только для вошедших.
+require_auth_for_profile_requests = true
+# Без суффиксов к именам новых пользователей (по умолчанию сервер добавляет эмодзи).
+new_user_displayname_suffix = ""
+
+# Фото и голосовые: до 50 МБ на файл.
+max_request_size = 52428800
+
+# Превью ссылок выключены (пустые списки разрешений) — сервер не ходит по чужим URL.
+url_preview_domain_contains_allowlist = []
+url_preview_domain_explicit_allowlist = []
+url_preview_url_contains_allowlist = []
+
+# Куда сервер НЕ может ходить исходящими запросами (защита от SSRF).
+# Это список по умолчанию, но вместо 10.0.0.0/8 — всё 10.x, кроме 10.89.0.0/24:
+# там живёт push-шлюз (подсеть зафиксирована в docker-compose.yml).
+ip_range_denylist = [
+  "127.0.0.0/8",
+  "10.0.0.0/10", "10.64.0.0/12", "10.80.0.0/13", "10.88.0.0/16",
+  "10.89.1.0/24", "10.89.2.0/23", "10.89.4.0/22", "10.89.8.0/21",
+  "10.89.16.0/20", "10.89.32.0/19", "10.89.64.0/18", "10.89.128.0/17",
+  "10.90.0.0/15", "10.92.0.0/14", "10.96.0.0/11", "10.128.0.0/9",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+  "100.64.0.0/10",
+  "192.0.0.0/24",
+  "169.254.0.0/16",
+  "192.88.99.0/24",
+  "198.18.0.0/15",
+  "192.0.2.0/24",
+  "198.51.100.0/24",
+  "203.0.113.0/24",
+  "224.0.0.0/4",
+  "::1/128",
+  "fe80::/10",
+  "fc00::/7",
+  "2001:db8::/32",
+  "ff00::/8",
+  "fec0::/10",
+]

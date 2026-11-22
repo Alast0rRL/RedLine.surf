@@ -1,0 +1,36 @@
+# Добавить в Caddyfile рядом с остальными сайтами (тот же стиль: PROXY-протокол
+# и TLS на 127.0.0.1:8443, ACME HTTP-01 на :18081). Домены — свои.
+
+http://matrix.redline.surf:18081, http://chat.redline.surf:18081 {
+    bind 127.0.0.1
+    respond 404
+}
+
+matrix.redline.surf:8443 {
+    bind 127.0.0.1
+    tls {
+        issuer acme {
+            disable_tlsalpn_challenge
+        }
+    }
+    header Strict-Transport-Security "max-age=31536000"
+    # фото и голосовые; совпадает с max_request_size в continuwuity.toml
+    request_body {
+        max_size 50MB
+    }
+    reverse_proxy 127.0.0.1:8008 {
+        # long-poll /sync
+        flush_interval -1
+    }
+}
+
+chat.redline.surf:8443 {
+    bind 127.0.0.1
+    tls {
+        issuer acme {
+            disable_tlsalpn_challenge
+        }
+    }
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy 127.0.0.1:8090
+}
