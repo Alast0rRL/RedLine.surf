@@ -1,0 +1,177 @@
+/*
+ * Redline design tokens.
+ *
+ * Два слоя:
+ *  1. Палитра и шкалы — константы, не зависят от темы.
+ *     Цвета дублируются каналами (`*-rgb`: "196 0 29") для прозрачности:
+ *     rgb(var(--rl-red-500-rgb) / .4) и Tailwind `<alpha-value>`.
+ *  2. Семантика (`--rl-color-*`) — переключается темой.
+ *     Светлая по умолчанию; тёмная — класс `.dark` (сайт) или
+ *     `[data-theme="dark"]` (чат) на любом предке.
+ */
+
+:root {
+  /* ---------- Палитра ---------- */
+  --rl-red-500: #C4001D;
+  --rl-red-500-rgb: 196 0 29;
+  --rl-red-600: #A30018;
+  --rl-red-600-rgb: 163 0 24;
+  --rl-red-400: #E0223D;
+  --rl-red-400-rgb: 224 34 61;
+
+  --rl-ink-950: #0a0a0a;
+  --rl-ink-950-rgb: 10 10 10;
+  --rl-ink-900: #121212;
+  --rl-ink-900-rgb: 18 18 18;
+  --rl-ink-800: #222222;
+  --rl-ink-700: #333333;
+
+  --rl-gray-50: #f9fafb;
+  --rl-gray-100: #f3f4f6;
+  --rl-gray-200: #e5e7eb;
+  --rl-gray-300: #d1d5db;
+  --rl-gray-400: #9ca3af;
+  --rl-gray-500: #6b7280;
+  --rl-gray-900: #111827;
+
+  --rl-green-500: #22c55e;
+  --rl-green-600: #16a34a;
+  --rl-blue-600: #2563eb;
+  --rl-yellow-500: #eab308;
+  --rl-danger-500: #ef4444;
+  --rl-discord: #5865F2;
+
+  /* ---------- Типографика ---------- */
+  --rl-font-display: 'Montserrat', sans-serif;
+  --rl-font-body: 'Open Sans', sans-serif;
+  --rl-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --rl-weight-regular: 400;
+  --rl-weight-semibold: 600;
+  --rl-weight-bold: 700;
+  --rl-weight-black: 900;
+
+  --rl-text-2xs: 0.625rem;  /* 10px — надписи-«бейджи» */
+  --rl-text-xs: 0.75rem;    /* 12px */
+  --rl-text-sm: 0.875rem;   /* 14px */
+  --rl-text-base: 1rem;     /* 16px */
+  --rl-text-lg: 1.125rem;   /* 18px */
+  --rl-text-xl: 1.25rem;    /* 20px */
+  --rl-text-2xl: 1.5rem;    /* 24px */
+  --rl-text-3xl: 1.875rem;  /* 30px */
+  --rl-text-4xl: 2.25rem;   /* 36px — заголовки секций */
+  --rl-text-5xl: 3rem;      /* 48px */
+  --rl-text-8xl: 6rem;      /* 96px — hero */
+
+  --rl-leading-tight: 1.25;
+  --rl-leading-normal: 1.5;
+  --rl-leading-relaxed: 1.625;
+
+  --rl-tracking-tighter: -0.05em;
+  --rl-tracking-tight: -0.025em;
+  --rl-tracking-widest: 0.1em;
+  --rl-tracking-caps: 0.2em;   /* кнопки, подписи капсом */
+  --rl-tracking-eyebrow: 0.3em;
+
+  /* ---------- Отступы (шаг 4px) ---------- */
+  --rl-space-0-5: 0.125rem;
+  --rl-space-1: 0.25rem;
+  --rl-space-1-5: 0.375rem;
+  --rl-space-2: 0.5rem;
+  --rl-space-3: 0.75rem;
+  --rl-space-4: 1rem;
+  --rl-space-5: 1.25rem;
+  --rl-space-6: 1.5rem;
+  --rl-space-8: 2rem;
+  --rl-space-10: 2.5rem;
+  --rl-space-12: 3rem;
+  --rl-space-16: 4rem;
+  --rl-space-20: 5rem;
+  --rl-space-32: 8rem;
+
+  /* ---------- Радиусы ---------- */
+  --rl-radius-sm: 0.5rem;   /* 8  */
+  --rl-radius-md: 0.75rem;  /* 12 — иконочные кнопки */
+  --rl-radius-lg: 1rem;     /* 16 — кнопки, поля, тосты */
+  --rl-radius-xl: 1.5rem;   /* 24 — hero-кнопки, фото */
+  --rl-radius-2xl: 30px;    /* FAQ */
+  --rl-radius-3xl: 40px;    /* большие карточки, модалка */
+  --rl-radius-full: 9999px;
+
+  /* ---------- Тени и свечение ---------- */
+  --rl-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --rl-shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --rl-shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --rl-shadow-glow: 0 20px 50px rgb(var(--rl-red-500-rgb) / 0.3);
+  --rl-blur-md: 12px;
+  --rl-blur-blob: 80px;
+
+  /* ---------- Движение ---------- */
+  --rl-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --rl-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);   /* появление блоков */
+  --rl-ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);  /* слайдер */
+  --rl-ease-wave: cubic-bezier(0.55, 0.5, 0.45, 0.5);
+  --rl-duration-fast: 150ms;
+  --rl-duration-base: 300ms;
+  --rl-duration-slow: 500ms;
+  --rl-duration-reveal: 1s;
+
+  /* Красные линии (см. red-lines.css) */
+  --rl-lines-color: var(--rl-red-500);
+  --rl-lines-width: 2px;
+  --rl-lines-angle: 45deg;
+  --rl-lines-enter: 1.5s;
+  --rl-lines-cycle: 12s;
+
+  /* ---------- Слои ---------- */
+  --rl-z-lines: 1;
+  --rl-z-glow: 40;
+  --rl-z-nav: 100;
+  --rl-z-overlay: 150;
+  --rl-z-modal: 200;
+  --rl-z-toast: 250;
+  --rl-z-lightbox: 300;
+
+  /* ---------- Семантика: светлая тема ---------- */
+  color-scheme: light;
+  --rl-color-bg: #ffffff;
+  --rl-color-bg-rgb: 255 255 255;
+  --rl-color-surface: var(--rl-gray-50);
+  --rl-color-surface-raised: #ffffff;
+  --rl-color-surface-glass: var(--rl-gray-50);
+  --rl-color-fill: var(--rl-gray-100);
+  --rl-color-border: var(--rl-gray-100);
+  --rl-color-border-strong: var(--rl-gray-300);
+  --rl-color-text: var(--rl-gray-900);
+  --rl-color-text-muted: var(--rl-gray-500);
+  --rl-color-text-subtle: var(--rl-gray-400);
+  --rl-color-accent: var(--rl-red-500);
+  --rl-color-on-accent: #ffffff;
+  --rl-color-inverse-bg: var(--rl-ink-950);
+  --rl-color-inverse-text: #ffffff;
+  --rl-color-backdrop: rgb(0 0 0 / 0.9);
+  --rl-color-skeleton-a: var(--rl-gray-200);
+  --rl-color-skeleton-b: var(--rl-gray-100);
+  --rl-lines-glow: none;
+}
+
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --rl-color-bg: var(--rl-ink-950);
+  --rl-color-bg-rgb: var(--rl-ink-950-rgb);
+  --rl-color-surface: var(--rl-ink-900);
+  --rl-color-surface-raised: var(--rl-ink-900);
+  --rl-color-surface-glass: rgb(255 255 255 / 0.03);
+  --rl-color-fill: rgb(255 255 255 / 0.05);
+  --rl-color-border: rgb(255 255 255 / 0.05);
+  --rl-color-border-strong: rgb(255 255 255 / 0.1);
+  --rl-color-text: var(--rl-gray-100);
+  --rl-color-text-muted: var(--rl-gray-500);
+  --rl-color-text-subtle: var(--rl-gray-400);
+  --rl-color-inverse-bg: #ffffff;
+  --rl-color-inverse-text: #000000;
+  --rl-color-skeleton-a: var(--rl-ink-800);
+  --rl-color-skeleton-b: var(--rl-ink-700);
+  --rl-lines-glow: 0 0 30px rgb(var(--rl-red-500-rgb) / 0.4);
+}

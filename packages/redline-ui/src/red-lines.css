@@ -1,0 +1,78 @@
+/*
+ * <rl-red-lines> — фирменные красные линии Redline.
+ *
+ * Каждая линия — полноразмерный слой `.rl-line`, который едет по X через
+ * `translate` (проценты = ширина контейнера, только композитинг, без reflow).
+ * Сама линия — его ::before: 2px × 250%, повёрнута на угол, градиент + свечение.
+ *
+ * Позиции задаёт red-lines.js через переменные у каждой линии:
+ *   --x       базовая позиция, %      (10% / 90% для двух линий)
+ *   --x-to    точка «вдоха», %        (25% / 75%)
+ *   --x-from  откуда въезжает, %      (-50% / 150%)
+ *   --cycle   длительность цикла
+ */
+
+rl-red-lines {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: var(--rl-z-lines);
+  /* brightness: 0..1 */
+  opacity: var(--rl-lines-brightness, 1);
+  contain: strict;
+}
+
+rl-red-lines[disabled] {
+  display: none;
+}
+
+rl-red-lines .rl-line {
+  position: absolute;
+  inset: 0;
+  translate: var(--x) 0;
+  will-change: translate;
+  animation:
+    rl-line-enter var(--rl-lines-enter) ease forwards,
+    rl-line-breathe var(--cycle, var(--rl-lines-cycle)) ease var(--rl-lines-enter) infinite;
+}
+
+rl-red-lines[no-intro] .rl-line {
+  animation: rl-line-breathe var(--cycle, var(--rl-lines-cycle)) ease var(--phase, 0s) infinite;
+}
+
+rl-red-lines .rl-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -75%;
+  width: var(--rl-lines-width);
+  height: 250%;
+  rotate: var(--rl-lines-angle);
+  background: linear-gradient(transparent, var(--rl-lines-color), transparent);
+  box-shadow: var(--rl-lines-glow);
+}
+
+rl-red-lines[data-paused] .rl-line {
+  animation-play-state: paused;
+}
+
+@keyframes rl-line-enter {
+  0% { translate: var(--x-from) 0; opacity: 0; }
+  100% { translate: var(--x) 0; opacity: 1; }
+}
+
+@keyframes rl-line-breathe {
+  0%, 100% { translate: var(--x) 0; }
+  50% { translate: var(--x-to) 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  rl-red-lines .rl-line,
+  rl-red-lines[no-intro] .rl-line {
+    animation: none;
+    translate: var(--x) 0;
+    opacity: 1;
+  }
+}

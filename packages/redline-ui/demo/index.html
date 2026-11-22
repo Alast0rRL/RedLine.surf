@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Redline UI</title>
+  <meta name="theme-color" content="#C4001D">
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../src/index.css">
+  <style>
+    .demo-wrap { width: min(100% - 2rem, 72rem); margin-inline: auto; }
+    .demo-hero {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 26rem;
+      overflow: hidden;
+      border-bottom: 1px solid var(--rl-color-border);
+      background: var(--rl-color-bg);
+      text-align: center;
+    }
+    .demo-hero__content { position: relative; z-index: 2; padding: 2rem 1rem; }
+    .demo-hero h1 {
+      margin: 1rem 0 0;
+      font-size: clamp(2.5rem, 9vw, var(--rl-text-8xl));
+      letter-spacing: var(--rl-tracking-tighter);
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    .demo-hero h1 span { color: var(--rl-color-accent); }
+
+    .demo-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+      gap: 1rem 1.5rem;
+      align-items: end;
+      margin-top: 2rem;
+    }
+    .demo-controls output { color: var(--rl-color-accent); font-family: var(--rl-font-mono); }
+    input[type="range"] { width: 100%; accent-color: var(--rl-red-500); }
+    .demo-check { display: flex; gap: .5rem; align-items: center; font-size: var(--rl-text-sm); }
+    .demo-check input { accent-color: var(--rl-red-500); width: 1.1rem; height: 1.1rem; }
+
+    section.demo-section { padding: 3.5rem 0; border-bottom: 1px solid var(--rl-color-border); }
+    .demo-section > .demo-wrap > h2 {
+      margin: 0 0 .5rem;
+      font-size: var(--rl-text-3xl);
+      font-style: italic;
+      text-transform: uppercase;
+      letter-spacing: var(--rl-tracking-tighter);
+    }
+    .demo-lead { margin: 0 0 2rem; color: var(--rl-color-text-muted); font-size: var(--rl-text-sm); }
+    .demo-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+    .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1.5rem; }
+    .demo-sub { margin: 2rem 0 1rem; }
+
+    .swatch { border-radius: var(--rl-radius-lg); overflow: hidden; border: 1px solid var(--rl-color-border); }
+    .swatch__chip { height: 4.5rem; }
+    .swatch__meta { padding: .6rem .75rem; font-size: var(--rl-text-xs); }
+    .swatch__meta code { display: block; color: var(--rl-color-text-muted); font-family: var(--rl-font-mono); font-size: 11px; }
+
+    .type-row { display: flex; flex-wrap: wrap; gap: .25rem 1.5rem; align-items: baseline; padding: .75rem 0; border-bottom: 1px dashed var(--rl-color-border); overflow-wrap: anywhere; }
+    .type-row code { flex: none; width: 9rem; color: var(--rl-color-text-muted); font-family: var(--rl-font-mono); font-size: var(--rl-text-xs); }
+
+    .radius-box { width: 5rem; height: 5rem; background: var(--rl-color-surface-glass); border: 2px solid var(--rl-color-accent); }
+    .shadow-box { width: 9rem; height: 5rem; border-radius: var(--rl-radius-lg); background: var(--rl-color-surface-raised); display: grid; place-items: center; font-size: var(--rl-text-xs); color: var(--rl-color-text-muted); }
+
+    .demo-topbar {
+      position: sticky; top: 0; z-index: var(--rl-z-nav);
+      display: flex; justify-content: space-between; align-items: center;
+      padding: .75rem 1rem;
+      background: rgb(var(--rl-color-bg-rgb) / .7);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--rl-color-border);
+    }
+    .demo-logo { font-family: var(--rl-font-display); font-weight: 900; font-size: var(--rl-text-xl); color: var(--rl-color-accent); text-transform: uppercase; letter-spacing: var(--rl-tracking-tighter); }
+
+    .demo-chatlist { position: relative; overflow: hidden; border-radius: var(--rl-radius-xl); border: 1px solid var(--rl-color-border); background: var(--rl-color-bg); }
+    .demo-chatlist ul { position: relative; z-index: 2; list-style: none; margin: 0; padding: .5rem; }
+    .demo-chatlist li { display: flex; gap: .75rem; align-items: center; padding: .75rem; border-radius: var(--rl-radius-lg); }
+    .demo-chatlist li:hover { background: var(--rl-color-fill); }
+    .demo-chatlist .name { font-weight: 600; }
+    .demo-chatlist .preview { color: var(--rl-color-text-muted); font-size: var(--rl-text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .demo-chatlist .meta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: .35rem; font-size: var(--rl-text-xs); color: var(--rl-color-text-subtle); }
+    .demo-chatlist .grow { min-width: 0; flex: 1; }
+  </style>
+</head>
+<body>
+  <header class="demo-topbar">
+    <span class="demo-logo">Redline UI</span>
+    <button class="rl-btn rl-btn--ghost rl-btn--sm" id="theme">Светлая тема</button>
+  </header>
+
+  <!-- ===== Красные линии ===== -->
+  <section class="demo-hero">
+    <rl-red-lines id="lines"></rl-red-lines>
+    <div class="demo-hero__content">
+      <span class="rl-eyebrow">Design system</span>
+      <h1>Redline <span>UI</span></h1>
+    </div>
+  </section>
+
+  <section class="demo-section">
+    <div class="demo-wrap">
+      <h2>Красные линии</h2>
+      <p class="demo-lead">
+        <code>&lt;rl-red-lines lines speed brightness disabled no-intro&gt;</code> — CSS-анимация на композиторе,
+        пауза в скрытой вкладке и вне экрана, при <code>prefers-reduced-motion</code> линии стоят на месте.
+      </p>
+      <div class="demo-controls">
+        <label class="rl-field">
+          <span class="rl-label">Плотность — <output id="o-lines">2</output></span>
+          <input type="range" id="c-lines" min="1" max="12" step="1" value="2">
+        </label>
+        <label class="rl-field">
+          <span class="rl-label">Скорость — <output id="o-speed">1×</output></span>
+          <input type="range" id="c-speed" min="0.25" max="4" step="0.25" value="1">
+        </label>
+        <label class="rl-field">
+          <span class="rl-label">Яркость — <output id="o-bright">1</output></span>
+          <input type="range" id="c-bright" min="0" max="1" step="0.05" value="1">
+        </label>
+        <div class="demo-row">
+          <label class="demo-check"><input type="checkbox" id="c-on" checked> Включены</label>
+          <button class="rl-btn rl-btn--secondary rl-btn--sm" id="c-replay">Повторить въезд</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Токены ===== -->
+  <section class="demo-section">
+    <div class="demo-wrap">
+      <h2>Цвета</h2>
+      <p class="demo-lead">Палитра — константы; семантические <code>--rl-color-*</code> переключаются темой.</p>
+      <div class="demo-grid" id="swatches"></div>
+
+      <h3 class="demo-sub">Типографика</h3>
+      <div>
+        <div class="type-row"><code>display / 8xl</code><span style="font-family:var(--rl-font-display);font-weight:900;font-size:clamp(2.5rem,7vw,var(--rl-text-8xl));line-height:1;text-transform:uppercase;letter-spacing:var(--rl-tracking-tighter)">Redline</span></div>
+        <div class="type-row"><code>display / 4xl</code><span style="font-family:var(--rl-font-display);font-weight:900;font-size:var(--rl-text-4xl);font-style:italic;text-transform:uppercase;letter-spacing:var(--rl-tracking-tighter)">Заголовок секции</span></div>
+        <div class="type-row"><code>display / xl</code><span style="font-family:var(--rl-font-display);font-weight:900;font-size:var(--rl-text-xl);text-transform:uppercase;color:var(--rl-color-accent)">Заголовок карточки</span></div>
+        <div class="type-row"><code>body / base</code><span>Обычный текст сообщения. Съешь же ещё этих мягких французских булок.</span></div>
+        <div class="type-row"><code>body / sm muted</code><span style="font-size:var(--rl-text-sm);color:var(--rl-color-text-muted)">Вторичный текст, подписи, превью последнего сообщения.</span></div>
+        <div class="type-row"><code>caps / 2xs</code><span class="rl-label">Подпись капсом</span></div>
+        <div class="type-row"><code>mono / sm</code><span style="font-family:var(--rl-font-mono);font-size:var(--rl-text-sm)">12:04 · 0:37</span></div>
+      </div>
+
+      <h3 class="demo-sub">Радиусы</h3>
+      <div class="demo-row">
+        <div class="radius-box" style="border-radius:var(--rl-radius-md)" title="md 12"></div>
+        <div class="radius-box" style="border-radius:var(--rl-radius-lg)" title="lg 16"></div>
+        <div class="radius-box" style="border-radius:var(--rl-radius-xl)" title="xl 24"></div>
+        <div class="radius-box" style="border-radius:var(--rl-radius-2xl)" title="2xl 30"></div>
+        <div class="radius-box" style="border-radius:var(--rl-radius-3xl)" title="3xl 40"></div>
+        <div class="radius-box" style="border-radius:var(--rl-radius-full)" title="full"></div>
+      </div>
+
+      <h3 class="demo-sub">Тени</h3>
+      <div class="demo-row">
+        <div class="shadow-box" style="box-shadow:var(--rl-shadow-xl)">shadow-xl</div>
+        <div class="shadow-box" style="box-shadow:var(--rl-shadow-2xl)">shadow-2xl</div>
+        <div class="shadow-box" style="box-shadow:var(--rl-shadow-glow)">shadow-glow</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Кнопки ===== -->
+  <section class="demo-section">
+    <div class="demo-wrap">
+      <h2>Button</h2>
+      <p class="demo-lead"><code>.rl-btn</code> + <code>--primary | --secondary | --ghost | --outline</code>, размеры <code>--sm | --lg | --xl</code>, <code>--icon</code>, <code>aria-busy</code>.</p>
+      <div class="demo-row">
+        <button class="rl-btn rl-btn--primary">Играть сейчас</button>
+        <button class="rl-btn">Discord</button>
+        <button class="rl-btn rl-btn--secondary">Secondary</button>
+        <button class="rl-btn rl-btn--ghost">Ghost</button>
+        <button class="rl-btn rl-btn--outline">Outline</button>
+        <button class="rl-btn rl-btn--primary" disabled>Disabled</button>
+        <button class="rl-btn rl-btn--primary" aria-busy="true">Загрузка</button>
+      </div>
+      <div class="demo-row" style="margin-top:1rem">
+        <button class="rl-btn rl-btn--primary rl-btn--sm">Small</button>
+        <button class="rl-btn rl-btn--primary">Medium</button>
+        <button class="rl-btn rl-btn--primary rl-btn--lg">Large</button>
+        <button class="rl-btn rl-btn--icon rl-btn--ghost" aria-label="Микрофон">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>
+        </button>
+        <button class="rl-btn rl-btn--icon rl-btn--primary rl-btn--round" aria-label="Отправить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <div style="margin-top:1rem">
+        <button class="rl-btn rl-btn--primary rl-btn--xl">Hero XL</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Поля ===== -->
+  <section class="demo-section">
+    <div class="demo-wrap">
+      <h2>Input</h2>
+      <p class="demo-lead"><code>.rl-field</code> &gt; <code>.rl-label</code> + <code>.rl-input</code> + <code>.rl-hint</code>; ошибка — <code>aria-invalid="true"</code>.</p>
+      <div class="demo-grid">
+        <label class="rl-field">
+          <span class="rl-label">Логин</span>
+          <input class="rl-input" placeholder="mari" autocomplete="off">
+          <span class="rl-hint">Без @ и домена сервера</span>
+        </label>
+        <label class="rl-field">
+          <span class="rl-label">Пароль</span>
+          <input class="rl-input" type="password" value="secret" aria-invalid="true">
+          <span class="rl-hint rl-hint--error">Неверный логин или пароль</span>
+        </label>
+        <label class="rl-field">
+          <span class="rl-label">Отключено</span>
+          <input class="rl-input" value="read only" disabled>
+        </label>
+        <label class="rl-field" style="grid-column:1/-1">
+          <span class="rl-label">Сообщение</span>
+          <textarea class="rl-input" rows="3" placeholder="Напиши что-нибудь…"></textarea>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Карточки ===== -->
+  <section class="demo-section">
+    <div class="demo-wrap">
+      <h2>Card</h2>
+      <p class="demo-lead"><code>.rl-card</code>, <code>--lg</code> (как на сайте), <code>--solid</code>, <code>--interactive</code>.</p>
+      <div class="demo-grid">
+        <article class="rl-card rl-card--lg rl-card--interactive" tabindex="0">
+          <div style="font-size:2.25rem;margin-bottom:1.5rem">🛡️</div>
+          <h3 class="rl-card__title">Защита вещей</h3>
+          <p class="rl-card__text">Инвентарь не исчезает по таймеру и не горит в лаве.</p>
+        </article>
+        <article class="rl-card">
+          <h3 class="rl-card__title">Обычная</h3>
+          <p class="rl-card__text">Компактная карточка для интерфейса чата: настройки, профиль.</p>
+        </article>
+        <article class="rl-card rl-card--solid">
+          <h3 class="rl-card__title">Solid</h3>
+          <p class="rl-card__text">Непрозрачный фон — когда под карточкой линии или фото.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Аватары и бейджи ===== -->
+  <section class="demo-section">
+    <div class="demo-wrap">
+      <h2>Avatar &amp; Badge</h2>
+      <p class="demo-lead">Цвет заглушки — <code>avatarColor(id)</code>, буквы — <code>initials(name)</code>.</p>
+      <div class="demo-row" id="avatars"></div>
+      <div class="demo-row" style="margin-top:1.5rem">
+        <span class="rl-avatar rl-avatar--lg"><img src="https://mc-heads.net/avatar/Alast0r_RL/112" alt=""><span class="rl-avatar__status" data-status="online"></span></span>
+        <span class="rl-avatar rl-avatar--xl"><img src="https://mc-heads.net/avatar/Alast0r_RL/128" alt=""></span>
+        <span class="rl-badge">3</span>
+        <span class="rl-badge">128</span>
+        <span class="rl-badge rl-badge--muted">12</span>
+        <span class="rl-badge rl-badge--dot"></span>
+        <span class="rl-eyebrow">Season 1: No Wipe</span>
+      </div>
+
+      <h3 class="demo-sub">Пример: список чатов на линиях</h3>
+      <div class="demo-chatlist" style="max-width:26rem">
+        <rl-red-lines no-intro brightness="0.35" speed="0.6"></rl-red-lines>
+        <ul id="chatlist"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Модалка и тосты ===== -->
+  <section class="demo-section">
+    <div class="demo-wrap">
+      <h2>Modal &amp; Toast</h2>
+      <p class="demo-lead">Нативный <code>&lt;dialog class="rl-modal"&gt;</code> + <code>openModal/closeModal</code>; <code>toast(text, {variant})</code>.</p>
+      <div class="demo-row">
+        <button class="rl-btn rl-btn--primary" id="open-modal">Открыть модалку</button>
+        <button class="rl-btn" data-toast="default">Тост</button>
+        <button class="rl-btn" data-toast="success">Успех</button>
+        <button class="rl-btn" data-toast="error">Ошибка</button>
+      </div>
+      <div class="demo-sub rl-skeleton" style="height:1rem;width:min(100%,20rem)"></div>
+      <span class="rl-spinner"></span>
+    </div>
+  </section>
+
+  <dialog class="rl-modal" id="modal" aria-labelledby="modal-title">
+    <button class="rl-btn rl-btn--icon rl-btn--ghost rl-btn--sm rl-modal__close" data-rl-close aria-label="Закрыть">✕</button>
+    <h2 class="rl-modal__title" id="modal-title">Кодекс Redline</h2>
+    <div class="rl-modal__body">
+      <p><strong>1. Честность.</strong> Любые читы — бан навсегда без права амнистии.</p>
+      <p><strong>2. Созидание.</strong> Гриферство запрещено в любом виде.</p>
+      <p><strong>3. Порядок.</strong> Запрещено создание лаг-машин.</p>
+    </div>
+    <div class="rl-modal__actions">
+      <button class="rl-btn rl-btn--primary rl-btn--lg" data-rl-close id="modal-ok">Принять</button>
+      <button class="rl-btn rl-btn--ghost rl-btn--lg" data-rl-close>Отмена</button>
+    </div>
+  </dialog>
+
+  <script type="module">
+    import { openModal, toast, avatarColor, initials } from '../src/index.js';
+
+    const $ = (s) => document.querySelector(s);
+
+    // Тема
+    const themeBtn = $('#theme');
+    themeBtn.onclick = () => {
+      const dark = document.documentElement.dataset.theme === 'dark';
+      document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+      themeBtn.textContent = dark ? 'Тёмная тема' : 'Светлая тема';
+    };
+
+    // Линии
+    const lines = $('#lines');
+    const bind = (input, out, attr, fmt = (v) => v) => {
+      $(input).addEventListener('input', (e) => {
+        lines.setAttribute(attr, e.target.value);
+        $(out).textContent = fmt(e.target.value);
+      });
+    };
+    bind('#c-lines', '#o-lines', 'lines');
+    bind('#c-speed', '#o-speed', 'speed', (v) => `${v}×`);
+    bind('#c-bright', '#o-bright', 'brightness');
+    $('#c-on').addEventListener('change', (e) => { lines.disabled = !e.target.checked; });
+    $('#c-replay').onclick = () => lines.replay();
+
+    // Палитра
+    const swatches = [
+      ['--rl-red-500', 'Redline red'], ['--rl-red-600', 'Red pressed'], ['--rl-red-400', 'Red light'],
+      ['--rl-ink-950', 'Ink 950 / фон'], ['--rl-ink-900', 'Ink 900 / поверхность'], ['--rl-gray-500', 'Gray 500 / muted'],
+      ['--rl-green-500', 'Online'], ['--rl-danger-500', 'Ошибка'], ['--rl-discord', 'Discord'],
+      ['--rl-color-bg', 'color-bg'], ['--rl-color-surface', 'color-surface'], ['--rl-color-text', 'color-text'],
+    ];
+    const css = getComputedStyle(document.documentElement);
+    $('#swatches').innerHTML = swatches.map(([v, name]) => `
+      <div class="swatch">
+        <div class="swatch__chip" style="background:var(${v})"></div>
+        <div class="swatch__meta">${name}<code>${v}</code><code>${css.getPropertyValue(v).trim()}</code></div>
+      </div>`).join('');
+
+    // Аватары
+    const people = ['Мари', 'Иван Петров', 'Alast0r_RL', 'Necr0manthre', 'German', 'Мама', 'Папа', '@bot:redline'];
+    $('#avatars').innerHTML = people.map((p, i) => {
+      const size = ['rl-avatar--xs', 'rl-avatar--sm', '', 'rl-avatar--lg'][i % 4];
+      return `<span class="rl-avatar ${size} ${i === 6 ? 'rl-avatar--round' : ''}" data-color="${avatarColor(p)}" title="${p}">${initials(p)}</span>`;
+    }).join('');
+
+    // Список чатов
+    const chats = [
+      ['Мари', 'Вода: 1.2 / 2 л. Пора выпить стакан 💧', '12:04', 2],
+      ['Семья', 'Мама: Кто заберёт хлеб?', '11:47', 5],
+      ['Папа', 'Голосовое сообщение · 0:37', 'вчера', 0],
+      ['Alast0r_RL', 'Фото', 'пн', 0],
+    ];
+    $('#chatlist').innerHTML = chats.map(([n, m, t, u]) => `
+      <li>
+        <span class="rl-avatar" data-color="${avatarColor(n)}">${initials(n)}</span>
+        <div class="grow"><div class="name">${n}</div><div class="preview">${m}</div></div>
+        <div class="meta"><span>${t}</span>${u ? `<span class="rl-badge">${u}</span>` : ''}</div>
+      </li>`).join('');
+
+    // Модалка и тосты
+    $('#open-modal').onclick = () => openModal($('#modal'));
+    $('#modal-ok').addEventListener('click', () => toast('Принято!', { variant: 'success' }));
+    const texts = { default: 'Скопировано!', success: 'Сообщение отправлено', error: 'Нет соединения с сервером' };
+    document.querySelectorAll('[data-toast]').forEach((b) => {
+      b.onclick = () => toast(texts[b.dataset.toast], { variant: b.dataset.toast });
+    });
+  </script>
+</body>
+</html>

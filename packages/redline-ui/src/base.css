@@ -1,0 +1,42 @@
+/*
+ * Базовые стили страницы для приложений без Tailwind (чат, демо).
+ * Сайт их не подключает — там preflight Tailwind.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--rl-color-bg);
+  color: var(--rl-color-text);
+  font-family: var(--rl-font-body);
+  font-size: var(--rl-text-base);
+  line-height: var(--rl-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--rl-font-display);
+  font-weight: var(--rl-weight-black);
+  line-height: var(--rl-leading-tight);
+}
+
+::selection {
+  background: var(--rl-color-accent);
+  color: var(--rl-color-on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--rl-color-accent);
+  outline-offset: 2px;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+img, svg, video, canvas, audio { display: block; max-width: 100%; }

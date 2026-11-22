@@ -1,0 +1,405 @@
+/*
+ * Компоненты Redline. Только классы `.rl-*` — без привязки к фреймворку:
+ * работают в Jinja-шаблонах сайта и в React-обёртках чата.
+ * Требуют tokens.css.
+ */
+
+/* ============ Button ============ */
+.rl-btn {
+  --_h: 3rem;
+  --_px: var(--rl-space-6);
+  --_radius: var(--rl-radius-lg);
+  --_fs: var(--rl-text-xs);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rl-space-2);
+  min-height: var(--_h);
+  padding: 0 var(--_px);
+  border: 1px solid transparent;
+  border-radius: var(--_radius);
+  font-family: var(--rl-font-body);
+  font-size: var(--_fs);
+  font-weight: var(--rl-weight-black);
+  line-height: 1;
+  letter-spacing: var(--rl-tracking-caps);
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--rl-color-fill);
+  color: var(--rl-color-text);
+  transition:
+    translate var(--rl-duration-slow) var(--rl-ease-standard),
+    scale var(--rl-duration-fast) var(--rl-ease-standard),
+    background-color var(--rl-duration-base) var(--rl-ease-standard),
+    color var(--rl-duration-base) var(--rl-ease-standard),
+    border-color var(--rl-duration-base) var(--rl-ease-standard),
+    box-shadow var(--rl-duration-base) var(--rl-ease-standard);
+}
+.rl-btn:hover { background: var(--rl-color-accent); color: var(--rl-color-on-accent); }
+.rl-btn:active { scale: 0.95; }
+.rl-btn:focus-visible {
+  outline: 2px solid var(--rl-color-accent);
+  outline-offset: 3px;
+}
+.rl-btn > svg { width: 1.25em; height: 1.25em; flex: none; }
+
+.rl-btn--primary {
+  background: var(--rl-color-accent);
+  color: var(--rl-color-on-accent);
+  box-shadow: var(--rl-shadow-glow);
+}
+.rl-btn--primary:hover { background: var(--rl-red-600); translate: 0 -2px; }
+
+.rl-btn--secondary {
+  background: var(--rl-color-surface-raised);
+  border-color: var(--rl-color-border-strong);
+}
+
+.rl-btn--ghost { background: transparent; }
+.rl-btn--ghost:hover { background: var(--rl-color-fill); color: var(--rl-color-accent); }
+
+.rl-btn--outline {
+  background: transparent;
+  border-color: var(--rl-color-accent);
+  color: var(--rl-color-accent);
+}
+
+.rl-btn--sm { --_h: 2.25rem; --_px: var(--rl-space-4); --_radius: var(--rl-radius-md); --_fs: var(--rl-text-2xs); }
+.rl-btn--lg { --_h: 4rem; --_px: var(--rl-space-10); --_fs: var(--rl-text-sm); }
+.rl-btn--xl { --_h: 6rem; --_px: var(--rl-space-12); --_radius: var(--rl-radius-xl); --_fs: var(--rl-text-lg); }
+.rl-btn--block { display: flex; width: 100%; }
+
+.rl-btn--icon { --_px: 0; width: var(--_h); letter-spacing: 0; }
+.rl-btn--icon.rl-btn--sm { --_radius: var(--rl-radius-md); }
+.rl-btn--round { --_radius: var(--rl-radius-full); }
+
+.rl-btn:disabled,
+.rl-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Загрузка: <button class="rl-btn" aria-busy="true"> — текст прячется, крутится спиннер */
+.rl-btn[aria-busy="true"] { color: transparent; pointer-events: none; }
+.rl-btn[aria-busy="true"]::after {
+  content: '';
+  position: absolute;
+  width: 1.25em;
+  height: 1.25em;
+  border: 2px solid currentColor;
+  border-color: var(--rl-color-on-accent) transparent var(--rl-color-on-accent) transparent;
+  border-radius: 50%;
+  animation: rl-spin 0.8s linear infinite;
+}
+.rl-btn:not(.rl-btn--primary)[aria-busy="true"]::after {
+  border-color: var(--rl-color-accent) transparent var(--rl-color-accent) transparent;
+}
+
+/* ============ Input ============ */
+.rl-field { display: flex; flex-direction: column; gap: var(--rl-space-2); }
+
+.rl-label {
+  font-size: var(--rl-text-2xs);
+  font-weight: var(--rl-weight-black);
+  letter-spacing: var(--rl-tracking-caps);
+  text-transform: uppercase;
+  color: var(--rl-color-text-muted);
+}
+
+.rl-input {
+  width: 100%;
+  min-height: 3rem;
+  padding: var(--rl-space-3) var(--rl-space-4);
+  border: 1px solid var(--rl-color-border-strong);
+  border-radius: var(--rl-radius-lg);
+  background: var(--rl-color-surface-glass);
+  color: var(--rl-color-text);
+  font-family: var(--rl-font-body);
+  font-size: var(--rl-text-base); /* 16px — iOS не зумит при фокусе */
+  line-height: var(--rl-leading-normal);
+  outline: none;
+  transition:
+    border-color var(--rl-duration-base) var(--rl-ease-standard),
+    box-shadow var(--rl-duration-base) var(--rl-ease-standard);
+}
+.rl-input::placeholder { color: var(--rl-color-text-subtle); opacity: 1; }
+.rl-input:hover { border-color: rgb(var(--rl-red-500-rgb) / 0.5); }
+.rl-input:focus {
+  border-color: var(--rl-color-accent);
+  box-shadow: 0 0 0 3px rgb(var(--rl-red-500-rgb) / 0.2);
+}
+.rl-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.rl-input[aria-invalid="true"] { border-color: var(--rl-danger-500); }
+textarea.rl-input { resize: vertical; min-height: 6rem; }
+
+.rl-hint { font-size: var(--rl-text-xs); color: var(--rl-color-text-muted); }
+.rl-hint--error { color: var(--rl-danger-500); }
+
+/* ============ Card ============ */
+.rl-card {
+  padding: var(--rl-space-6);
+  border: 1px solid var(--rl-color-border);
+  border-radius: var(--rl-radius-xl);
+  background: var(--rl-color-surface-glass);
+  backdrop-filter: blur(var(--rl-blur-md));
+  -webkit-backdrop-filter: blur(var(--rl-blur-md));
+  transition: border-color var(--rl-duration-slow) var(--rl-ease-standard);
+}
+.rl-card--lg { padding: var(--rl-space-10); border-radius: var(--rl-radius-3xl); }
+.rl-card--solid { background: var(--rl-color-surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.rl-card--interactive { cursor: pointer; }
+.rl-card--interactive:hover,
+.rl-card--interactive:focus-visible { border-color: rgb(var(--rl-red-500-rgb) / 0.5); outline: none; }
+
+.rl-card__title {
+  margin: 0 0 var(--rl-space-4);
+  font-family: var(--rl-font-display);
+  font-size: var(--rl-text-xl);
+  font-weight: var(--rl-weight-black);
+  text-transform: uppercase;
+  color: var(--rl-color-accent);
+}
+.rl-card__text {
+  margin: 0;
+  font-size: var(--rl-text-sm);
+  line-height: var(--rl-leading-relaxed);
+  color: var(--rl-color-text-muted);
+}
+
+/* ============ Avatar ============ */
+.rl-avatar {
+  --_size: 2.5rem;
+  --_bg: var(--rl-red-500);
+
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--_size);
+  height: var(--_size);
+  border-radius: 28%;
+  background: var(--_bg);
+  color: #fff;
+  font-family: var(--rl-font-display);
+  font-size: calc(var(--_size) * 0.4);
+  font-weight: var(--rl-weight-black);
+  line-height: 1;
+  text-transform: uppercase;
+  user-select: none;
+}
+.rl-avatar > img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+.rl-avatar--xs { --_size: 1.5rem; }
+.rl-avatar--sm { --_size: 2rem; }
+.rl-avatar--lg { --_size: 3.5rem; }
+.rl-avatar--xl { --_size: 8rem; border-radius: var(--rl-radius-xl); }
+.rl-avatar--round { border-radius: var(--rl-radius-full); }
+
+/* Цвет заглушки выбирается по хешу имени: data-color="0..7" */
+.rl-avatar[data-color="0"] { --_bg: #C4001D; }
+.rl-avatar[data-color="1"] { --_bg: #B4541A; }
+.rl-avatar[data-color="2"] { --_bg: #8A6A00; }
+.rl-avatar[data-color="3"] { --_bg: #2F7D32; }
+.rl-avatar[data-color="4"] { --_bg: #00796B; }
+.rl-avatar[data-color="5"] { --_bg: #1D5FC4; }
+.rl-avatar[data-color="6"] { --_bg: #5E35B1; }
+.rl-avatar[data-color="7"] { --_bg: #AD1457; }
+
+.rl-avatar__status {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 28%;
+  height: 28%;
+  min-width: 8px;
+  min-height: 8px;
+  border: 2px solid var(--rl-color-bg);
+  border-radius: 50%;
+  background: var(--rl-gray-500);
+}
+.rl-avatar__status[data-status="online"] { background: var(--rl-green-500); }
+
+/* ============ Badge ============ */
+.rl-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 var(--rl-space-1-5, 0.375rem);
+  border-radius: var(--rl-radius-full);
+  background: var(--rl-color-accent);
+  color: var(--rl-color-on-accent);
+  font-size: var(--rl-text-2xs);
+  font-weight: var(--rl-weight-black);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.rl-badge--muted { background: var(--rl-color-fill); color: var(--rl-color-text-muted); }
+.rl-badge--dot { min-width: 0.625rem; width: 0.625rem; height: 0.625rem; padding: 0; }
+
+/* Капсульная надпись как «Season 1: No Wipe» */
+.rl-eyebrow {
+  display: inline-block;
+  padding: var(--rl-space-1) var(--rl-space-4);
+  border: 1px solid var(--rl-color-accent);
+  border-radius: var(--rl-radius-full);
+  color: var(--rl-color-accent);
+  font-size: var(--rl-text-2xs);
+  font-weight: var(--rl-weight-black);
+  letter-spacing: var(--rl-tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+/* ============ Modal (<dialog class="rl-modal">) ============ */
+.rl-modal {
+  width: min(100% - 2 * var(--rl-space-4), 42rem);
+  max-height: min(100% - 2 * var(--rl-space-4), 52rem);
+  margin: auto;
+  padding: var(--rl-space-10);
+  border: 1px solid var(--rl-color-border);
+  border-radius: var(--rl-radius-3xl);
+  background: var(--rl-color-surface-raised);
+  color: var(--rl-color-text);
+  box-shadow: var(--rl-shadow-2xl);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.rl-modal::backdrop {
+  background: var(--rl-color-backdrop);
+  backdrop-filter: blur(var(--rl-blur-md));
+  -webkit-backdrop-filter: blur(var(--rl-blur-md));
+}
+.rl-modal[open] { animation: rl-modal-in var(--rl-duration-base) var(--rl-ease-out-expo); }
+.rl-modal[open]::backdrop { animation: rl-fade-in var(--rl-duration-base) var(--rl-ease-standard); }
+.rl-modal[data-closing] { animation: rl-modal-out var(--rl-duration-fast) var(--rl-ease-standard) forwards; }
+.rl-modal[data-closing]::backdrop { animation: rl-fade-out var(--rl-duration-fast) var(--rl-ease-standard) forwards; }
+
+.rl-modal__title {
+  margin: 0 var(--rl-space-10) var(--rl-space-8) 0;
+  font-family: var(--rl-font-display);
+  font-size: var(--rl-text-3xl);
+  font-weight: var(--rl-weight-black);
+  font-style: italic;
+  text-transform: uppercase;
+  color: var(--rl-color-accent);
+}
+.rl-modal__close {
+  position: absolute;
+  top: var(--rl-space-6);
+  right: var(--rl-space-6);
+}
+.rl-modal__body { color: var(--rl-color-text-muted); font-size: var(--rl-text-sm); line-height: var(--rl-leading-relaxed); }
+.rl-modal__actions { display: flex; flex-wrap: wrap; gap: var(--rl-space-3); margin-top: var(--rl-space-10); }
+
+@media (max-width: 639px) {
+  .rl-modal { padding: var(--rl-space-6); border-radius: var(--rl-radius-2xl); }
+  .rl-modal__title { font-size: var(--rl-text-2xl); margin-bottom: var(--rl-space-6); }
+  .rl-modal__close { top: var(--rl-space-4); right: var(--rl-space-4); }
+  .rl-modal__actions > .rl-btn { flex: 1 1 100%; }
+}
+
+/* ============ Toast ============ */
+.rl-toaster {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--rl-space-10) + env(safe-area-inset-bottom, 0px));
+  z-index: var(--rl-z-toast);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: var(--rl-space-3);
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--rl-space-4));
+  translate: -50% 0;
+  pointer-events: none;
+}
+.rl-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-3);
+  padding: var(--rl-space-4) var(--rl-space-8);
+  border: 1px solid rgb(var(--rl-red-500-rgb) / 0.5);
+  border-radius: var(--rl-radius-lg);
+  background: var(--rl-color-inverse-bg);
+  color: var(--rl-color-inverse-text);
+  box-shadow: var(--rl-shadow-2xl);
+  font-size: var(--rl-text-xs);
+  font-weight: var(--rl-weight-black);
+  letter-spacing: var(--rl-tracking-caps);
+  text-transform: uppercase;
+  pointer-events: auto;
+  opacity: 0;
+  translate: 0 20px;
+  transition:
+    opacity var(--rl-duration-slow) var(--rl-ease-standard),
+    translate var(--rl-duration-slow) var(--rl-ease-standard);
+}
+.rl-toast[data-state="open"] { opacity: 1; translate: 0 0; }
+.rl-toast::before {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--rl-color-accent);
+}
+.rl-toast[data-variant="success"]::before { background: var(--rl-green-500); }
+.rl-toast[data-variant="error"] { border-color: var(--rl-danger-500); }
+.rl-toast[data-variant="error"]::before { background: var(--rl-danger-500); }
+
+/* ============ Утилиты ============ */
+.rl-skeleton {
+  background: linear-gradient(90deg, var(--rl-color-skeleton-a) 25%, var(--rl-color-skeleton-b) 50%, var(--rl-color-skeleton-a) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--rl-radius-sm);
+  animation: rl-skeleton 1.5s infinite;
+}
+
+.rl-spinner {
+  display: inline-block;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--rl-color-accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: rl-spin 0.8s linear infinite;
+}
+
+.rl-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes rl-spin { to { rotate: 360deg; } }
+@keyframes rl-skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes rl-fade-in { from { opacity: 0; } }
+@keyframes rl-fade-out { to { opacity: 0; } }
+@keyframes rl-modal-in { from { opacity: 0; translate: 0 16px; scale: 0.98; } }
+@keyframes rl-modal-out { to { opacity: 0; translate: 0 8px; scale: 0.98; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-btn, .rl-input, .rl-card, .rl-toast { transition-duration: 1ms; }
+  .rl-modal[open], .rl-modal[open]::backdrop,
+  .rl-modal[data-closing], .rl-modal[data-closing]::backdrop { animation-duration: 1ms; }
+  .rl-skeleton { animation: none; }
+  .rl-btn--primary:hover { translate: none; }
+}
