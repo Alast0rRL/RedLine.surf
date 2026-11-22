@@ -3,6 +3,7 @@ import { getConfig } from '../config';
 import { formatLink, parseLink, saveLink, type PersonalLink } from '../lib/pin';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 export function Login() {
   const { login, error: sessionError } = useMatrix();
@@ -43,6 +44,7 @@ export function Login() {
   return (
     <main className="screen login">
       <RedLines />
+      <ThemeToggle className="screen__theme" />
       <div className="login__glow" aria-hidden="true" />
       <div className="login__card rl-card rl-card--lg">
         <span className="rl-eyebrow">Семейный чат</span>

@@ -15,6 +15,7 @@ import './styles/app.css';
 import { toast } from '@redline/ui';
 import { MatrixProvider } from './state/MatrixContext';
 import { App } from './App';
+import { initTheme } from './lib/theme';
 
 const updateSW = registerSW({
   onNeedRefresh() {
@@ -22,6 +23,8 @@ const updateSW = registerSW({
     document.querySelector('.rl-toaster')?.addEventListener('click', () => void updateSW(true), { once: true });
   },
 });
+
+initTheme();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useMatrix } from './state/MatrixContext';
 import { navigate, useHashRoute } from './hooks/useHashRoute';
 import { Button, Card, Icon, RedLines } from './components/ui';
+import { ThemeToggle } from './components/ThemeToggle';
 import { loadLink } from './lib/pin';
 import { Splash } from './screens/Splash';
 import { Login } from './screens/Login';
@@ -46,6 +47,7 @@ export function App() {
       return (
         <main className="screen login">
           <RedLines />
+          <ThemeToggle className="screen__theme" />
           <div className="login__glow" aria-hidden="true" />
           <Card solid className="login__card">
             <p className="login__note">Ссылка устарела. Попроси новую</p>

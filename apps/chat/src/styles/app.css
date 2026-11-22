@@ -4,13 +4,55 @@
  */
 
 :root {
+  /* Светлая тема, как на сайте */
   --chat-bubble-own: var(--rl-red-500);
-  --chat-bubble-other: #171717;
-  --chat-bubble-bot: #131313;
-  --chat-bg: var(--rl-ink-950);
+  --chat-bubble-other: #fff;
+  --chat-bubble-other-border: var(--rl-gray-200);
+  --chat-bubble-bot: #fff;
+  --chat-bg: var(--rl-color-bg);
+  --chat-screen: linear-gradient(rgb(215 215 215 / 0.96), rgb(255 255 255 / 0.92));
+  --chat-pane: rgb(243 244 246 / 0.6);
+  --chat-tint-rgb: var(--rl-ink-950-rgb);
+  --chat-bar: rgb(255 255 255 / 0.7);
+  --chat-composer: rgb(255 255 255 / 0.92);
+  --chat-float: rgb(255 255 255 / 0.85);
+  --chat-card: rgb(255 255 255 / 0.78);
+  --chat-inset: var(--rl-gray-100);
+  --chat-link-box: var(--rl-gray-100);
+  --chat-accent-text: var(--rl-red-600);
+  --chat-meta: #596170;
+  --chat-own-meta: rgb(255 255 255 / 0.9);
+  --chat-lines-opacity: 0.35;
+  --chat-pane-blur: 8px;
   --chat-topbar-h: 3.5rem;
   --chat-safe-top: env(safe-area-inset-top, 0px);
   --chat-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+:root:not([data-theme="dark"]) {
+  --rl-color-border: var(--rl-gray-200);
+  /* серые сайта на мелком тексте чата читаются плохо */
+  --rl-color-text-muted: #596170;
+  --rl-color-text-subtle: #596170;
+  --rl-danger-500: #b91c1c;
+}
+:root[data-theme="dark"] {
+  --chat-bubble-other: #171717;
+  --chat-bubble-other-border: rgb(255 255 255 / 0.05);
+  --chat-bubble-bot: #131313;
+  --chat-screen: linear-gradient(rgb(0 0 0 / 0.85), rgb(5 5 5 / 0.92));
+  --chat-pane: rgb(22 22 22 / 0.55);
+  --chat-tint-rgb: 255 255 255;
+  --chat-bar: rgb(var(--rl-ink-950-rgb) / 0.75);
+  --chat-composer: rgb(var(--rl-ink-950-rgb) / 0.92);
+  --chat-float: rgb(18 18 18 / 0.85);
+  --chat-card: rgb(18 18 18 / 0.72);
+  --chat-inset: rgb(0 0 0 / 0.4);
+  --chat-link-box: rgb(0 0 0 / 0.3);
+  --chat-accent-text: var(--rl-red-400);
+  --chat-meta: rgb(255 255 255 / 0.45);
+  --chat-own-meta: rgb(255 255 255 / 0.75);
+  --chat-lines-opacity: 0.22;
 }
 
 html, body, #root { height: 100%; }
@@ -24,7 +66,7 @@ button { cursor: pointer; }
 a { color: inherit; }
 
 /* непрочитанные без упоминания — спокойнее, чем красный */
-.rl-badge--soft { background: rgb(255 255 255 / 0.14); color: var(--rl-color-text); }
+.rl-badge--soft { background: rgb(var(--chat-tint-rgb) / 0.14); color: var(--rl-color-text); }
 
 /* ============ Экраны входа / загрузки ============ */
 .screen {
@@ -39,7 +81,7 @@ a { color: inherit; }
   overflow-x: hidden;
   overflow-y: auto;
   background:
-    linear-gradient(rgb(0 0 0 / 0.85), rgb(5 5 5 / 0.92)),
+    var(--chat-screen),
     var(--chat-bg);
 }
 .login__glow {
@@ -58,7 +100,7 @@ a { color: inherit; }
   flex-direction: column;
   gap: var(--rl-space-5);
   width: min(100%, 26rem);
-  background: rgb(18 18 18 / 0.72);
+  background: var(--chat-card);
   border-color: var(--rl-color-border-strong);
 }
 .login__card .rl-eyebrow { align-self: flex-start; }
@@ -127,7 +169,18 @@ a { color: inherit; }
 @media (max-width: 899px) { .pane--placeholder { display: none !important; } }
 
 /* ниже всех панелей: сами панели без заливки, чтобы линии шли через весь экран */
-.app__lines { z-index: -1; }
+.app__lines { z-index: -1; opacity: var(--chat-lines-opacity); }
+/* Подложка чата. Размытие только на ::before: на самом .pane оно сломало бы position: fixed у .lightbox. */
+.pane--chat::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--chat-pane);
+  backdrop-filter: blur(var(--chat-pane-blur));
+  -webkit-backdrop-filter: blur(var(--chat-pane-blur));
+}
 .pane__scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: var(--rl-space-2) var(--rl-space-2) calc(var(--chat-safe-bottom) + var(--rl-space-4)); }
 
 /* ============ Верхняя панель ============ */
@@ -137,7 +190,7 @@ a { color: inherit; }
   gap: var(--rl-space-2);
   min-height: calc(var(--chat-topbar-h) + var(--chat-safe-top));
   padding: var(--chat-safe-top) var(--rl-space-2) 0 var(--rl-space-4);
-  background: rgb(var(--rl-ink-950-rgb) / 0.75);
+  background: var(--chat-bar);
   backdrop-filter: blur(var(--rl-blur-md));
   -webkit-backdrop-filter: blur(var(--rl-blur-md));
   border-bottom: 1px solid var(--rl-color-border);
@@ -159,6 +212,40 @@ a { color: inherit; }
 .topbar__sub { display: flex; align-items: center; gap: 4px; font-size: var(--rl-text-xs); color: var(--rl-color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar__sub.is-typing { color: var(--rl-color-accent); }
 
+/* ============ Переключатель темы, как на сайте ============ */
+.theme-toggle.rl-btn {
+  flex: none;
+  --_h: 2.75rem;
+  --_radius: var(--rl-radius-md);
+  align-self: center;
+}
+.theme-toggle.rl-btn:hover { background: var(--rl-color-fill); color: var(--rl-color-text); }
+@media (hover: hover) {
+  .theme-toggle.rl-btn:hover { rotate: 12deg; }
+}
+.theme-toggle > svg { width: 1.25rem; height: 1.25rem; }
+.theme-toggle__sun { color: var(--rl-yellow-500); }
+.screen__theme.rl-btn {
+  position: fixed;
+  z-index: 3;
+  top: calc(var(--chat-safe-top) + var(--rl-space-3));
+  right: var(--rl-space-3);
+}
+
+/* iOS с экрана «Домой» всегда пишет часы белым (black-translucent): в светлой теме под ними тёмная полоса */
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) {
+    :root:not([data-theme="dark"]) body::before {
+      content: "";
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: var(--rl-z-nav);
+      height: var(--chat-safe-top);
+      background: var(--rl-ink-950);
+    }
+  }
+}
+
 /* ============ Баннеры ============ */
 .banner {
   display: flex;
@@ -168,7 +255,7 @@ a { color: inherit; }
   padding: var(--rl-space-3) var(--rl-space-4);
   border: 1px solid var(--rl-color-border-strong);
   border-radius: var(--rl-radius-lg);
-  background: rgb(18 18 18 / 0.9);
+  background: var(--chat-float);
   color: var(--rl-color-text);
   font-size: var(--rl-text-sm);
   text-align: left;
@@ -197,8 +284,8 @@ a { color: inherit; }
   text-decoration: none;
   transition: background-color var(--rl-duration-fast) var(--rl-ease-standard);
 }
-.chat-row:hover { background: rgb(255 255 255 / 0.04); }
-.chat-row:active { background: rgb(255 255 255 / 0.07); }
+.chat-row:hover { background: rgb(var(--chat-tint-rgb) / 0.04); }
+.chat-row:active { background: rgb(var(--chat-tint-rgb) / 0.07); }
 .chat-row[aria-current="page"] { background: rgb(var(--rl-red-500-rgb) / 0.12); }
 .chat-row__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .chat-row__name { display: flex; align-items: center; gap: var(--rl-space-2); font-weight: var(--rl-weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -216,7 +303,7 @@ a { color: inherit; }
   padding: 1px 6px;
   border-radius: var(--rl-radius-full);
   background: rgb(var(--rl-red-500-rgb) / 0.18);
-  color: var(--rl-red-400);
+  color: var(--chat-accent-text);
   font-size: 10px;
   font-weight: var(--rl-weight-black);
   letter-spacing: var(--rl-tracking-widest);
@@ -267,7 +354,7 @@ a { color: inherit; }
 .day-sep span {
   padding: 4px 12px;
   border-radius: var(--rl-radius-full);
-  background: rgb(18 18 18 / 0.85);
+  background: var(--chat-float);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--rl-color-border);
@@ -289,7 +376,7 @@ a { color: inherit; }
   padding: 7px 12px 6px;
   border-radius: 18px;
   background: var(--chat-bubble-other);
-  border: 1px solid rgb(255 255 255 / 0.05);
+  border: 1px solid var(--chat-bubble-other-border);
   overflow-wrap: anywhere;
   line-height: 1.4;
 }
@@ -313,7 +400,7 @@ a { color: inherit; }
   border-left: 3px solid var(--rl-color-accent);
   border-radius: 6px 16px 16px 6px;
 }
-.bubble__sender { display: flex; align-items: center; gap: var(--rl-space-2); margin-bottom: 2px; color: var(--rl-red-400); font-size: var(--rl-text-xs); font-weight: var(--rl-weight-black); }
+.bubble__sender { display: flex; align-items: center; gap: var(--rl-space-2); margin-bottom: 2px; color: var(--chat-accent-text); font-size: var(--rl-text-xs); font-weight: var(--rl-weight-black); }
 
 .bubble__meta {
   display: flex;
@@ -324,12 +411,12 @@ a { color: inherit; }
   float: right;
   position: relative;
   top: 2px;
-  color: rgb(255 255 255 / 0.45);
+  color: var(--chat-meta);
   font-size: 11px;
   line-height: 1;
   white-space: nowrap;
 }
-.msg--own .bubble__meta { color: rgb(255 255 255 / 0.75); }
+.msg--own .bubble__meta { color: var(--chat-own-meta); }
 .bubble__edited { font-style: italic; }
 .bubble::after { content: ''; display: block; clear: both; }
 
@@ -351,7 +438,7 @@ a { color: inherit; }
 
 .msg-text { white-space: pre-wrap; }
 .msg-text a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.msg:not(.msg--own) .msg-text a { color: var(--rl-red-400); }
+.msg:not(.msg--own) .msg-text a { color: var(--chat-accent-text); }
 .msg-text--muted { color: var(--rl-color-text-muted); font-style: italic; display: inline-flex; gap: 6px; align-items: center; }
 .msg--own .msg-text--muted { color: rgb(255 255 255 / 0.75); }
 .msg-text--emoji { font-size: 2.5rem; line-height: 1.15; }
@@ -362,14 +449,14 @@ a { color: inherit; }
 .msg-text--html h1, .msg-text--html h2, .msg-text--html h3 { margin: 0.4em 0 0.3em; font-size: 1.05em; text-transform: uppercase; letter-spacing: var(--rl-tracking-tight); }
 .msg-text--html ul, .msg-text--html ol { margin: 0.3em 0; padding-left: 1.3em; }
 .msg-text--html blockquote { margin: 0.4em 0; padding-left: 0.75em; border-left: 3px solid rgb(var(--rl-red-500-rgb) / 0.6); color: var(--rl-color-text-muted); }
-.msg-text--html code { padding: 1px 5px; border-radius: 6px; background: rgb(255 255 255 / 0.08); font-family: var(--rl-font-mono); font-size: 0.88em; }
-.msg-text--html pre { margin: 0.4em 0; padding: 0.6em 0.8em; border-radius: var(--rl-radius-md); background: rgb(0 0 0 / 0.4); overflow-x: auto; }
+.msg-text--html code { padding: 1px 5px; border-radius: 6px; background: rgb(var(--chat-tint-rgb) / 0.08); font-family: var(--rl-font-mono); font-size: 0.88em; }
+.msg-text--html pre { margin: 0.4em 0; padding: 0.6em 0.8em; border-radius: var(--rl-radius-md); background: var(--chat-inset); overflow-x: auto; }
 .msg-text--html pre code { padding: 0; background: none; }
 .msg-text--html table { border-collapse: collapse; margin: 0.4em 0; font-size: 0.92em; }
-.msg-text--html th, .msg-text--html td { padding: 4px 8px; border: 1px solid rgb(255 255 255 / 0.1); text-align: left; }
-.msg-text--html hr { border: 0; border-top: 1px solid rgb(255 255 255 / 0.12); margin: 0.6em 0; }
+.msg-text--html th, .msg-text--html td { padding: 4px 8px; border: 1px solid rgb(var(--chat-tint-rgb) / 0.1); text-align: left; }
+.msg-text--html hr { border: 0; border-top: 1px solid rgb(var(--chat-tint-rgb) / 0.12); margin: 0.6em 0; }
 .msg-text--html details { margin: 0.3em 0; }
-.msg-text--html summary { cursor: pointer; color: var(--rl-red-400); }
+.msg-text--html summary { cursor: pointer; color: var(--chat-accent-text); }
 .msg-text--html [data-mx-spoiler] { background: currentColor; border-radius: 4px; transition: background-color var(--rl-duration-fast); }
 .msg-text--html [data-mx-spoiler]:hover { background: transparent; }
 
@@ -380,7 +467,7 @@ a { color: inherit; }
   padding: 4px 8px;
   border-left: 3px solid var(--rl-red-400);
   border-radius: 4px;
-  background: rgb(255 255 255 / 0.06);
+  background: rgb(var(--chat-tint-rgb) / 0.06);
   font-size: var(--rl-text-xs);
 }
 .msg--own .msg-reply { border-left-color: #fff; background: rgb(0 0 0 / 0.18); }
@@ -401,7 +488,7 @@ a { color: inherit; }
   border: 0;
   border-radius: 15px;
   overflow: hidden;
-  background: rgb(255 255 255 / 0.04);
+  background: rgb(var(--chat-tint-rgb) / 0.04);
 }
 .msg-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .msg-image__skeleton { position: absolute; inset: 0; border-radius: 0; }
@@ -450,13 +537,13 @@ a { color: inherit; }
   cursor: pointer;
   outline-offset: 4px;
 }
-.voice__wave span { flex: 1; min-width: 2px; border-radius: 2px; background: rgb(255 255 255 / 0.28); transition: background-color 120ms; }
+.voice__wave span { flex: 1; min-width: 2px; border-radius: 2px; background: rgb(var(--chat-tint-rgb) / 0.28); transition: background-color 120ms; }
 .voice__wave span.is-played { background: var(--rl-red-400); }
 .msg--own .voice__wave span { background: rgb(255 255 255 / 0.4); }
 .msg--own .voice__wave span.is-played { background: #fff; }
 .voice__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; min-width: 2.6rem; }
 .voice__time { font-family: var(--rl-font-mono); font-size: 11px; opacity: 0.85; }
-.voice__speed { padding: 1px 6px; border: 0; border-radius: var(--rl-radius-full); background: rgb(255 255 255 / 0.15); color: inherit; font-size: 10px; font-weight: var(--rl-weight-black); }
+.voice__speed { padding: 1px 6px; border: 0; border-radius: var(--rl-radius-full); background: rgb(var(--chat-tint-rgb) / 0.15); color: inherit; font-size: 10px; font-weight: var(--rl-weight-black); }
 
 /* Загрузки */
 .bubble--upload { min-width: 10rem; }
@@ -472,7 +559,7 @@ a { color: inherit; }
   gap: var(--rl-space-2);
   padding: var(--rl-space-2) var(--rl-space-2) calc(var(--chat-safe-bottom) + var(--rl-space-2));
   border-top: 1px solid var(--rl-color-border);
-  background: rgb(var(--rl-ink-950-rgb) / 0.92);
+  background: var(--chat-composer);
   flex: none;
 }
 .composer > .rl-btn { flex: none; }
@@ -483,7 +570,7 @@ a { color: inherit; }
   padding: 0.6rem 1rem;
   border: 1px solid var(--rl-color-border-strong);
   border-radius: 1.4rem;
-  background: rgb(255 255 255 / 0.04);
+  background: rgb(var(--chat-tint-rgb) / 0.04);
   color: var(--rl-color-text);
   font-size: var(--rl-text-base);
   line-height: 1.45;
@@ -545,7 +632,7 @@ a { color: inherit; }
   width: 2.2rem;
   padding: 8px 0;
   border-radius: var(--rl-radius-full);
-  background: var(--rl-ink-900);
+  background: var(--rl-color-surface-raised);
   border: 1px solid var(--rl-color-border-strong);
   color: var(--rl-color-text-muted);
 }
@@ -578,7 +665,7 @@ a { color: inherit; }
   padding: var(--rl-space-3);
   border: 1px dashed rgb(var(--rl-red-500-rgb) / 0.6);
   border-radius: var(--rl-radius-lg);
-  background: rgb(0 0 0 / 0.3);
+  background: var(--chat-link-box);
   color: var(--rl-color-text);
   font-family: var(--rl-font-mono);
   font-size: var(--rl-text-sm);
@@ -616,7 +703,7 @@ a { color: inherit; }
   min-width: 0;
   padding: var(--rl-space-3);
   border-radius: var(--rl-radius-lg);
-  background: rgb(255 255 255 / 0.03);
+  background: rgb(var(--chat-tint-rgb) / 0.03);
 }
 .people-row__main {
   display: flex;

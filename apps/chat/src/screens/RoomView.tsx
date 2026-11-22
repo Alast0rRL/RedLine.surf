@@ -63,7 +63,7 @@ export function RoomView({ roomId }: { roomId: string }) {
 
   if (!room || room.getMyMembership() !== KnownMembership.Join) {
     return (
-      <section className="pane pane--room">
+      <section className="pane pane--room pane--chat">
         <header className="topbar">
           <Button variant="ghost" icon aria-label="Назад" onClick={() => navigate.list()}><Icon name="back" /></Button>
         </header>
@@ -76,7 +76,7 @@ export function RoomView({ roomId }: { roomId: string }) {
   const peerId = isDm ? room.getAvatarFallbackMember()?.userId : undefined;
 
   return (
-    <section className="pane pane--room" aria-label={room.name}>
+    <section className="pane pane--room pane--chat" aria-label={room.name}>
       <header className="topbar topbar--room">
         <Button variant="ghost" icon aria-label="Назад к чатам" className="topbar__back" onClick={() => navigate.list()}>
           <Icon name="back" />

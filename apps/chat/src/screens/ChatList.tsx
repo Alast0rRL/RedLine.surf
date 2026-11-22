@@ -9,6 +9,7 @@ import { sweepExpiredInvites } from '../lib/invites';
 import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { Avatar, Button, Icon, toast } from '../components/ui';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { NewChatModal } from './NewChat';
 
 export function roomAvatarMxc(room: Room, isDm: boolean): string | null {
@@ -121,6 +122,7 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
       <header className="topbar">
         <span className="topbar__logo">Redline</span>
         <span className="topbar__actions">
+          <ThemeToggle />
           <Button variant="ghost" icon aria-label="Новый чат" onClick={() => setNewChat(true)}>
             <Icon name="plus" />
           </Button>
