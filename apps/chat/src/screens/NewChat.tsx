@@ -12,7 +12,7 @@ export function toUserId(input: string): string {
   return v.includes(':') ? `@${v}` : `@${v}:${getConfig().serverName}`;
 }
 
-async function addDirect(client: MatrixClient, userId: string, roomId: string) {
+export async function addDirect(client: MatrixClient, userId: string, roomId: string) {
   const direct = client.getAccountData(EventType.Direct)?.getContent<Record<string, string[]>>() ?? {};
   const list = direct[userId] ?? [];
   if (!list.includes(roomId)) {
@@ -20,7 +20,7 @@ async function addDirect(client: MatrixClient, userId: string, roomId: string) {
   }
 }
 
-function findExistingDm(client: MatrixClient, userId: string): string | null {
+export function findExistingDm(client: MatrixClient, userId: string): string | null {
   const direct = client.getAccountData(EventType.Direct)?.getContent<Record<string, string[]>>() ?? {};
   for (const roomId of direct[userId] ?? []) {
     const room = client.getRoom(roomId);
@@ -30,7 +30,7 @@ function findExistingDm(client: MatrixClient, userId: string): string | null {
 }
 
 /** E2E включено всегда: и в личных, и в групповых чатах. */
-const encryption = [{ type: 'm.room.encryption', state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' } }];
+export const encryption = [{ type: 'm.room.encryption', state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' } }];
 
 interface PersonPick {
   id: string;

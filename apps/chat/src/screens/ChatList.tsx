@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { useClient, useMatrix } from '../state/MatrixContext';
 import { useRoomList, type RoomSummary } from '../hooks/useRoomList';
@@ -8,9 +8,13 @@ import { formatListTime, previewText } from '../lib/events';
 import { sweepExpiredInvites } from '../lib/invites';
 import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
+import { leaveRoom, setRoomMuted, setRoomPinned } from '../lib/rooms';
 import { Avatar, Button, Icon, toast } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { ExtraIcon } from '../components/extraIcons';
 import { NewChatModal } from './NewChat';
+import { ConfirmDialog } from './infoParts';
+import '../styles/info.css';
 
 export function roomAvatarMxc(room: Room, isDm: boolean): string | null {
   const own = room.getMxcAvatarUrl();
@@ -19,8 +23,23 @@ export function roomAvatarMxc(room: Room, isDm: boolean): string | null {
   return room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? null;
 }
 
-function RoomRow({ client, s, active }: { client: MatrixClient; s: RoomSummary; active: boolean }) {
-  const { room, lastEvent, unread, highlight, isDm } = s;
+const LONG_PRESS_MS = 450;
+
+interface MenuState {
+  s: RoomSummary;
+  x: number;
+  y: number;
+}
+
+function RoomRow({ client, s, active, onMenu }: { client: MatrixClient; s: RoomSummary; active: boolean; onMenu: (m: MenuState) => void }) {
+  const { room, lastEvent, unread, highlight, isDm, pinned, muted } = s;
+  const timer = useRef<number | null>(null);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const fired = useRef(false);
+  const cancel = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+  };
   const me = client.getUserId();
   const pin = isPinUser(me);
   const sender = lastEvent?.getSender();
@@ -38,13 +57,40 @@ function RoomRow({ client, s, active }: { client: MatrixClient; s: RoomSummary; 
         aria-current={active ? 'page' : undefined}
         onClick={(e) => {
           e.preventDefault();
+          if (fired.current) {
+            fired.current = false;
+            return;
+          }
           navigate.room(room.roomId);
         }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          cancel();
+          fired.current = false;
+          onMenu({ s, x: e.clientX, y: e.clientY });
+        }}
+        onPointerDown={(e) => {
+          if (e.pointerType !== 'touch') return;
+          fired.current = false;
+          start.current = { x: e.clientX, y: e.clientY };
+          cancel();
+          timer.current = window.setTimeout(() => {
+            fired.current = true;
+            navigator.vibrate?.(15);
+            onMenu({ s, x: start.current?.x ?? 0, y: start.current?.y ?? 0 });
+          }, LONG_PRESS_MS);
+        }}
+        onPointerMove={(e) => {
+          const p = start.current;
+          if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) cancel();
+        }}
+        onPointerUp={cancel}
+        onPointerCancel={cancel}
       >
         <Avatar client={client} name={room.name} seed={dmPeer ?? room.roomId} mxc={roomAvatarMxc(room, isDm)} />
         <span className="chat-row__main">
           <span className="chat-row__name">
-            {room.name}
+            <span className="chat-row__title">{room.name}</span>
             {dmPeer && isBotUser(dmPeer) && <span className="bot-tag">бот</span>}
           </span>
           <span className="chat-row__preview">
@@ -54,7 +100,13 @@ function RoomRow({ client, s, active }: { client: MatrixClient; s: RoomSummary; 
         </span>
         <span className="chat-row__meta">
           <span className="chat-row__time">{s.lastTs ? formatListTime(s.lastTs) : ''}</span>
-          {unread > 0 && <span className={`rl-badge${highlight ? '' : ' rl-badge--soft'}`}>{unread > 99 ? '99+' : unread}</span>}
+          <span className="chat-row__icons">
+            {muted && <span role="img" aria-label="Без звука"><ExtraIcon name="bellOff" size={14} /></span>}
+            {pinned && <span role="img" aria-label="Закреплён"><ExtraIcon name="pin" size={14} /></span>}
+            {unread > 0 && (
+              <span className={`rl-badge${muted ? ' rl-badge--muted' : highlight ? '' : ' rl-badge--soft'}`}>{unread > 99 ? '99+' : unread}</span>
+            )}
+          </span>
         </span>
       </a>
     </li>
@@ -99,6 +151,34 @@ function InviteRow({ client, room }: { client: MatrixClient; room: Room }) {
   );
 }
 
+function RowMenu({ menu, onClose, onToggle, onLeave }: { menu: MenuState; onClose: () => void; onToggle: (k: 'pin' | 'mute') => void; onLeave: () => void }) {
+  const W = 208;
+  const left = Math.max(8, Math.min(menu.x, window.innerWidth - W - 8));
+  const top = Math.max(8, Math.min(menu.y, window.innerHeight - 160));
+  return (
+    <>
+      <div className="row-menu-backdrop" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
+      <div
+        className="row-menu"
+        role="menu"
+        aria-label={`Действия: ${menu.s.room.name}`}
+        style={{ left, top }}
+        onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      >
+        <button type="button" role="menuitem" autoFocus onClick={() => onToggle('pin')}>
+          <ExtraIcon name="pin" /> {menu.s.pinned ? 'Открепить' : 'Закрепить'}
+        </button>
+        <button type="button" role="menuitem" onClick={() => onToggle('mute')}>
+          <ExtraIcon name="bellOff" /> {menu.s.muted ? 'Включить звук' : 'Без звука'}
+        </button>
+        <button type="button" role="menuitem" className="is-danger" onClick={onLeave}>
+          <Icon name="logout" size={18} /> Покинуть
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const client = useClient();
   const { syncProblem, logout } = useMatrix();
@@ -106,6 +186,41 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const { rooms, invites, totalUnread } = useRoomList(client);
   const [security] = useSecurityState(client);
   const [newChat, setNewChat] = useState(false);
+  const [query, setQuery] = useState('');
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [leaving, setLeaving] = useState<Room | null>(null);
+  const [leaveBusy, setLeaveBusy] = useState(false);
+
+  const q = query.trim().toLocaleLowerCase('ru');
+  const shown = useMemo(() => (q ? rooms.filter((s) => s.room.name.toLocaleLowerCase('ru').includes(q)) : rooms), [rooms, q]);
+
+  const toggle = async (kind: 'pin' | 'mute') => {
+    const target = menu?.s;
+    setMenu(null);
+    if (!target) return;
+    try {
+      if (kind === 'pin') await setRoomPinned(client, target.room.roomId, !target.pinned);
+      else await setRoomMuted(client, target.room.roomId, !target.muted);
+    } catch (e) {
+      console.error(e);
+      toast(kind === 'pin' ? 'Не удалось закрепить' : 'Не получилось изменить уведомления', { variant: 'error' });
+    }
+  };
+
+  const doLeave = async () => {
+    if (!leaving) return;
+    setLeaveBusy(true);
+    try {
+      const id = leaving.roomId;
+      await leaveRoom(client, id);
+      if (activeRoomId === id) location.hash = '#/';
+      setLeaving(null);
+    } catch (e) {
+      console.error(e);
+      toast('Не удалось покинуть чат', { variant: 'error' });
+    }
+    setLeaveBusy(false);
+  };
 
   useEffect(() => {
     void sweepExpiredInvites(client);
@@ -150,8 +265,27 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
         </button>
       )}
 
+      {rooms.length > 0 && (
+        <div className="chat-search" role="search">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск"
+            aria-label="Поиск по чатам"
+            autoComplete="off"
+            enterKeyHint="search"
+          />
+          {query && (
+            <Button variant="ghost" size="sm" icon className="chat-search__clear" aria-label="Очистить поиск" onClick={() => setQuery('')}>
+              <Icon name="close" size={16} />
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="pane__scroll">
-        {invites.length > 0 && (
+        {!q && invites.length > 0 && (
           <>
             <h2 className="list-heading">Приглашения</h2>
             <ul className="chat-list">
@@ -159,9 +293,11 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
             </ul>
           </>
         )}
-        {rooms.length > 0 ? (
+        {q && shown.length === 0 ? (
+          <div className="empty"><p>Ничего не найдено</p></div>
+        ) : shown.length > 0 ? (
           <ul className="chat-list">
-            {rooms.map((s) => <RoomRow key={s.room.roomId} client={client} s={s} active={s.room.roomId === activeRoomId} />)}
+            {shown.map((s) => <RoomRow key={s.room.roomId} client={client} s={s} active={s.room.roomId === activeRoomId} onMenu={setMenu} />)}
           </ul>
         ) : invites.length === 0 ? (
           <div className="empty">
@@ -171,6 +307,26 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
         ) : null}
       </div>
 
+      {menu && (
+        <RowMenu
+          menu={menu}
+          onClose={() => setMenu(null)}
+          onToggle={(k) => void toggle(k)}
+          onLeave={() => {
+            setLeaving(menu.s.room);
+            setMenu(null);
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={!!leaving}
+        title="Покинуть чат"
+        text={`Покинуть «${leaving?.name ?? ''}»?`}
+        confirmLabel="Покинуть"
+        busy={leaveBusy}
+        onConfirm={() => void doLeave()}
+        onClose={() => setLeaving(null)}
+      />
       <NewChatModal open={newChat} onClose={() => setNewChat(false)} />
     </section>
   );

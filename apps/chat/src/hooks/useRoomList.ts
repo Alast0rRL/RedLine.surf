@@ -11,6 +11,7 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { isMessageLike } from '../lib/events';
+import { isRoomMuted, isRoomPinned } from '../lib/rooms';
 import { useThrottledVersion } from './useThrottledVersion';
 
 export interface RoomSummary {
@@ -20,6 +21,8 @@ export interface RoomSummary {
   unread: number;
   highlight: number;
   isDm: boolean;
+  pinned: boolean;
+  muted: boolean;
 }
 
 function lastMessage(room: Room): MatrixEvent | null {
@@ -47,6 +50,7 @@ export function useRoomList(client: MatrixClient) {
       [client, ClientEvent.AccountData],
       [client, RoomEvent.Timeline],
       [client, RoomEvent.Name],
+      [client, RoomEvent.Tags],
       [client, RoomEvent.Receipt],
       [client, RoomEvent.UnreadNotifications],
       [client, RoomEvent.MyMembership],
@@ -77,10 +81,12 @@ export function useRoomList(client: MatrixClient) {
         unread: room.getUnreadNotificationCount(NotificationCountType.Total),
         highlight: room.getUnreadNotificationCount(NotificationCountType.Highlight),
         isDm: isDirectRoom(client, room),
+        pinned: isRoomPinned(room),
+        muted: isRoomMuted(client, room.roomId),
       });
     }
-    joined.sort((a, b) => b.lastTs - a.lastTs);
-    const totalUnread = joined.reduce((n, r) => n + r.unread, 0);
+    joined.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastTs - a.lastTs);
+    const totalUnread = joined.reduce((n, r) => (r.muted ? n : n + r.unread), 0);
     return { rooms: joined, invites, totalUnread };
     // version — триггер пересчёта по событиям SDK
     // eslint-disable-next-line react-hooks/exhaustive-deps

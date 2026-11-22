@@ -11,6 +11,8 @@ import { ChatList } from './screens/ChatList';
 import { RoomView } from './screens/RoomView';
 import { Settings } from './screens/Settings';
 import { People } from './screens/People';
+import { RoomInfo } from './screens/RoomInfo';
+import { UserProfile } from './screens/UserProfile';
 
 /** Один фон на весь экран: у панелей своих линий нет. */
 function AppLines() {
@@ -91,8 +93,10 @@ export function App() {
   return (
     <div className="app" data-view={view}>
       <AppLines />
-      <ChatList activeRoomId={route.name === 'room' ? route.roomId : undefined} />
+      <ChatList activeRoomId={route.name === 'room' || route.name === 'room-info' ? route.roomId : undefined} />
       {route.name === 'room' && <RoomView key={route.roomId} roomId={route.roomId} />}
+      {route.name === 'room-info' && <RoomInfo key={route.roomId} roomId={route.roomId} />}
+      {route.name === 'user' && <UserProfile key={route.userId} userId={route.userId} />}
       {route.name === 'settings' && <Settings />}
       {route.name === 'people' && <People />}
       {route.name === 'list' && (
