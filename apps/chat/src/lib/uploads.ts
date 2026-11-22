@@ -6,10 +6,13 @@
 export interface PendingUpload {
   id: string;
   roomId: string;
-  kind: 'image' | 'voice';
+  kind: 'image' | 'voice' | 'file';
   /** blob: URL превью (для фото) */
   previewUrl?: string;
   durationMs?: number;
+  /** имя и размер файла (для kind: 'file') */
+  name?: string;
+  size?: number;
   /** 0..1 */
   progress: number;
   error?: string;

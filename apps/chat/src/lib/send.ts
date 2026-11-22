@@ -1,9 +1,12 @@
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events.js';
 import { encryptAttachment, type EncryptedFileInfo } from './attachments';
+import { toast } from '@redline/ui';
 import { uploadStore } from './uploads';
 import type { VoiceRecording } from './voice/recorder';
 
+/** Лимит сервера — 52428800 байт. */
+export const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_SIDE = 2560;
 const REENCODE_OVER_BYTES = 2.5 * 1024 * 1024;
 
@@ -83,6 +86,38 @@ export function sendImage(client: MatrixClient, roomId: string, file: File): voi
     } catch (e) {
       console.error('image send failed', e);
       uploadStore.update(id, { error: 'Не удалось отправить фото', retry: () => void run() });
+    }
+  };
+  void run();
+}
+
+/** Любой файл: видео уходит как m.video, остальное как m.file (шифруется так же, как фото). */
+export function sendFile(client: MatrixClient, roomId: string, file: File): void {
+  if (file.size > MAX_FILE_BYTES) {
+    toast(`Файл «${file.name}» слишком большой: максимум 50 МБ`, { variant: 'error' });
+    return;
+  }
+  const id = uid();
+  uploadStore.add({ id, roomId, kind: 'file', name: file.name, size: file.size, progress: 0 });
+  const isVideo = file.type.startsWith('video/');
+
+  const run = async () => {
+    uploadStore.update(id, { error: undefined, progress: 0 });
+    try {
+      const mimetype = file.type || 'application/octet-stream';
+      const ref = await uploadBlob(client, roomId, file, file.name, (p) => uploadStore.update(id, { progress: p }));
+      const content = {
+        msgtype: isVideo ? 'm.video' : 'm.file',
+        body: file.name,
+        filename: file.name,
+        info: { mimetype, size: file.size },
+        ...ref,
+      } as unknown as RoomMessageEventContent;
+      await client.sendMessage(roomId, content);
+      uploadStore.remove(id);
+    } catch (e) {
+      console.error('file send failed', e);
+      uploadStore.update(id, { error: 'Не удалось отправить файл', retry: () => void run() });
     }
   };
   void run();

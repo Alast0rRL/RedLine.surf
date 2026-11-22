@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
-import type { MatrixClient, Room } from 'matrix-js-sdk';
-import { sendImage, sendText, sendVoice } from '../lib/send';
+import type { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
+import { sendFile, sendImage, sendText, sendVoice } from '../lib/send';
+import { plainBody, sendEdit, sendReply } from '../lib/messageActions';
+import { previewText } from '../lib/events';
 import { formatDuration } from '../lib/events';
 import { isVoiceRecordingSupported, VoiceRecorder } from '../lib/voice/recorder';
 import { Button, Icon, toast } from '../components/ui';
+import './room.css';
 
+export const MAX_LEN = 2000;
+const COUNTER_FROM = 1800;
 const CANCEL_DX = 90;
 const LOCK_DY = 70;
 const MIN_VOICE_MS = 700;
@@ -26,7 +31,14 @@ async function micPermission(): Promise<PermissionState | 'unknown'> {
   }
 }
 
-export function Composer({ client, room }: { client: MatrixClient; room: Room }) {
+export type ComposerContext = { kind: 'reply' | 'edit'; ev: MatrixEvent } | null;
+
+export function Composer({ client, room, context, onClearContext }: {
+  client: MatrixClient;
+  room: Room;
+  context: ComposerContext;
+  onClearContext: () => void;
+}) {
   const [text, setText] = useState(() => {
     try {
       return localStorage.getItem(DRAFT_KEY(room.roomId)) ?? '';
@@ -39,6 +51,10 @@ export function Composer({ client, room }: { client: MatrixClient; room: Room })
   const [levels, setLevels] = useState<number[]>([]);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const attachInput = useRef<HTMLInputElement>(null);
+  const draftBeforeEdit = useRef<string | null>(null);
+  const editing = context?.kind === 'edit' ? context.ev : null;
+  const replying = context?.kind === 'reply' ? context.ev : null;
   const recorder = useRef<VoiceRecorder | null>(null);
   const origin = useRef({ x: 0, y: 0 });
   const released = useRef(false);
@@ -47,13 +63,37 @@ export function Composer({ client, room }: { client: MatrixClient; room: Room })
 
   // черновик на комнату
   useEffect(() => {
+    if (editing) return;
     try {
       if (text) localStorage.setItem(DRAFT_KEY(room.roomId), text);
       else localStorage.removeItem(DRAFT_KEY(room.roomId));
     } catch {
       /* приватный режим */
     }
-  }, [text, room.roomId]);
+  }, [text, room.roomId, editing]);
+
+  // вход в режим правки: подставляем текст; выход — возвращаем черновик
+  const editId = editing?.getId();
+  useEffect(() => {
+    if (!editing) return;
+    setText((cur) => {
+      if (draftBeforeEdit.current === null) draftBeforeEdit.current = cur;
+      return plainBody(editing).slice(0, MAX_LEN);
+    });
+    textarea.current?.focus();
+    return () => {
+      if (draftBeforeEdit.current !== null) {
+        setText(draftBeforeEdit.current);
+        draftBeforeEdit.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
+
+  const replyId = replying?.getId();
+  useEffect(() => {
+    if (replyId) textarea.current?.focus();
+  }, [replyId]);
 
   // авто-высота поля
   useEffect(() => {
@@ -83,17 +123,38 @@ export function Composer({ client, room }: { client: MatrixClient; room: Room })
     }
   };
 
+  const tooLong = text.length > MAX_LEN;
+
   const submitText = () => {
     const body = text.trim();
-    if (!body) return;
-    setText('');
+    if (!body || tooLong) return;
     typing(false);
-    sendText(client, room.roomId, body).catch((e) => console.warn('send failed (shown in timeline)', e));
+    if (editing) {
+      // без изменений — просто выходим
+      if (body !== plainBody(editing).trim()) {
+        sendEdit(client, room.roomId, editing, body).catch(() => toast('Не удалось изменить сообщение', { variant: 'error' }));
+      }
+      draftBeforeEdit.current = draftBeforeEdit.current ?? '';
+      onClearContext();
+      return;
+    }
+    setText('');
+    if (replying?.getId()) {
+      sendReply(client, room.roomId, body, replying.getId()!).catch((e) => console.warn('send failed (shown in timeline)', e));
+      onClearContext();
+    } else {
+      sendText(client, room.roomId, body).catch((e) => console.warn('send failed (shown in timeline)', e));
+    }
     window.dispatchEvent(new Event('rl:sent'));
     textarea.current?.focus();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape' && context) {
+      e.preventDefault();
+      onClearContext();
+      return;
+    }
     // на телефоне Enter — перенос строки, отправка кнопкой
     if (e.key === 'Enter' && !e.shiftKey && !coarsePointer() && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -113,6 +174,13 @@ export function Composer({ client, room }: { client: MatrixClient; room: Room })
   const pickFiles = (files: FileList | null) => {
     [...(files ?? [])].filter((f) => f.type.startsWith('image/')).forEach((f) => sendImage(client, room.roomId, f));
     if (fileInput.current) fileInput.current.value = '';
+    window.dispatchEvent(new Event('rl:sent'));
+  };
+
+  // любые файлы: фото — как фото, остальное — файл/видео
+  const pickAnyFiles = (files: FileList | null) => {
+    [...(files ?? [])].forEach((f) => (f.type.startsWith('image/') ? sendImage(client, room.roomId, f) : sendFile(client, room.roomId, f)));
+    if (attachInput.current) attachInput.current.value = '';
     window.dispatchEvent(new Event('rl:sent'));
   };
 
@@ -226,9 +294,28 @@ export function Composer({ client, room }: { client: MatrixClient; room: Room })
   };
 
   const recording = rec.kind === 'recording';
-  const showSend = text.trim().length > 0 || !voiceOk;
+  const showSend = text.trim().length > 0 || !voiceOk || !!editing;
+
+  const ctxTarget = editing ?? replying;
+  const ctxWho = replying ? (replying.sender?.name ?? replying.getSender() ?? '') : '';
 
   return (
+    <div className="composer-box">
+      {ctxTarget && !recording && (
+        <div className="composer-ctx" role="group" aria-label={editing ? 'Редактирование' : 'Ответ'}>
+          <span className="composer-ctx__bar" aria-hidden="true" />
+          <span className="composer-ctx__text">
+            <span className="composer-ctx__title">{editing ? 'Редактирование' : ctxWho}</span>
+            <span className="composer-ctx__preview">{editing ? previewText(editing).split('\n')[0] : previewText(ctxTarget).split('\n')[0]}</span>
+          </span>
+          <Button variant="ghost" size="sm" icon onClick={onClearContext} aria-label={editing ? 'Отменить редактирование' : 'Отменить ответ'}>
+            <Icon name="close" size={18} />
+          </Button>
+        </div>
+      )}
+      {text.length >= COUNTER_FROM && !recording && (
+        <div className={`composer-count${text.length >= MAX_LEN ? ' is-max' : ''}`} aria-live="polite">{text.length}/{MAX_LEN}</div>
+      )}
     <div className={`composer${recording ? ' composer--recording' : ''}`}>
       {recording ? (
         <div className="rec-bar" aria-live="polite">
@@ -253,15 +340,23 @@ export function Composer({ client, room }: { client: MatrixClient; room: Room })
             <Icon name="image" />
           </Button>
           <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => pickFiles(e.target.files)} />
+          <Button variant="ghost" icon aria-label="Прикрепить файл" onClick={() => attachInput.current?.click()}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l9-9a3.3 3.3 0 0 1 4.7 4.7l-9 9a1.7 1.7 0 0 1-2.4-2.4l8.3-8.3" />
+            </svg>
+          </Button>
+          <input ref={attachInput} type="file" multiple hidden onChange={(e) => pickAnyFiles(e.target.files)} />
           <textarea
             ref={textarea}
             className="composer__input"
             rows={1}
             placeholder="Сообщение"
             value={text}
+            maxLength={MAX_LEN}
             onChange={(e) => {
-              setText(e.target.value);
-              if (e.target.value) typing(true);
+              const v = e.target.value.slice(0, MAX_LEN);
+              setText(v);
+              if (v && !editing) typing(true);
             }}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
@@ -273,7 +368,7 @@ export function Composer({ client, room }: { client: MatrixClient; room: Room })
       )}
 
       {showSend && !recording ? (
-        <Button variant="primary" icon round aria-label="Отправить" onClick={submitText} disabled={!text.trim()}>
+        <Button variant="primary" icon round aria-label={editing ? 'Сохранить' : 'Отправить'} onClick={submitText} disabled={!text.trim() || tooLong}>
           <Icon name="send" />
         </Button>
       ) : recording && rec.locked ? (
@@ -303,6 +398,7 @@ export function Composer({ client, room }: { client: MatrixClient; room: Room })
           </button>
         </div>
       )}
+    </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { KnownMembership, RoomMemberEvent, type MatrixClient, type Room } from 'matrix-js-sdk';
+import { useCallback, useEffect, useState } from 'react';
+import { KnownMembership, RoomMemberEvent, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useClient } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
 import { isDirectRoom } from '../hooks/useRoomList';
@@ -8,7 +8,7 @@ import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { Avatar, Button, Icon } from '../components/ui';
 import { Timeline } from '../room/Timeline';
-import { Composer } from '../room/Composer';
+import { Composer, type ComposerContext } from '../room/Composer';
 import { roomAvatarMxc } from './ChatList';
 
 function useTyping(client: MatrixClient, room: Room | null): string[] {
@@ -47,6 +47,12 @@ export function RoomView({ roomId }: { roomId: string }) {
   const room = client.getRoom(roomId);
   const [encrypted, setEncrypted] = useState(false);
   const typing = useTyping(client, room);
+  const [context, setContext] = useState<ComposerContext>(null);
+  const onReply = useCallback((ev: MatrixEvent) => setContext({ kind: 'reply', ev }), []);
+  const onEdit = useCallback((ev: MatrixEvent) => setContext({ kind: 'edit', ev }), []);
+  const clearContext = useCallback(() => setContext(null), []);
+
+  useEffect(() => setContext(null), [roomId]);
 
   useEffect(() => {
     setCurrentRoom(roomId);
@@ -89,8 +95,8 @@ export function RoomView({ roomId }: { roomId: string }) {
           </span>
         </span>
       </header>
-      <Timeline key={room.roomId} client={client} room={room} />
-      <Composer key={room.roomId} client={client} room={room} />
+      <Timeline key={room.roomId} client={client} room={room} onReply={onReply} onEdit={onEdit} />
+      <Composer key={room.roomId} client={client} room={room} context={context} onClearContext={clearContext} />
     </section>
   );
 }

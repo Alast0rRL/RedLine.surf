@@ -69,3 +69,14 @@ export async function getMediaBytes(client: MatrixClient, src: MediaSource): Pro
   const url = await getMediaUrl(client, src);
   return (await fetch(url)).arrayBuffer();
 }
+
+/** Блоб без кеша (файлы и видео): вызывающий сам делает createObjectURL и revoke. */
+export async function loadMediaBlob(client: MatrixClient, src: MediaSource): Promise<Blob> {
+  const mxc = src.file?.url ?? src.url;
+  if (!mxc?.startsWith('mxc://')) throw new Error('Нет ссылки на медиа');
+  const httpUrl = client.mxcUrlToHttp(mxc, undefined, undefined, undefined, false, true, true);
+  if (!httpUrl) throw new Error('Не удалось построить URL медиа');
+  let data = await fetchAuthed(client, httpUrl);
+  if (src.file) data = await decryptAttachment(data, src.file);
+  return new Blob([data], { type: src.mimetype || 'application/octet-stream' });
+}

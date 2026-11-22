@@ -1,14 +1,19 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
-import { EventType, NotificationCountType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { EventType, MatrixEventEvent, NotificationCountType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useTimeline, isReadByOthers } from '../hooks/useTimeline';
-import { formatDay, formatDuration, isStateNotice, sameDay } from '../lib/events';
+import { formatDay, formatDuration, isStateNotice, sameDay, trackRelationEvent } from '../lib/events';
+import { reactionsStamp } from '../lib/messageActions';
 import { isPinUser } from '../lib/pin';
 import { uploadStore } from '../lib/uploads';
 import { Button, Icon } from '../components/ui';
+import { FileGlyph, formatSize } from './FileMessage';
 import { Message, messageStamp } from './Message';
+import { DeleteDialog, ForwardDialog, MessageMenu, type MenuPoint } from './MessageMenu';
+import './room.css';
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 120;
+const isMessageEvent = (e: MatrixEvent) => !isStateNotice(e);
 
 function stateText(ev: MatrixEvent, pin: boolean): string | null {
   const name = ev.sender?.name ?? (pin ? 'Участник' : ev.getSender());
@@ -52,6 +57,9 @@ function Uploads({ roomId }: { roomId: string }) {
       {list.map((u) => (
         <div key={u.id} className="msg msg--own msg--first msg--last">
           <div className={`bubble bubble--upload${u.kind === 'image' ? ' bubble--media' : ''}`}>
+            {u.kind === 'file' && (
+              <div className="upload-file"><FileGlyph size={18} /> <span className="upload-file__name">{u.name}</span> <span>{formatSize(u.size)}</span></div>
+            )}
             {u.kind === 'image' && u.previewUrl && <img className="upload-preview" src={u.previewUrl} alt="" />}
             {u.kind === 'voice' && (
               <div className="upload-voice"><Icon name="mic" size={16} /> Голосовое · {formatDuration(u.durationMs ?? 0)}</div>
@@ -74,7 +82,14 @@ function Uploads({ roomId }: { roomId: string }) {
   );
 }
 
-export function Timeline({ client, room }: { client: MatrixClient; room: Room }) {
+export interface TimelineProps {
+  client: MatrixClient;
+  room: Room;
+  onReply: (ev: MatrixEvent) => void;
+  onEdit: (ev: MatrixEvent) => void;
+}
+
+export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
   const { events, loadOlder, loadingOlder, canLoadOlder, version } = useTimeline(client, room);
   const me = client.getUserId()!;
   const pin = isPinUser(me);
@@ -83,6 +98,38 @@ export function Timeline({ client, room }: { client: MatrixClient; room: Room })
   const prevHeight = useRef(0);
   const loadingOlderRef = useRef(false);
   const isGroup = room.getJoinedMemberCount() > 2;
+
+  const [menu, setMenu] = useState<{ ev: MatrixEvent; point: MenuPoint } | null>(null);
+  const [forwarding, setForwarding] = useState<MatrixEvent | null>(null);
+  const [deleting, setDeleting] = useState<MatrixEvent | null>(null);
+  const openMenu = useCallback((ev: MatrixEvent, point: MenuPoint) => setMenu({ ev, point }), []);
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  // кнопка «вниз» и счётчик новых, пока лента прокручена вверх
+  const [far, setFar] = useState(false);
+  const [unseen, setUnseen] = useState(0);
+  const tailId = useRef<string | null>(null);
+
+  // реакции/правки в E2E-комнатах: запоминаем, чтобы удалённые не превращались в «пустышки»
+  useEffect(() => {
+    const on = (ev: MatrixEvent) => trackRelationEvent(ev);
+    client.on(MatrixEventEvent.Decrypted, on);
+    return () => {
+      client.off(MatrixEventEvent.Decrypted, on);
+    };
+  }, [client]);
+
+  useEffect(() => {
+    const visible = events.filter(isMessageEvent);
+    const last = visible.at(-1)?.getId() ?? null;
+    const prevTail = tailId.current;
+    tailId.current = last;
+    if (!prevTail || !last || prevTail === last || stick.current) return;
+    const idx = visible.findIndex((e) => e.getId() === prevTail);
+    if (idx < 0) return;
+    const fresh = visible.slice(idx + 1).filter((e) => e.getSender() !== me && e.getId()?.startsWith('$')).length;
+    if (fresh > 0) setUnseen((n) => n + fresh);
+  }, [events, me]);
 
   // позиция прокрутки: внизу — держим низ; подгрузили старое — сохраняем место
   useLayoutEffect(() => {
@@ -136,12 +183,23 @@ export function Timeline({ client, room }: { client: MatrixClient; room: Room })
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;
-    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stick.current = dist < NEAR_BOTTOM_PX;
+    setFar(dist > el.clientHeight);
+    if (stick.current) setUnseen(0);
     if (el.scrollTop < 300 && canLoadOlder && !loadingOlder) {
       loadingOlderRef.current = true;
       prevHeight.current = el.scrollHeight;
       void loadOlder();
     }
+  };
+
+  const jumpToBottom = () => {
+    const el = scroller.current;
+    if (!el) return;
+    stick.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    setUnseen(0);
   };
 
   // последнее своё сообщение, прочитанное другими — для галочек
@@ -154,6 +212,7 @@ export function Timeline({ client, room }: { client: MatrixClient; room: Room })
   })();
 
   return (
+    <div className="timeline-wrap">
     <div className="timeline" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
       <div className="timeline__inner">
         {canLoadOlder ? (
@@ -190,13 +249,36 @@ export function Timeline({ client, room }: { client: MatrixClient; room: Room })
                 last={!sameAsNext}
                 showSenderName={isGroup}
                 readByOthers={readByOthers}
-                stamp={messageStamp(ev) + (readByOthers ? 'r' : '')}
+                stamp={messageStamp(ev) + (readByOthers ? 'r' : '') + '|' + reactionsStamp(room, ev, me)}
+                onMenu={openMenu}
               />
             </Fragment>
           );
         })}
         <Uploads roomId={room.roomId} />
       </div>
+    </div>
+    {far && (
+      <button type="button" className="jump-bottom" onClick={jumpToBottom} aria-label={unseen > 0 ? `Вниз, новых сообщений: ${unseen}` : 'Вниз'}>
+        <Icon name="chevronUp" size={22} />
+        {unseen > 0 && <span className="jump-bottom__badge">{unseen > 99 ? '99+' : unseen}</span>}
+      </button>
+    )}
+    {menu && (
+      <MessageMenu
+        client={client}
+        room={room}
+        ev={menu.ev}
+        point={menu.point}
+        onClose={closeMenu}
+        onReply={onReply}
+        onEdit={onEdit}
+        onForward={setForwarding}
+        onDelete={setDeleting}
+      />
+    )}
+    <ForwardDialog client={client} ev={forwarding} onClose={() => setForwarding(null)} />
+    <DeleteDialog client={client} ev={deleting} onClose={() => setDeleting(null)} />
     </div>
   );
 }

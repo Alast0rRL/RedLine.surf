@@ -390,7 +390,8 @@ a { color: inherit; }
   border-bottom-right-radius: 6px;
 }
 .msg--own:not(.msg--first) .bubble { border-top-right-radius: 6px; }
-.msg--own.msg--last .bubble { box-shadow: 0 6px 20px rgb(var(--rl-red-500-rgb) / 0.25); }
+/* одинаковая лёгкая тень у всех пузырей (красное свечение было только у последнего своего и прыгало при новом сообщении) */
+.bubble { box-shadow: 0 1px 2px rgb(0 0 0 / 0.14); }
 
 /* Бот (Мари и др.): карточка с красной кромкой, HTML-разметка */
 .msg--bot .bubble {
