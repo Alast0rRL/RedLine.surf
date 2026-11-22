@@ -13,6 +13,7 @@
  */
 import http from 'node:http';
 import * as webpush from 'web-push';
+import { createPhoneApi } from './phone.mjs';
 
 const env = (name, fallback) => {
   const v = process.env[name] ?? fallback;
@@ -25,7 +26,17 @@ const APP_ID = env('PUSH_APP_ID', 'surf.redline.chat.web');
 const TTL = Number(process.env.PUSH_TTL || 60 * 60 * 24);
 const MAX_BODY = 64 * 1024;
 
-webpush.setVapidDetails(env('VAPID_SUBJECT'), env('VAPID_PUBLIC_KEY'), env('VAPID_PRIVATE_KEY'));
+// PHONE_ONLY=1 — только вход по номеру (локальные тесты без push-ключей)
+const PUSH_ENABLED = !!(process.env.VAPID_SUBJECT && process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+if (PUSH_ENABLED) {
+  webpush.setVapidDetails(env('VAPID_SUBJECT'), env('VAPID_PUBLIC_KEY'), env('VAPID_PRIVATE_KEY'));
+} else if (process.env.PHONE_ONLY === '1') {
+  console.warn('VAPID env not set: push disabled (PHONE_ONLY=1)');
+} else {
+  env('VAPID_SUBJECT');
+  env('VAPID_PUBLIC_KEY');
+  env('VAPID_PRIVATE_KEY');
+}
 
 // Только настоящие push-сервисы браузеров — шлюз не должен слать запросы куда попало
 const ALLOWED_ENDPOINT_HOSTS = [
@@ -41,6 +52,12 @@ const proxy = process.env.PUSH_PROXY || process.env.HTTPS_PROXY || undefined;
 
 const log = (level, msg, extra = {}) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), level, msg, ...extra }));
+
+const phoneApi = createPhoneApi({
+  dbPath: process.env.PHONE_DB || '/data/phones.json',
+  homeserverUrl: (process.env.HOMESERVER_INTERNAL_URL || 'http://continuwuity:8008').replace(/\/+$/, ''),
+  log,
+});
 
 function endpointAllowed(endpoint) {
   try {
@@ -141,8 +158,10 @@ const send = (res, status, body) => {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://gateway');
   if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true });
+  if (await phoneApi(req, res, url)) return;
   if (url.pathname !== '/_matrix/push/v1/notify') return send(res, 404, { errcode: 'M_UNRECOGNIZED' });
   if (req.method !== 'POST') return send(res, 405, { errcode: 'M_UNRECOGNIZED' });
+  if (!PUSH_ENABLED) return send(res, 503, { errcode: 'M_UNKNOWN', error: 'push disabled' });
   try {
     const body = await readJson(req);
     if (!body?.notification) return send(res, 400, { errcode: 'M_BAD_JSON', error: 'notification missing' });

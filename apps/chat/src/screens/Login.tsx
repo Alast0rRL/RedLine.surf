@@ -1,13 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { getConfig } from '../config';
-import { formatLink, parseLink, saveLink, type PersonalLink } from '../lib/pin';
+import { formatLink, parseLink, PIN_LENGTH, saveLink, type PersonalLink } from '../lib/pin';
+import { fetchLinkByPhone, normalizePhone } from '../lib/phone';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 export function Login() {
-  const { login, error: sessionError } = useMatrix();
+  const { login, enterPin, error: sessionError } = useMatrix();
   const [admin, setAdmin] = useState(false);
+  const [byPhone, setByPhone] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [pin, setPin] = useState('');
   const [value, setValue] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +30,26 @@ export function Login() {
     saveLink(link);
     location.hash = new URL(formatLink(link)).hash;
     window.dispatchEvent(new HashChangeEvent('hashchange'));
+  };
+
+  const submitPhone = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy || pin.length !== PIN_LENGTH) return;
+    if (!normalizePhone(phone)) {
+      setError('Проверьте номер');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      // ссылку отдаёт сервер, дальше вход идёт ровно как по ссылке (enterPin запомнит её)
+      const link = await fetchLinkByPhone(phone, pin);
+      await enterPin(link, pin);
+    } catch (err) {
+      setError((err as Error).message || 'Не удалось войти');
+      setPin('');
+      setBusy(false);
+    }
   };
 
   const submitAdmin = async (e: FormEvent) => {
@@ -86,8 +110,47 @@ export function Login() {
               Назад
             </Button>
           </form>
+        ) : byPhone ? (
+          <form className="stack" onSubmit={(e) => void submitPhone(e)} noValidate>
+            <Field
+              label="Номер телефона"
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="+7 900 123-45-67"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              disabled={busy}
+              required
+            />
+            <Field
+              label="PIN"
+              name="pin"
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={PIN_LENGTH}
+              autoComplete="off"
+              className="pin-input"
+              value={pin}
+              error={error ?? sessionError}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+              disabled={busy}
+              required
+            />
+            <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !phone.trim() || pin.length !== PIN_LENGTH}>
+              Войти
+            </Button>
+            <Button variant="ghost" size="sm" className="login__link" disabled={busy} onClick={() => { setByPhone(false); setError(null); }}>
+              Назад
+            </Button>
+          </form>
         ) : (
           <form className="stack" onSubmit={submitLink} noValidate>
+            <Button variant="primary" size="lg" block onClick={() => { setByPhone(true); setError(null); }}>
+              Войти по номеру телефона
+            </Button>
             <Field
               label="Вставь свою ссылку"
               name="link"
