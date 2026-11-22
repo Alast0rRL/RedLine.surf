@@ -20,6 +20,18 @@ const secretStorageKeys = new Map<string, Uint8Array<ArrayBuffer>>();
 /** Ключ, создаваемый прямо сейчас (bootstrapSecretStorage): его id ещё неизвестен. */
 let pendingNewKey: Uint8Array<ArrayBuffer> | null = null;
 
+/** Идущая очистка после выхода: новый вход ждёт её, иначе откроет хранилища прежнего аккаунта. */
+let pendingWipe: Promise<void> = Promise.resolve();
+
+/** Ключи в браузере от другого аккаунта или устройства: остались после прерванного выхода. */
+function isForeignCryptoStore(e: unknown): boolean {
+  return String(e instanceof Error ? e.message : e).includes("doesn't match the account in the constructor");
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | void> {
+  return Promise.race([p, new Promise<void>((resolve) => setTimeout(resolve, ms))]);
+}
+
 export function cacheSecretStorageKey(keyId: string, key: Uint8Array<ArrayBuffer>): void {
   secretStorageKeys.set(keyId, key);
 }
@@ -71,7 +83,8 @@ export async function loginWithPassword(baseUrl: string, username: string, passw
 }
 
 /** Создаёт клиент, поднимает хранилища и E2E и запускает синхронизацию. */
-export async function startMatrix(session: StoredSession): Promise<MatrixClient> {
+export async function startMatrix(session: StoredSession, retried = false): Promise<MatrixClient> {
+  await pendingWipe;
   let store: IndexedDBStore | MemoryStore;
   try {
     store = new IndexedDBStore({ indexedDB: window.indexedDB, dbName: SYNC_DB, localStorage: window.localStorage });
@@ -92,7 +105,16 @@ export async function startMatrix(session: StoredSession): Promise<MatrixClient>
     cryptoCallbacks: { getSecretStorageKey },
   });
 
-  await client.initRustCrypto({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX });
+  try {
+    await client.initRustCrypto({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX });
+  } catch (e) {
+    if (retried || !isForeignCryptoStore(e)) throw e;
+    // Чужие ключи нашему сеансу не нужны: его собственных в браузере всё равно нет
+    console.warn('crypto store belongs to another session, wiping it', e);
+    client.stopClient();
+    await withTimeout(client.clearStores({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX }), 10_000);
+    return startMatrix(session, true);
+  }
 
   await client.startClient({
     lazyLoadMembers: true,
@@ -103,27 +125,35 @@ export async function startMatrix(session: StoredSession): Promise<MatrixClient>
   return client;
 }
 
-/** Выход: удаляет устройство на сервере (вместе с его pusher'ами) и чистит локальные данные. */
+/**
+ * Выход: сначала чистит локальные данные (экран входа уже показан, новый вход ждёт очистку),
+ * потом удаляет устройство на сервере вместе с его pusher'ами.
+ */
 export async function logout(client: MatrixClient | null): Promise<void> {
-  if (client) {
-    try {
-      await client.logout(true);
-    } catch (e) {
-      console.warn('logout request failed', e);
-    }
-    client.stopClient();
-    await wipeLocalData(client);
-  } else {
-    await wipeLocalData(null);
+  if (!client) return wipeLocalData(null);
+  client.stopClient();
+  await wipeLocalData(client);
+  try {
+    await client.logout(true);
+  } catch (e) {
+    console.warn('logout request failed', e);
   }
 }
 
 /** Локальная очистка — после выхода или если сервер отозвал токен. */
-export async function wipeLocalData(client: MatrixClient | null): Promise<void> {
+export function wipeLocalData(client: MatrixClient | null): Promise<void> {
+  // сразу, а не в очереди: иначе сотрётся сессия входа, начатого во время очистки
   clearSession();
   secretStorageKeys.clear();
+  const wipe = pendingWipe.then(() => wipeStores(client));
+  pendingWipe = wipe.catch(() => undefined);
+  return wipe;
+}
+
+async function wipeStores(client: MatrixClient | null): Promise<void> {
   try {
-    if (client) await client.clearStores({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX });
+    // deleteDatabase ждёт закрытия всех соединений: без предела зависнет вход
+    if (client) await withTimeout(client.clearStores({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX }), 10_000);
   } catch (e) {
     console.warn('clearStores failed', e);
   }
