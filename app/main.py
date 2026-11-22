@@ -24,7 +24,7 @@ templates = Jinja2Templates(directory="templates")
 async def read_root(request: Request):
     """Отображает главную страницу"""
     # Мы можем передать данные сразу при загрузке, но лучше подгружать JS-ом
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 @app.get("/api/status")
 async def get_server_status():

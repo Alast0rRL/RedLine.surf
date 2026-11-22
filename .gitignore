@@ -1,3 +1,17 @@
 __pycache__/
 *.py[cod]
-redline.db
+*.db
+.venv/
+venv/
+
+node_modules/
+dist/
+dev-dist/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+# артефакт Windows (перенаправление в NUL)
+NUL
