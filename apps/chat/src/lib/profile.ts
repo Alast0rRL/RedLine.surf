@@ -15,7 +15,7 @@ export async function setName(client: MatrixClient, name: string): Promise<void>
 }
 
 /** Квадрат по центру, не больше 512px: аватарка публичная, хранить оригинал незачем. */
-async function squareAvatar(file: File): Promise<Blob> {
+export async function squareAvatar(file: File): Promise<Blob> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file); // учитывает EXIF-поворот

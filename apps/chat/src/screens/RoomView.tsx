@@ -10,6 +10,7 @@ import { Avatar, Button, Icon } from '../components/ui';
 import { Timeline } from '../room/Timeline';
 import { Composer, type ComposerContext } from '../room/Composer';
 import { roomAvatarMxc } from './ChatList';
+import '../styles/info.css';
 
 function useTyping(client: MatrixClient, room: Room | null): string[] {
   const [names, setNames] = useState<string[]>([]);
@@ -87,13 +88,20 @@ export function RoomView({ roomId }: { roomId: string }) {
         <Button variant="ghost" icon aria-label="Назад к чатам" className="topbar__back" onClick={() => navigate.list()}>
           <Icon name="back" />
         </Button>
-        <Avatar client={client} name={room.name} seed={peerId ?? room.roomId} mxc={roomAvatarMxc(room, isDm)} size="sm" />
-        <span className="topbar__title">
-          <span className="topbar__name">{room.name}</span>
-          <span className={`topbar__sub${typing.length ? ' is-typing' : ''}`}>
-            {encrypted && !typing.length && <Icon name="lock" size={11} />} {subtitle(room, typing, isDm, encrypted)}
+        <button
+          type="button"
+          className="topbar__open"
+          aria-label={isDm ? `Профиль: ${room.name}` : `Информация о группе ${room.name}`}
+          onClick={() => (isDm && peerId ? navigate.user(peerId) : navigate.roomInfo(room.roomId))}
+        >
+          <Avatar client={client} name={room.name} seed={peerId ?? room.roomId} mxc={roomAvatarMxc(room, isDm)} size="sm" />
+          <span className="topbar__title">
+            <span className="topbar__name">{room.name}</span>
+            <span className={`topbar__sub${typing.length ? ' is-typing' : ''}`}>
+              {encrypted && !typing.length && <Icon name="lock" size={11} />} {subtitle(room, typing, isDm, encrypted)}
+            </span>
           </span>
-        </span>
+        </button>
       </header>
       <Timeline key={room.roomId} client={client} room={room} onReply={onReply} onEdit={onEdit} />
       <Composer key={room.roomId} client={client} room={room} context={context} onClearContext={clearContext} />
