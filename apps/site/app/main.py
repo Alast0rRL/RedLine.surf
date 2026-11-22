@@ -5,18 +5,19 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from . import models, database, utils
+from .paths import SITE_DIR
 
 # 1. Инициализация БД (создает таблицы при запуске)
 models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="Redline Server")
 
-# 2. Подключение папок
-# Если у тебя будут отдельные CSS/JS файлы, они пойдут в static
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# 2. Подключение папок (пути от apps/site, а не от текущей директории)
+STATIC_DIR = SITE_DIR / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Шаблоны (твои HTML файлы)
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=SITE_DIR / "templates")
 
 # --- МАРШРУТЫ (ROUTES) ---
 
@@ -35,7 +36,7 @@ async def get_server_status():
 @app.get("/api/gallery")
 async def get_gallery():
     """API для получения списка фото галереи"""
-    folder = "static/gallery"
+    folder = STATIC_DIR / "gallery"
     if not os.path.isdir(folder):
         return {"images": []}
     files = sorted(
