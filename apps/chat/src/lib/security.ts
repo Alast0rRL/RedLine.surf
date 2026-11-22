@@ -1,6 +1,8 @@
 import type { MatrixClient } from 'matrix-js-sdk';
-import { decodeRecoveryKey } from 'matrix-js-sdk/lib/crypto-api/index.js';
+import { decodeRecoveryKey, deriveRecoveryKeyFromPassphrase } from 'matrix-js-sdk/lib/crypto-api/index.js';
 import { cacheSecretStorageKey, setPendingNewSecretStorageKey } from './matrix';
+
+export const MIN_PHRASE = 8;
 
 /**
  * E2E-безопасность аккаунта:
@@ -9,6 +11,18 @@ import { cacheSecretStorageKey, setPendingNewSecretStorageKey } from './matrix';
  *  - ok           — устройство подтверждено, резервная копия ключей включена
  */
 export type SecurityState = 'checking' | 'needs-setup' | 'needs-unlock' | 'ok' | 'unavailable';
+
+export function normalizePhrase(s: string): string {
+  return s.normalize('NFC').trim().replace(/\s+/g, ' ');
+}
+
+export function phraseProblem(phrase: string, password?: string): string | null {
+  const value = normalizePhrase(phrase);
+  if (value.length < MIN_PHRASE) return `Фраза короче ${MIN_PHRASE} символов`;
+  if (/^(.)\1*$/.test(value)) return 'Фраза не должна состоять из одного символа';
+  if (password && value === normalizePhrase(password)) return 'Фраза должна отличаться от пароля';
+  return null;
+}
 
 export async function getSecurityState(client: MatrixClient): Promise<SecurityState> {
   const crypto = client.getCrypto();
@@ -22,10 +36,10 @@ export async function getSecurityState(client: MatrixClient): Promise<SecuritySt
 
 /**
  * Первое устройство: создаёт cross-signing, хранилище секретов и резервную копию ключей.
- * Возвращает ключ восстановления — его нужно показать и попросить сохранить.
+ * Ключ хранилища выводится из фразы восстановления, сохранять его отдельно не нужно.
  * Сервер для загрузки ключей подписи просит пароль (UIA).
  */
-export async function setupRecovery(client: MatrixClient, password: string): Promise<string> {
+export async function setupRecovery(client: MatrixClient, password: string, phrase: string): Promise<void> {
   const crypto = client.getCrypto();
   if (!crypto) throw new Error('Шифрование недоступно');
   const userId = client.getUserId()!;
@@ -37,7 +51,7 @@ export async function setupRecovery(client: MatrixClient, password: string): Pro
     },
   });
 
-  const recovery = await crypto.createRecoveryKeyFromPassphrase();
+  const recovery = await crypto.createRecoveryKeyFromPassphrase(normalizePhrase(phrase));
   setPendingNewSecretStorageKey(recovery.privateKey);
   try {
     await crypto.bootstrapSecretStorage({
@@ -48,29 +62,77 @@ export async function setupRecovery(client: MatrixClient, password: string): Pro
   } finally {
     setPendingNewSecretStorageKey(null);
   }
-  if (!recovery.encodedPrivateKey) throw new Error('Не удалось получить ключ восстановления');
-  return recovery.encodedPrivateKey;
 }
 
 /**
- * Новое устройство: ключ восстановления → подтверждаем устройство и
+ * Смена фразы на подтверждённом устройстве: пересоздаём хранилище секретов,
+ * но сохраняем существующую резервную копию ключей. Без всех локальных ключей
+ * это приведёт к потере доступа к старой переписке — поэтому сначала проверка.
+ */
+export async function changeRecoveryPhrase(client: MatrixClient, phrase: string): Promise<void> {
+  const crypto = client.getCrypto();
+  if (!crypto) throw new Error('Шифрование недоступно');
+  const noKeys = new Error('На этом устройстве нет всех ключей. Смените фразу на другом подтверждённом устройстве');
+
+  try {
+    const status = await crypto.getCrossSigningStatus();
+    const cached = status.privateKeysCachedLocally;
+    if (!cached.masterKey || !cached.selfSigningKey || !cached.userSigningKey) throw noKeys;
+    const info = await crypto.getKeyBackupInfo();
+    if (!info) throw noKeys;
+    const backupKey = await crypto.getSessionBackupPrivateKey();
+    if (!backupKey) throw noKeys;
+    if (!(await crypto.isKeyBackupTrusted(info)).matchesDecryptionKey) throw noKeys;
+  } catch (e) {
+    if (e === noKeys) throw e;
+    throw noKeys;
+  }
+
+  const recovery = await crypto.createRecoveryKeyFromPassphrase(normalizePhrase(phrase));
+  setPendingNewSecretStorageKey(recovery.privateKey);
+  try {
+    await crypto.bootstrapSecretStorage({
+      createSecretStorageKey: async () => recovery,
+      setupNewSecretStorage: true,
+    });
+  } finally {
+    setPendingNewSecretStorageKey(null);
+  }
+}
+
+/**
+ * Новое устройство: фраза или ключ восстановления → подтверждаем устройство и
  * подтягиваем ключи старых сообщений из резервной копии.
  */
-export async function unlockWithRecoveryKey(client: MatrixClient, input: string): Promise<{ imported: number }> {
+export async function unlockWithRecovery(client: MatrixClient, input: string): Promise<{ imported: number }> {
   const crypto = client.getCrypto();
   if (!crypto) throw new Error('Шифрование недоступно');
 
-  let key: Uint8Array<ArrayBuffer>;
+  const keyId = await client.secretStorage.getDefaultKeyId();
+  if (!keyId) throw new Error('На аккаунте нет хранилища ключей');
+  const stored = await client.secretStorage.getKey(keyId);
+  if (!stored) throw new Error('На аккаунте нет хранилища ключей');
+
+  let key: Uint8Array<ArrayBuffer> | null = null;
   try {
     key = decodeRecoveryKey(input.trim());
   } catch {
-    throw new Error('Это не похоже на ключ восстановления');
+    const passphrase = stored[1].passphrase;
+    if (passphrase?.algorithm === 'm.pbkdf2' && typeof passphrase.salt === 'string' && typeof passphrase.iterations === 'number') {
+      try {
+        key = await deriveRecoveryKeyFromPassphrase(
+          normalizePhrase(input),
+          passphrase.salt,
+          passphrase.iterations,
+          passphrase.bits,
+        );
+      } catch {
+        /* неверная фраза — ниже будет общая ошибка */
+      }
+    }
   }
-  const keyId = await client.secretStorage.getDefaultKeyId();
-  if (!keyId) throw new Error('На аккаунте нет хранилища ключей');
-  const keyInfo = await client.secretStorage.getKey(keyId);
-  if (!keyInfo || !(await client.secretStorage.checkKey(key, keyInfo[1]))) {
-    throw new Error('Неверный ключ восстановления');
+  if (!key || !(await client.secretStorage.checkKey(key, stored[1]))) {
+    throw new Error('Неверная фраза или ключ');
   }
   cacheSecretStorageKey(keyId, key);
 

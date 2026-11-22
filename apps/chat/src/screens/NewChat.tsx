@@ -120,7 +120,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
           label={mode === 'dm' ? 'Кому' : 'Участники'}
           value={who}
           onChange={(e) => setWho(e.target.value)}
-          placeholder={mode === 'dm' ? 'имя' : 'мама, папа'}
+          placeholder={mode === 'dm' ? 'mama' : 'mama, papa'}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}

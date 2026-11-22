@@ -86,7 +86,7 @@ function Content({ ev }: { ev: MatrixEvent }): ReactNode {
   if (isUndecryptable(ev)) {
     return (
       <div className="msg-text msg-text--muted">
-        <Icon name="lock" size={14} /> Не удалось расшифровать. Введите ключ восстановления в настройках
+        <Icon name="lock" size={14} /> Не удалось расшифровать. Введите фразу восстановления в настройках
       </div>
     );
   }

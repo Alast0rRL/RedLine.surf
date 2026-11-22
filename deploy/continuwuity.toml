@@ -5,8 +5,9 @@ database_path = "/var/lib/continuwuity"
 address = ["0.0.0.0"]
 port = 8008
 
-# Аккаунты создаёт администратор (!admin users create …). Открытой регистрации нет.
-allow_registration = false
+# Регистрация только по одноразовому приглашению из клиента: без действующего токена сервер отвечает 403.
+# Не задавать registration_token (он многоразовый) и опцию yes_i_am_very_very_sure_… (открытая регистрация).
+allow_registration = true
 # Сервер замкнутый: без федерации с остальным Matrix.
 allow_federation = false
 allow_public_room_directory_over_federation = false

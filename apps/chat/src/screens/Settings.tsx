@@ -2,8 +2,16 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useClient, useMatrix } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
 import { useSecurityState } from '../hooks/useSecurityState';
+import { changePassword, passwordProblem } from '../lib/account';
+import { findAdminRoom } from '../lib/admin';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
-import { setupRecovery, unlockWithRecoveryKey } from '../lib/security';
+import {
+  changeRecoveryPhrase,
+  normalizePhrase,
+  phraseProblem,
+  setupRecovery,
+  unlockWithRecovery,
+} from '../lib/security';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 
 const PUSH_TEXT: Record<PushState, string> = {
@@ -13,6 +21,8 @@ const PUSH_TEXT: Record<PushState, string> = {
   off: 'Выключены',
   on: 'Включены',
 };
+
+const PHRASE_HINT = 'Нужна на новом телефоне, чтобы прочитать старую переписку. Лучше 3–4 слова. Запишите её';
 
 function PushSection() {
   const client = useClient();
@@ -48,40 +58,91 @@ function PushSection() {
   );
 }
 
+function AdminSection() {
+  const client = useClient();
+  const [adminRoom, setAdminRoom] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    findAdminRoom(client)
+      .then((roomId) => {
+        if (alive) setAdminRoom(roomId);
+      })
+      .catch(() => {
+        if (alive) setAdminRoom(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [client]);
+
+  if (!adminRoom) return null;
+  return (
+    <Card solid className="settings-card">
+      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Семья</h2>
+      <p className="settings-card__text">Здесь можно приглашать родных и управлять ссылками.</p>
+      <Button variant="primary" onClick={() => navigate.people()}>Пригласить и управлять</Button>
+    </Card>
+  );
+}
+
+type SecurityDialog = 'setup' | 'unlock' | 'change' | null;
+
 function SecuritySection() {
   const client = useClient();
   const [state, refresh] = useSecurityState(client);
-  const [dialog, setDialog] = useState<'setup' | 'unlock' | null>(null);
-  const [input, setInput] = useState('');
+  const [dialog, setDialog] = useState<SecurityDialog>(null);
+  const [password, setPassword] = useState('');
+  const [phrase, setPhrase] = useState('');
+  const [phrase2, setPhrase2] = useState('');
+  const [recovery, setRecovery] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const close = () => {
     setDialog(null);
-    setInput('');
-    setError(null);
+    setPassword('');
+    setPhrase('');
+    setPhrase2('');
+    setRecovery('');
+    setErrors({});
     setBusy(false);
-    setRecoveryKey(null);
     refresh();
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    const mode = dialog;
+    if (!mode) return;
+    const next: Record<string, string> = {};
+    if (mode === 'unlock') {
+      if (!recovery.trim()) next.recovery = 'Введите фразу или ключ';
+    } else {
+      if (mode === 'setup' && !password) next.password = 'Введите пароль от аккаунта';
+      const problem = phraseProblem(phrase, mode === 'setup' ? password : undefined);
+      if (problem) next.phrase = problem;
+      else if (normalizePhrase(phrase) !== normalizePhrase(phrase2)) next.phrase2 = 'Фразы не совпадают';
+    }
+    setErrors(next);
+    if (Object.keys(next).length) return;
+
     setBusy(true);
-    setError(null);
     try {
-      if (dialog === 'setup') {
-        setRecoveryKey(await setupRecovery(client, input));
-        setBusy(false);
+      if (mode === 'setup') {
+        await setupRecovery(client, password, phrase);
+        toast('Фраза восстановления создана', { variant: 'success' });
+      } else if (mode === 'change') {
+        await changeRecoveryPhrase(client, phrase);
+        toast('Фраза восстановления изменена', { variant: 'success' });
       } else {
-        const { imported } = await unlockWithRecoveryKey(client, input);
+        const { imported } = await unlockWithRecovery(client, recovery);
         toast(imported ? `Устройство подтверждено, восстановлено ключей: ${imported}` : 'Устройство подтверждено', { variant: 'success' });
-        close();
       }
+      close();
     } catch (err) {
       const e2 = err as { errcode?: string; message?: string };
-      setError(e2.errcode === 'M_FORBIDDEN' ? 'Неверный пароль' : e2.message ?? 'Ошибка');
+      const field = mode === 'unlock' ? 'recovery' : 'form';
+      setErrors({ [field]: e2.errcode === 'M_FORBIDDEN' ? 'Неверный пароль' : e2.message || 'Ошибка' });
       setBusy(false);
     }
   };
@@ -89,43 +150,155 @@ function SecuritySection() {
   const text = {
     checking: 'Проверяем…',
     unavailable: 'Шифрование недоступно в этом браузере.',
-    'needs-setup': 'Ключ восстановления не создан. Без него переписку не прочитать на новом устройстве.',
-    'needs-unlock': 'Это устройство не подтверждено — старые сообщения не расшифруются. Введите ключ восстановления.',
-    ok: 'Устройство подтверждено, ключи сообщений сохраняются в зашифрованной резервной копии.',
+    'needs-setup': 'Задайте фразу восстановления, чтобы не потерять переписку.',
+    'needs-unlock': 'Введите фразу восстановления, чтобы читать старые сообщения.',
+    ok: 'Устройство подтверждено, фраза восстановления задана.',
   }[state];
 
   return (
     <Card solid className="settings-card">
       <h2 className="settings-card__title"><Icon name="shield" size={18} /> Шифрование</h2>
       <p className="settings-card__text">{text}</p>
-      {state === 'needs-setup' && <Button variant="primary" onClick={() => setDialog('setup')}>Создать ключ</Button>}
-      {state === 'needs-unlock' && <Button variant="primary" onClick={() => setDialog('unlock')}>Ввести ключ</Button>}
+      {state === 'needs-setup' && <Button variant="primary" onClick={() => setDialog('setup')}>Задать фразу</Button>}
+      {state === 'needs-unlock' && <Button variant="primary" onClick={() => setDialog('unlock')}>Ввести фразу</Button>}
+      {state === 'ok' && <Button variant="secondary" onClick={() => setDialog('change')}>Сменить фразу</Button>}
 
-      <Modal open={dialog !== null} onClose={close} title={dialog === 'setup' ? 'Ключ восстановления' : 'Подтвердить устройство'}>
-        {recoveryKey ? (
-          <div className="stack">
-            <p>Сохраните ключ в надёжном месте (менеджер паролей, бумажка в сейфе). Он понадобится на каждом новом устройстве. Показать его снова нельзя.</p>
-            <code className="recovery-key">{recoveryKey}</code>
-            <Button
-              variant="secondary"
-              onClick={() => navigator.clipboard.writeText(recoveryKey).then(() => toast('Скопировано!'))}
-            >
-              <Icon name="copy" size={16} /> Скопировать
-            </Button>
-            <Button variant="primary" onClick={close}>Я сохранил(а) ключ</Button>
-          </div>
-        ) : (
-          <form className="stack" onSubmit={submit}>
-            {dialog === 'setup' ? (
-              <Field label="Пароль от аккаунта" type="password" autoComplete="current-password" value={input} onChange={(e) => setInput(e.target.value)} error={error} hint="Сервер просит подтвердить создание ключей" />
-            ) : (
-              <Field label="Ключ восстановления" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="EsTc …" value={input} onChange={(e) => setInput(e.target.value)} error={error} />
-            )}
-            <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={!input.trim()}>
-              {dialog === 'setup' ? 'Создать' : 'Подтвердить'}
-            </Button>
-          </form>
-        )}
+      <Modal
+        open={dialog !== null}
+        onClose={close}
+        title={dialog === 'setup' ? 'Фраза восстановления' : dialog === 'change' ? 'Сменить фразу' : 'Подтвердить устройство'}
+      >
+        <form className="stack" onSubmit={submit}>
+          {dialog === 'setup' && (
+            <Field
+              label="Пароль от аккаунта"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              error={errors.password ?? null}
+              onChange={(e) => setPassword(e.target.value)}
+              hint="Сервер просит подтвердить создание ключей"
+            />
+          )}
+          {dialog === 'unlock' && (
+            <Field
+              label="Фраза или старый ключ восстановления"
+              name="recovery"
+              type="password"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={recovery}
+              error={errors.recovery ?? null}
+              onChange={(e) => setRecovery(e.target.value)}
+            />
+          )}
+          {(dialog === 'setup' || dialog === 'change') && (
+            <>
+              {dialog === 'change' && <p>Старая фраза и старый ключ перестанут работать. Запишите новую фразу.</p>}
+              <Field
+                label="Фраза восстановления"
+                name="phrase"
+                type="password"
+                autoComplete="off"
+                value={phrase}
+                error={errors.phrase ?? null}
+                hint={errors.phrase ? undefined : PHRASE_HINT}
+                onChange={(e) => setPhrase(e.target.value)}
+              />
+              <Field
+                label="Повторите фразу"
+                name="phrase2"
+                type="password"
+                autoComplete="off"
+                value={phrase2}
+                error={errors.phrase2 ?? null}
+                onChange={(e) => setPhrase2(e.target.value)}
+              />
+            </>
+          )}
+          {errors.form && <p className="rl-hint rl-hint--error" role="alert">{errors.form}</p>}
+          <Button type="submit" variant="primary" size="lg" block busy={busy}>
+            {dialog === 'unlock' ? 'Подтвердить' : 'Сохранить'}
+          </Button>
+        </form>
+      </Modal>
+    </Card>
+  );
+}
+
+function PasswordSection() {
+  const client = useClient();
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [logoutOthers, setLogoutOthers] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const close = () => {
+    setOpen(false);
+    setCurrent('');
+    setNext('');
+    setLogoutOthers(false);
+    setErrors({});
+    setBusy(false);
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const local: Record<string, string> = {};
+    if (!current) local.current = 'Введите текущий пароль';
+    const problem = passwordProblem(next);
+    if (problem) local.next = problem;
+    setErrors(local);
+    if (Object.keys(local).length) return;
+
+    setBusy(true);
+    try {
+      await changePassword(client, current, next, logoutOthers);
+      toast('Пароль изменён', { variant: 'success' });
+      close();
+    } catch (err) {
+      setErrors({ current: (err as Error).message || 'Не удалось сменить пароль' });
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card solid className="settings-card">
+      <h2 className="settings-card__title"><Icon name="lock" size={18} /> Пароль</h2>
+      <p className="settings-card__text">Пароль нужен для входа. Переписку открывает отдельная фраза восстановления.</p>
+      <Button variant="outline" onClick={() => setOpen(true)}>Сменить пароль</Button>
+      <Modal open={open} onClose={close} title="Сменить пароль">
+        <form className="stack" onSubmit={submit}>
+          <Field
+            label="Текущий пароль"
+            name="current"
+            type="password"
+            autoComplete="current-password"
+            value={current}
+            error={errors.current ?? null}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+          <Field
+            label="Новый пароль"
+            name="next"
+            type="password"
+            autoComplete="new-password"
+            value={next}
+            error={errors.next ?? null}
+            onChange={(e) => setNext(e.target.value)}
+            hint="Не короче 8 символов"
+          />
+          <label className="check-row">
+            <input type="checkbox" checked={logoutOthers} onChange={(e) => setLogoutOthers(e.target.checked)} />
+            <span>Выйти на других устройствах</span>
+          </label>
+          {logoutOthers && <p>На этих устройствах для чтения старой переписки понадобится фраза восстановления.</p>}
+          <Button type="submit" variant="primary" size="lg" block busy={busy}>Сохранить</Button>
+        </form>
       </Modal>
     </Card>
   );
@@ -152,8 +325,10 @@ export function Settings() {
             <div className="profile__id">{client.getUserId()}</div>
           </div>
         </div>
+        <AdminSection />
         <PushSection />
         <SecuritySection />
+        <PasswordSection />
         <Card solid className="settings-card">
           <h2 className="settings-card__title"><Icon name="logout" size={18} /> Сеанс</h2>
           <p className="settings-card__text">Устройство: <code>{client.getDeviceId()}</code></p>
@@ -172,7 +347,7 @@ export function Settings() {
           </>
         }
       >
-        <p>Если ключ восстановления не сохранён, зашифрованные сообщения на этом устройстве будут потеряны.</p>
+        <p>Если фраза восстановления не сохранена, зашифрованные сообщения на этом устройстве будут потеряны.</p>
       </Modal>
     </section>
   );

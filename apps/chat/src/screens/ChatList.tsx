@@ -5,6 +5,7 @@ import { useRoomList, type RoomSummary } from '../hooks/useRoomList';
 import { useSecurityState } from '../hooks/useSecurityState';
 import { navigate } from '../hooks/useHashRoute';
 import { formatListTime, previewText } from '../lib/events';
+import { sweepExpiredInvites } from '../lib/invites';
 import { isBotUser } from '../bots/registry';
 import { Avatar, Button, Icon, RedLines, toast } from '../components/ui';
 import { NewChatModal } from './NewChat';
@@ -98,6 +99,10 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const [newChat, setNewChat] = useState(false);
 
   useEffect(() => {
+    void sweepExpiredInvites(client);
+  }, [client]);
+
+  useEffect(() => {
     const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
     if (!nav.setAppBadge) return;
     (totalUnread > 0 ? nav.setAppBadge(totalUnread) : nav.clearAppBadge?.())?.catch(() => {});
@@ -128,8 +133,8 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
           <Icon name="key" size={18} />
           <span>
             {security === 'needs-setup'
-              ? 'Создайте ключ восстановления, чтобы не потерять переписку'
-              : 'Введите ключ восстановления, чтобы читать старые сообщения'}
+              ? 'Задайте фразу восстановления, чтобы не потерять переписку'
+              : 'Введите фразу восстановления, чтобы читать старые сообщения'}
           </span>
         </button>
       )}

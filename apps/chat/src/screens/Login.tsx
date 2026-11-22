@@ -61,7 +61,7 @@ export function Login() {
         <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={!username.trim() || !password}>
           Войти
         </Button>
-        <p className="login__note">Аккаунты создаёт администратор. Регистрации нет.</p>
+        <p className="login__note">Нет аккаунта? Попросите у администратора ссылку-приглашение.</p>
       </form>
     </main>
   );

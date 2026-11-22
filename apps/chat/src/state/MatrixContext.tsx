@@ -1,11 +1,23 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ClientEvent, HttpApiEvent, SyncState, type MatrixClient } from 'matrix-js-sdk';
+import { toast } from '@redline/ui';
 import { loadConfig } from '../config';
+import { registerWithInvite } from '../lib/account';
 import { loadSession } from '../lib/session';
 import { loginWithPassword, logout as doLogout, startMatrix, wipeLocalData } from '../lib/matrix';
 import { attachForegroundNotifications } from '../lib/notifications';
+import { setupRecovery } from '../lib/security';
 
 export type AppStatus = 'boot' | 'logged-out' | 'starting' | 'ready' | 'fatal';
+
+interface RegisterOptions {
+  token: string;
+  roomId: string | null;
+  displayName?: string;
+  username: string;
+  password: string;
+  phrase: string;
+}
 
 interface MatrixState {
   status: AppStatus;
@@ -13,7 +25,10 @@ interface MatrixState {
   /** null — синхронизация в норме; иначе состояние проблемы */
   syncProblem: 'reconnecting' | 'error' | null;
   error: string | null;
+  /** Текст шага регистрации, который надо показать после экрана входа. */
+  progress: string | null;
   login: (username: string, password: string) => Promise<void>;
+  register: (opts: RegisterOptions) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -33,42 +48,47 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   const [client, setClient] = useState<MatrixClient | null>(null);
   const [syncProblem, setSyncProblem] = useState<MatrixState['syncProblem']>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const clientRef = useRef<MatrixClient | null>(null);
 
-  const start = useCallback(async (session: NonNullable<ReturnType<typeof loadSession>>) => {
-    setStatus('starting');
-    const c = await startMatrix(session);
-    clientRef.current = c;
-    setClient(c);
+  const start = useCallback(
+    async (session: NonNullable<ReturnType<typeof loadSession>>, beforeReady?: (c: MatrixClient) => Promise<void>) => {
+      setStatus('starting');
+      const c = await startMatrix(session);
+      clientRef.current = c;
+      setClient(c);
 
-    c.on(HttpApiEvent.SessionLoggedOut, async () => {
-      c.stopClient();
-      await wipeLocalData(c);
-      clientRef.current = null;
-      setClient(null);
-      setError('Сессия завершена. Войдите снова');
-      setStatus('logged-out');
-    });
+      c.on(HttpApiEvent.SessionLoggedOut, async () => {
+        c.stopClient();
+        await wipeLocalData(c);
+        clientRef.current = null;
+        setClient(null);
+        setError('Сессия завершена. Войдите снова');
+        setStatus('logged-out');
+      });
 
-    await new Promise<void>((resolve) => {
-      if (c.isInitialSyncComplete()) return resolve();
-      const onSync = (state: SyncState) => {
-        if (state === SyncState.Prepared || state === SyncState.Syncing) {
-          c.off(ClientEvent.Sync, onSync);
-          resolve();
-        }
-      };
-      c.on(ClientEvent.Sync, onSync);
-    });
+      await new Promise<void>((resolve) => {
+        if (c.isInitialSyncComplete()) return resolve();
+        const onSync = (state: SyncState) => {
+          if (state === SyncState.Prepared || state === SyncState.Syncing) {
+            c.off(ClientEvent.Sync, onSync);
+            resolve();
+          }
+        };
+        c.on(ClientEvent.Sync, onSync);
+      });
 
-    c.on(ClientEvent.Sync, (state) => {
-      setSyncProblem(
-        state === SyncState.Reconnecting ? 'reconnecting' : state === SyncState.Error ? 'error' : null,
-      );
-    });
-    attachForegroundNotifications(c);
-    setStatus('ready');
-  }, []);
+      c.on(ClientEvent.Sync, (state) => {
+        setSyncProblem(
+          state === SyncState.Reconnecting ? 'reconnecting' : state === SyncState.Error ? 'error' : null,
+        );
+      });
+      attachForegroundNotifications(c);
+      if (beforeReady) await beforeReady(c);
+      setStatus('ready');
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +137,51 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     [start],
   );
 
+  const register = useCallback(
+    async (opts: RegisterOptions) => {
+      setError(null);
+      setProgress(null);
+      const { homeserverUrl } = await loadConfig();
+      // пока статус logged-out, форма регистрации сохраняет введённые данные и показывает ошибку
+      const session = await registerWithInvite(homeserverUrl, opts);
+
+      history.replaceState(null, '', '/#/');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      try {
+        await start(session, async (c) => {
+          try {
+            if (opts.displayName) await c.setDisplayName(opts.displayName);
+          } catch {
+            console.warn('Не удалось задать имя');
+          }
+          try {
+            setProgress('Настраиваем шифрование…');
+            await setupRecovery(c, opts.password, opts.phrase);
+          } catch {
+            console.warn('Не удалось настроить шифрование');
+            toast('Не удалось настроить шифрование. Завершите настройку в «Настройках»', { variant: 'error' });
+          }
+          try {
+            if (opts.roomId) {
+              setProgress('Присоединяемся к комнате «Семья»…');
+              await c.joinRoom(opts.roomId);
+            }
+          } catch {
+            console.warn('Не удалось присоединиться к комнате');
+            toast('Не удалось присоединиться к комнате «Семья»', { variant: 'error' });
+          }
+        });
+      } catch (e) {
+        console.error(e);
+        setError('Аккаунт создан. Войдите со своим логином и паролем');
+        setStatus('logged-out');
+      } finally {
+        setProgress(null);
+      }
+    },
+    [start],
+  );
+
   const logout = useCallback(async () => {
     const c = clientRef.current;
     clientRef.current = null;
@@ -126,7 +191,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ status, client, syncProblem, error, login, logout }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ status, client, syncProblem, error, progress, login, register, logout }}>{children}</Ctx.Provider>
   );
 }
 

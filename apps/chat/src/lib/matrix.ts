@@ -44,7 +44,7 @@ async function getSecretStorageKey(
   return null;
 }
 
-function deviceName(): string {
+export function deviceName(): string {
   const ua = navigator.userAgent;
   const os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad/i.test(ua) ? 'iOS' : /Windows/i.test(ua) ? 'Windows' : /Mac/i.test(ua) ? 'macOS' : /Linux/i.test(ua) ? 'Linux' : 'web';
   return `Redline Chat · ${os}`;
