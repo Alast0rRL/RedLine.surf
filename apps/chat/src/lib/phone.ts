@@ -51,6 +51,26 @@ async function api<T>(method: string, path: string, body?: unknown, token?: stri
   return data;
 }
 
+const SAVED_PHONE = 'rl.phone';
+
+/** Номер, привязанный с этого устройства: нужен, чтобы после смены PIN обновить привязку без вопросов. */
+export function savedPhone(user: string): string | null {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(SAVED_PHONE) ?? 'null');
+    if (v && typeof v === 'object' && (v as { user?: unknown }).user === user) {
+      const phone = (v as { phone?: unknown }).phone;
+      return typeof phone === 'string' ? phone : null;
+    }
+  } catch { /* нет доступа к хранилищу */ }
+  return null;
+}
+function rememberPhone(user: string, phone: string | null): void {
+  try {
+    if (phone) localStorage.setItem(SAVED_PHONE, JSON.stringify({ user, phone }));
+    else localStorage.removeItem(SAVED_PHONE);
+  } catch { /* приватный режим */ }
+}
+
 /** Ссылка человека по номеру и PIN; дальше вход идёт как по обычной ссылке. */
 export async function fetchLinkByPhone(phoneInput: string, pin: string): Promise<PersonalLink> {
   const phone = normalizePhone(phoneInput);
@@ -61,6 +81,7 @@ export async function fetchLinkByPhone(phoneInput: string, pin: string): Promise
   });
   const link = { user: r.user, key: r.key, token: NO_TOKEN, name: r.name || 'Участник' };
   if (!isPersonalLink(link)) throw new Error('Не удалось войти по номеру');
+  rememberPhone(link.user, phone);
   return link;
 }
 
@@ -77,11 +98,13 @@ export async function bindPhone(token: string, link: PersonalLink, phoneInput: s
     { phone, proof: await phoneProof(phone, pin), key: link.key, name: link.name },
     token,
   );
+  rememberPhone(link.user, phone);
   return r.mask;
 }
 
 export async function unbindPhone(token: string): Promise<void> {
   await api('DELETE', 'bind', undefined, token);
+  localStorage.removeItem(SAVED_PHONE);
 }
 
 /** Проверка PIN: заходим с выведенным паролем и сразу закрываем этот лишний сеанс. */

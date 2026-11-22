@@ -3,7 +3,7 @@ import { ClientEvent, HttpApiEvent, SyncState, type MatrixClient } from 'matrix-
 import { loadConfig } from '../config';
 import { loginWithPin, preparePinSession, saveLink, type PersonalLink } from '../lib/pin';
 import { loadSession } from '../lib/session';
-import { getBoundPhone } from '../lib/phone';
+import { bindPhone, getBoundPhone, savedPhone } from '../lib/phone';
 import { PhoneOffer, type PhoneOfferData } from '../screens/PhoneOffer';
 import { loginWithPassword, logout as doLogout, startMatrix, wipeLocalData } from '../lib/matrix';
 import { attachForegroundNotifications } from '../lib/notifications';
@@ -144,10 +144,16 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
           history.replaceState(null, '', '/#/');
           window.dispatchEvent(new HashChangeEvent('hashchange'));
         });
-        // PIN ещё в памяти: если номер не привязан, предлагаем привязать (ошибки не мешают входу)
+        // PIN ещё в памяти: если номер не привязан, предлагаем привязать (ошибки не мешают входу).
+        // Если привязан и номер известен этому устройству, обновляем привязку под текущий PIN:
+        // после сброса PIN админом вход по номеру сразу работает с новым PIN.
         const token = r.session.accessToken;
         getBoundPhone(token)
-          .then((mask) => mask === null && setPhoneOffer({ link, pin, token }))
+          .then(async (mask) => {
+            if (mask === null) return setPhoneOffer({ link, pin, token });
+            const phone = savedPhone(link.user);
+            if (phone) await bindPhone(token, link, phone, pin);
+          })
           .catch(() => console.warn('Не удалось проверить привязку номера'));
       } catch (e) {
         console.error(e);
