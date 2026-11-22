@@ -15,3 +15,6 @@ dev-dist/
 
 # артефакт Windows (перенаправление в NUL)
 NUL
+
+# локальный конфиг чата для vite dev
+apps/chat/public/config.json

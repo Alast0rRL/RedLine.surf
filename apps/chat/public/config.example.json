@@ -1,0 +1,7 @@
+{
+  "homeserverUrl": "https://matrix.example.org",
+  "serverName": "example.org",
+  "pushGatewayUrl": "",
+  "vapidPublicKey": "",
+  "botUsers": []
+}
