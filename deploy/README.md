@@ -31,9 +31,10 @@ docker compose build
 (`--execute`). Пароль генерируется на сервере и сразу ложится в файл, в логи и терминал не попадает:
 
 ```bash
-umask 077; openssl rand -base64 24 > ~/redline-admin-password
-docker compose run --rm -d --name rl-bootstrap continuwuity   --execute "users create admin $(cat ~/redline-admin-password)"   --execute "users make-user-admin @admin:${SERVER_NAME}"
-sleep 15; docker logs rl-bootstrap 2>&1 | grep -i "admin privileges"; docker rm -f rl-bootstrap
+umask 077; openssl rand -base64 24 | tr -d '/+=' > ~/redline-admin-password
+# у образа нет ENTRYPOINT — бинарник указываем явно; server shutdown — выйти после команд
+docker compose run -d --name rl-bootstrap continuwuity /sbin/conduwuit   --execute "users create admin $(cat ~/redline-admin-password)"   --execute "users make-user-admin @admin:${SERVER_NAME}"   --execute "server shutdown"
+sleep 20; docker logs rl-bootstrap 2>&1 | grep -i -E "admin privileges|failed"; docker rm -f rl-bootstrap
 docker compose up -d
 ```
 
