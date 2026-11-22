@@ -20,28 +20,34 @@ cd deploy
 cp .env.example .env
 pnpm --filter @redline/push-gateway vapid   # → VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY в .env
 # заполнить SERVER_NAME, HOMESERVER_URL, CONTINUWUITY_VERSION, BOT_USERS
-docker compose up -d --build
-docker compose logs continuwuity | grep -i token
+docker compose build
 ```
 
-`SERVER_NAME` — часть всех Matrix ID (`@мама:redline.surf`); после первого запуска его не поменять.
+`SERVER_NAME` — часть всех Matrix ID (`@mama:redline.surf`); после первого запуска его не поменять.
 
 ### Первый администратор
 
-При первом запуске Continuwuity печатает в лог **одноразовый токен регистрации**.
-Наш клиент регистрацию не умеет (так задумано), поэтому первый аккаунт создаём в любом клиенте
-с поддержкой токенов, например Element Web: «Создать аккаунт» → сервер `https://matrix.<домен>` →
-имя, пароль, токен из лога. Этот пользователь становится администратором и попадает в комнату
-`#admins`.
+Регистрация закрыта полностью, поэтому первый аккаунт создаётся админ-командой при старте
+(`--execute`). Пароль генерируется на сервере и сразу ложится в файл, в логи и терминал не попадает:
+
+```bash
+umask 077; openssl rand -base64 24 > ~/redline-admin-password
+docker compose run --rm -d --name rl-bootstrap continuwuity   --execute "users create admin $(cat ~/redline-admin-password)"   --execute "users make-user-admin @admin:${SERVER_NAME}"
+sleep 15; docker logs rl-bootstrap 2>&1 | grep -i "admin privileges"; docker rm -f rl-bootstrap
+docker compose up -d
+```
+
+Войти в клиент как `admin` — там будет комната `#admins` с консолью сервера.
 
 ### Остальные аккаунты
 
-В комнате `#admins` (можно прямо из Redline Chat) отправить:
+В комнате `#admins` отправить (имя — только латиница, цифры, `._=-`):
 
 ```
-!admin users create мама            # пароль сгенерируется и придёт ответом
-!admin users create папа ПарольПапы
-!admin users reset-password мама
+!admin users create mama            # пароль сгенерируется и придёт ответом
+!admin users create papa ПарольПапы
+!admin users make-user-admin @papa:redline.surf
+!admin users reset-password mama
 ```
 
 Пароль передать человеку лично. Дальше он входит на `https://chat.<домен>` и:

@@ -10,7 +10,8 @@ allow_registration = false
 # Сервер замкнутый: без федерации с остальным Matrix.
 allow_federation = false
 allow_public_room_directory_over_federation = false
-allow_public_room_directory_without_auth = false
+lockdown_public_room_directory = true
+# Федерации нет — помощь чужих серверов с ключами не нужна.
 trusted_servers = []
 # Профили и аватары — только для вошедших.
 require_auth_for_profile_requests = true
