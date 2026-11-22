@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useClient, useMatrix } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
 import { useSecurityState } from '../hooks/useSecurityState';
 import { changePassword, passwordProblem } from '../lib/account';
 import { findAdminRoom } from '../lib/admin';
 import { isPinUser } from '../lib/pin';
+import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
 import {
   changeRecoveryPhrase,
@@ -305,6 +306,132 @@ function PasswordSection() {
   );
 }
 
+/** Имя и фото: их видят все в семье. */
+function ProfileSection({ fallbackName }: { fallbackName: string }) {
+  const client = useClient();
+  const userId = client.getUserId()!;
+  const me = client.getUser(userId);
+  const [name, setNameState] = useState(me?.displayName ?? '');
+  const [avatar, setAvatarState] = useState<string | null>(me?.avatarUrl ?? null);
+  const [draft, setDraft] = useState(name);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [savingName, setSavingName] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const edited = useRef(false);
+
+  // в кеше клиента профиль бывает неполным: берём с сервера
+  useEffect(() => {
+    let alive = true;
+    client.getProfileInfo(userId).then(
+      (p) => {
+        if (!alive) return;
+        setNameState(p.displayname ?? '');
+        if (!edited.current) setDraft(p.displayname ?? '');
+        setAvatarState(p.avatar_url || null);
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [client, userId]);
+
+  const saveName = async (e: FormEvent) => {
+    e.preventDefault();
+    const problem = nameProblem(draft);
+    setNameError(problem);
+    if (problem) return;
+    setSavingName(true);
+    try {
+      await setName(client, draft);
+      setNameState(draft.trim());
+      setDraft(draft.trim());
+      edited.current = false;
+      toast('Имя сохранено', { variant: 'success' });
+    } catch (err) {
+      setNameError((err as Error).message || 'Не удалось сохранить имя');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const pickPhoto = async (file: File | undefined) => {
+    if (fileInput.current) fileInput.current.value = '';
+    if (!file) return;
+    setPhotoBusy(true);
+    try {
+      await setAvatar(client, file);
+      const p = await client.getProfileInfo(userId).catch(() => null);
+      setAvatarState(p?.avatar_url || null);
+      toast('Фото обновлено', { variant: 'success' });
+    } catch (err) {
+      toast((err as Error).message || 'Не удалось загрузить фото', { variant: 'error' });
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const dropPhoto = async () => {
+    setPhotoBusy(true);
+    try {
+      await removeAvatar(client);
+      setAvatarState(null);
+    } catch (err) {
+      toast((err as Error).message || 'Не удалось убрать фото', { variant: 'error' });
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const shown = name || fallbackName;
+  const changed = draft.trim() !== name;
+
+  return (
+    <div className="profile">
+      <div className="profile__photo">
+        <button
+          type="button"
+          className="profile__avatar"
+          aria-label={avatar ? 'Сменить фото' : 'Добавить фото'}
+          disabled={photoBusy}
+          onClick={() => fileInput.current?.click()}
+        >
+          <Avatar client={client} name={shown} seed={userId} mxc={avatar} size="xl" />
+          <span className="profile__badge" aria-hidden="true">
+            {photoBusy ? <span className="rl-spinner" /> : <Icon name="image" size={18} />}
+          </span>
+        </button>
+        <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0])} />
+        {avatar && (
+          <Button variant="ghost" size="sm" disabled={photoBusy} onClick={() => void dropPhoto()}>
+            Убрать фото
+          </Button>
+        )}
+      </div>
+      <form className="profile__form" onSubmit={saveName} noValidate>
+        <Field
+          label="Имя"
+          name="displayname"
+          autoComplete="nickname"
+          maxLength={NAME_MAX}
+          value={draft}
+          error={nameError}
+          disabled={savingName}
+          onChange={(e) => {
+            edited.current = true;
+            setDraft(e.target.value);
+            setNameError(null);
+          }}
+          hint="Так вас видят в семье"
+        />
+        <Button type="submit" variant="primary" busy={savingName} disabled={!changed}>Сохранить</Button>
+      </form>
+      {userId && !isPinUser(userId) && <div className="profile__id">{userId}</div>}
+    </div>
+  );
+}
+
 export function Settings() {
   const client = useClient();
   const { logout } = useMatrix();
@@ -320,13 +447,7 @@ export function Settings() {
         <span className="topbar__title"><span className="topbar__name">Настройки</span></span>
       </header>
       <div className="settings">
-        <div className="profile">
-          <Avatar client={client} name={name} seed={client.getUserId()!} mxc={me?.avatarUrl} size="lg" />
-          <div>
-            <div className="profile__name">{name}</div>
-            {!pin && <div className="profile__id">{client.getUserId()}</div>}
-          </div>
-        </div>
+        <ProfileSection fallbackName={name} />
         <AdminSection />
         <PushSection />
         {!pin && (

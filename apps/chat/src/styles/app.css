@@ -639,8 +639,30 @@ a { color: inherit; }
 
 /* ============ Настройки ============ */
 .settings { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: var(--rl-space-4); width: 100%; max-width: 40rem; margin: 0 auto; padding: var(--rl-space-6) var(--rl-space-4) calc(var(--chat-safe-bottom) + var(--rl-space-8)); }
-.profile { display: flex; align-items: center; gap: var(--rl-space-4); padding: var(--rl-space-2) var(--rl-space-2) var(--rl-space-4); }
-.profile__name { font-family: var(--rl-font-display); font-weight: var(--rl-weight-black); font-size: var(--rl-text-xl); }
+.profile { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--rl-space-4) var(--rl-space-6); padding: var(--rl-space-2) var(--rl-space-2) var(--rl-space-4); }
+.profile__photo { display: flex; flex-direction: column; align-items: center; gap: var(--rl-space-1); flex: none; }
+.profile__avatar { position: relative; padding: 0; border: 0; border-radius: var(--rl-radius-xl); background: none; }
+.profile__avatar:disabled { cursor: progress; }
+.profile__avatar:focus-visible { outline: 2px solid var(--rl-color-accent); outline-offset: 3px; }
+.profile__badge {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 3px solid var(--rl-color-bg);
+  border-radius: 50%;
+  background: var(--rl-color-accent);
+  color: #fff;
+  transition: scale var(--rl-duration-fast) var(--rl-ease-standard);
+}
+.profile__badge .rl-spinner { width: 1rem; height: 1rem; border-color: #fff; border-right-color: transparent; }
+@media (hover: hover) { .profile__avatar:not(:disabled):hover .profile__badge { scale: 1.1; } }
+.profile__form { display: flex; flex-direction: column; align-items: flex-start; gap: var(--rl-space-3); flex: 1 1 14rem; min-width: 0; }
+.profile__form .rl-field { width: 100%; }
+.profile .profile__id { flex-basis: 100%; }
 .profile__id { color: var(--rl-color-text-muted); font-size: var(--rl-text-sm); overflow-wrap: anywhere; }
 .settings-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--rl-space-3); }
 .settings-card > form { width: 100%; }
