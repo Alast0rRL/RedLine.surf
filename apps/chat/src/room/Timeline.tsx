@@ -1,8 +1,8 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useMemo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { EventType, NotificationCountType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useTimeline, isReadByOthers } from '../hooks/useTimeline';
 import { formatDay, formatDuration, isStateNotice, sameDay } from '../lib/events';
-import { reactionsStamp } from '../lib/messageActions';
+import { getReactions, reactionsStamp, type ReactionSummary } from '../lib/messageActions';
 import { isPinUser } from '../lib/pin';
 import { uploadStore } from '../lib/uploads';
 import { Button, Icon } from '../components/ui';
@@ -13,6 +13,10 @@ import './room.css';
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 120;
+/** Сколько последних событий рисуем; растёт при прокрутке вверх. */
+const WINDOW = 150;
+const WINDOW_STEP = 100;
+const NO_REACTIONS: ReactionSummary[] = [];
 const isMessageEvent = (e: MatrixEvent) => !isStateNotice(e);
 
 function stateText(ev: MatrixEvent, pin: boolean): string | null {
@@ -99,6 +103,38 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
   const loadingOlderRef = useRef(false);
   const isGroup = room.getJoinedMemberCount() > 2;
 
+  const [limit, setLimit] = useState(WINDOW);
+  useEffect(() => setLimit(WINDOW), [room.roomId]);
+  const hidden = Math.max(0, events.length - limit);
+  const shown = useMemo(() => (hidden > 0 ? events.slice(hidden) : events), [events, hidden]);
+
+  // реакции считаются один раз на проход (а не дважды на сообщение при каждом обновлении)
+  const reactionMap = useMemo(() => {
+    const m = new Map<string, ReactionSummary[]>();
+    for (const ev of shown) {
+      const id = ev.getId();
+      if (!id || isStateNotice(ev)) continue;
+      const list = getReactions(room, ev, me);
+      if (list.length) m.set(id, list);
+    }
+    return m;
+    // version: события мутируются на месте, сам список событий может не поменяться
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, room, me, version]);
+
+  /** Подгрузить старое: сперва показываем уже загруженное, потом тянем с сервера. */
+  const growOrLoad = (el: HTMLElement | null) => {
+    if (hidden > 0) {
+      loadingOlderRef.current = true;
+      prevHeight.current = el?.scrollHeight ?? 0;
+      setLimit((l) => l + WINDOW_STEP);
+    } else if (canLoadOlder && !loadingOlder) {
+      loadingOlderRef.current = true;
+      prevHeight.current = el?.scrollHeight ?? 0;
+      void loadOlder();
+    }
+  };
+
   const [menu, setMenu] = useState<{ ev: MatrixEvent; point: MenuPoint } | null>(null);
   const [forwarding, setForwarding] = useState<MatrixEvent | null>(null);
   const [deleting, setDeleting] = useState<MatrixEvent | null>(null);
@@ -133,7 +169,7 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
       el.scrollTop = el.scrollHeight;
     }
     prevHeight.current = el.scrollHeight;
-  }, [version, events.length]);
+  }, [version, shown.length]);
 
   // пусто или мало сообщений — сразу подгружаем историю
   useEffect(() => {
@@ -178,11 +214,7 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
     stick.current = dist < NEAR_BOTTOM_PX;
     setFar(dist > el.clientHeight);
     if (stick.current) setUnseen(0);
-    if (el.scrollTop < 300 && canLoadOlder && !loadingOlder) {
-      loadingOlderRef.current = true;
-      prevHeight.current = el.scrollHeight;
-      void loadOlder();
-    }
+    if (el.scrollTop < 300) growOrLoad(el);
   };
 
   const jumpToBottom = () => {
@@ -195,8 +227,8 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
 
   // последнее своё сообщение, прочитанное другими — для галочек
   const lastReadOwnIdx = (() => {
-    for (let i = events.length - 1; i >= 0; i--) {
-      const e = events[i];
+    for (let i = shown.length - 1; i >= 0; i--) {
+      const e = shown[i];
       if (e.getSender() === me && e.getId()?.startsWith('$') && isReadByOthers(room, e, me)) return i;
     }
     return -1;
@@ -206,16 +238,16 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
     <div className="timeline-wrap">
     <div className="timeline" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
       <div className="timeline__inner">
-        {canLoadOlder ? (
+        {hidden > 0 || canLoadOlder ? (
           <div className="timeline__older">
-            {loadingOlder ? <span className="rl-spinner" /> : <Button size="sm" variant="ghost" onClick={() => void loadOlder()}>Загрузить ещё</Button>}
+            {loadingOlder ? <span className="rl-spinner" /> : <Button size="sm" variant="ghost" onClick={() => growOrLoad(scroller.current)}>Загрузить ещё</Button>}
           </div>
         ) : (
           <div className="timeline__start">Начало переписки</div>
         )}
-        {events.map((ev, i) => {
-          const prev = events[i - 1];
-          const next = events[i + 1];
+        {shown.map((ev, i) => {
+          const prev = shown[i - 1];
+          const next = shown[i + 1];
           const newDay = !prev || !sameDay(prev.getTs(), ev.getTs());
           const dayEl = newDay ? <div className="day-sep"><span>{formatDay(ev.getTs())}</span></div> : null;
 
@@ -228,6 +260,7 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
           const sameAsNext = next && !isStateNotice(next) && next.getSender() === ev.getSender() && next.getTs() - ev.getTs() < GROUP_GAP_MS && sameDay(next.getTs(), ev.getTs());
           const own = ev.getSender() === me;
           const readByOthers = own && i <= lastReadOwnIdx;
+          const reactions = reactionMap.get(ev.getId() ?? '') ?? NO_REACTIONS;
           return (
             <Fragment key={ev.getTxnId() ?? ev.getId() ?? i}>
               {dayEl}
@@ -240,7 +273,8 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
                 last={!sameAsNext}
                 showSenderName={isGroup}
                 readByOthers={readByOthers}
-                stamp={messageStamp(ev) + (readByOthers ? 'r' : '') + '|' + reactionsStamp(room, ev, me)}
+                reactions={reactions}
+                stamp={messageStamp(ev) + (readByOthers ? 'r' : '') + '|' + reactionsStamp(reactions)}
                 onMenu={openMenu}
               />
             </Fragment>

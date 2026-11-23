@@ -90,8 +90,8 @@ export function getReactions(room: Room, ev: MatrixEvent, me: string): ReactionS
 }
 
 /** Короткая подпись реакций — для stamp, чтобы мемо-сообщение перерисовалось. */
-export function reactionsStamp(room: Room, ev: MatrixEvent, me: string): string {
-  return getReactions(room, ev, me).map((r) => `${r.key}:${r.count}:${r.own ? 1 : 0}`).join(',');
+export function reactionsStamp(list: ReactionSummary[]): string {
+  return list.map((r) => `${r.key}:${r.count}:${r.own ? 1 : 0}`).join(',');
 }
 
 export async function toggleReaction(client: MatrixClient, room: Room, ev: MatrixEvent, key: string): Promise<void> {

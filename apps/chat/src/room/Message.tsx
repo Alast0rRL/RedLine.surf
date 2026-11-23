@@ -5,7 +5,7 @@ import { sanitizeMatrixHtml, stripReplyFallback } from '../lib/html';
 import type { MediaSource } from '../lib/media';
 import { isPinUser } from '../lib/pin';
 import { navigate } from '../hooks/useHashRoute';
-import { canAct, getReactions, toggleReaction } from '../lib/messageActions';
+import { canAct, toggleReaction, type ReactionSummary } from '../lib/messageActions';
 import { findRenderer, isBotStyled, isBotUser } from '../bots/registry';
 import { Avatar, Icon, toast } from '../components/ui';
 import { FileMessage, VideoMessage } from './FileMessage';
@@ -148,6 +148,8 @@ export interface MessageProps {
    * stamp меняется вместе с ним и заставляет перерисовать именно это сообщение.
    */
   stamp: string;
+  /** реакции, посчитанные один раз на проход в Timeline (в сравнении memo не участвуют: их отражает stamp) */
+  reactions: ReactionSummary[];
   /** открыть меню действий (стабильная ссылка) */
   onMenu: (ev: MatrixEvent, point: MenuPoint) => void;
 }
@@ -159,7 +161,15 @@ export function messageStamp(ev: MatrixEvent): string {
 const LONG_PRESS_MS = 450;
 const MOVE_TOLERANCE = 10;
 
-export const Message = memo(function Message({ client, room, ev, own, first, last, showSenderName, readByOthers, onMenu }: MessageProps) {
+function sameMessage(a: MessageProps, b: MessageProps): boolean {
+  return (
+    a.stamp === b.stamp && a.ev === b.ev && a.own === b.own && a.first === b.first && a.last === b.last &&
+    a.showSenderName === b.showSenderName && a.readByOthers === b.readByOthers && a.client === b.client &&
+    a.room === b.room && a.onMenu === b.onMenu
+  );
+}
+
+export const Message = memo(function Message({ client, room, ev, own, first, last, showSenderName, readByOthers, reactions, onMenu }: MessageProps) {
   const bot = !own && isBotStyled(ev);
   const pin = isPinUser(client.getUserId());
   const sender = ev.sender;
@@ -170,8 +180,6 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
   const isAudio = !ev.isRedacted() && ev.getContent().msgtype === MsgType.Audio;
   const edited = !!ev.replacingEventId();
   const isFile = !ev.isRedacted() && [MsgType.File, MsgType.Video].includes(ev.getContent().msgtype as MsgType);
-  const me = client.getUserId() ?? '';
-  const reactions = getReactions(room, ev, me);
   const actionable = canAct(ev);
   const senderId = ev.getSender() ?? '';
   const openUser = () => {
@@ -293,4 +301,4 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
       )}
     </div>
   );
-});
+}, sameMessage);
