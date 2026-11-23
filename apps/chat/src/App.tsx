@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMatrix } from './state/MatrixContext';
 import { navigate, useHashRoute } from './hooks/useHashRoute';
+import { useEdgeSwipeBack } from './hooks/useEdgeSwipeBack';
 import { Button, Card, Icon, Modal, RedLines } from './components/ui';
 import { isPinUser } from './lib/pin';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -116,6 +117,7 @@ function AppLines() {
 export function App() {
   const { status, error, progress, client } = useMatrix();
   const route = useHashRoute();
+  useEdgeSwipeBack();
 
   // клик по уведомлению: service worker просит открыть комнату
   useEffect(() => {
