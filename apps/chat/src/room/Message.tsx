@@ -99,7 +99,6 @@ function Status({ client, room, ev, readByOthers }: { client: MatrixClient; room
 }
 
 function Content({ ev, name }: { ev: MatrixEvent; name: string }): ReactNode {
-  if (ev.isRedacted()) return <div className="msg-text msg-text--muted">Сообщение удалено</div>;
   if (isUndecryptable(ev)) {
     return (
       <div className="msg-text msg-text--muted">

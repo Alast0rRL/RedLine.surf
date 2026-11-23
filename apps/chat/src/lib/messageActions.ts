@@ -1,6 +1,5 @@
 import { EventType, MsgType, RelationType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events.js';
-import { rememberRelationEvent } from './events';
 import { stripReplyFallback } from './html';
 
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
@@ -70,15 +69,13 @@ export async function toggleReaction(client: MatrixClient, room: Room, ev: Matri
   if (mine) {
     const mid = mine.getId();
     if (mid?.startsWith('$')) {
-      rememberRelationEvent(mid);
       await client.redactEvent(room.roomId, mid);
     }
     return;
   }
-  const res = await client.sendEvent(room.roomId, EventType.Reaction as never, {
+  await client.sendEvent(room.roomId, EventType.Reaction as never, {
     'm.relates_to': { rel_type: RelationType.Annotation, event_id: id, key },
   } as never);
-  rememberRelationEvent((res as { event_id?: string }).event_id);
 }
 
 /* ---------------- ответ / правка ---------------- */
@@ -101,8 +98,7 @@ export async function sendEdit(client: MatrixClient, roomId: string, target: Mat
     'm.new_content': { msgtype: 'm.text', body: text },
     'm.relates_to': { rel_type: RelationType.Replace, event_id: id },
   } as unknown as RoomMessageEventContent;
-  const res = await client.sendMessage(roomId, content);
-  rememberRelationEvent((res as { event_id?: string }).event_id);
+  await client.sendMessage(roomId, content);
 }
 
 /* ---------------- пересылка ---------------- */

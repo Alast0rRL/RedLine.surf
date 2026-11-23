@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { EventType, MatrixEventEvent, NotificationCountType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
+import { EventType, NotificationCountType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useTimeline, isReadByOthers } from '../hooks/useTimeline';
-import { formatDay, formatDuration, isStateNotice, sameDay, trackRelationEvent } from '../lib/events';
+import { formatDay, formatDuration, isStateNotice, sameDay } from '../lib/events';
 import { reactionsStamp } from '../lib/messageActions';
 import { isPinUser } from '../lib/pin';
 import { uploadStore } from '../lib/uploads';
@@ -109,15 +109,6 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
   const [far, setFar] = useState(false);
   const [unseen, setUnseen] = useState(0);
   const tailId = useRef<string | null>(null);
-
-  // реакции/правки в E2E-комнатах: запоминаем, чтобы удалённые не превращались в «пустышки»
-  useEffect(() => {
-    const on = (ev: MatrixEvent) => trackRelationEvent(ev);
-    client.on(MatrixEventEvent.Decrypted, on);
-    return () => {
-      client.off(MatrixEventEvent.Decrypted, on);
-    };
-  }, [client]);
 
   useEffect(() => {
     const visible = events.filter(isMessageEvent);

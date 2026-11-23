@@ -50,7 +50,6 @@ export function Composer({ client, room, context, onClearContext }: {
   const [elapsed, setElapsed] = useState(0);
   const [levels, setLevels] = useState<number[]>([]);
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
   const attachInput = useRef<HTMLInputElement>(null);
   const draftBeforeEdit = useRef<string | null>(null);
   const editing = context?.kind === 'edit' ? context.ev : null;
@@ -171,15 +170,10 @@ export function Composer({ client, room, context, onClearContext }: {
     }
   };
 
-  const pickFiles = (files: FileList | null) => {
-    [...(files ?? [])].filter((f) => f.type.startsWith('image/')).forEach((f) => sendImage(client, room.roomId, f));
-    if (fileInput.current) fileInput.current.value = '';
-    window.dispatchEvent(new Event('rl:sent'));
-  };
-
-  // любые файлы: фото — как фото, остальное — файл/видео
+  // одна кнопка «Прикрепить»: фото — как фото, видео — m.video, остальное — файл
+  const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/bmp'];
   const pickAnyFiles = (files: FileList | null) => {
-    [...(files ?? [])].forEach((f) => (f.type.startsWith('image/') ? sendImage(client, room.roomId, f) : sendFile(client, room.roomId, f)));
+    [...(files ?? [])].forEach((f) => (PHOTO_TYPES.includes(f.type) ? sendImage(client, room.roomId, f) : sendFile(client, room.roomId, f)));
     if (attachInput.current) attachInput.current.value = '';
     window.dispatchEvent(new Event('rl:sent'));
   };
@@ -336,11 +330,7 @@ export function Composer({ client, room, context, onClearContext }: {
         </div>
       ) : (
         <>
-          <Button variant="ghost" icon aria-label="Отправить фото" onClick={() => fileInput.current?.click()}>
-            <Icon name="image" />
-          </Button>
-          <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => pickFiles(e.target.files)} />
-          <Button variant="ghost" icon aria-label="Прикрепить файл" onClick={() => attachInput.current?.click()}>
+          <Button variant="ghost" icon aria-label="Прикрепить" onClick={() => attachInput.current?.click()}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l9-9a3.3 3.3 0 0 1 4.7 4.7l-9 9a1.7 1.7 0 0 1-2.4-2.4l8.3-8.3" />
             </svg>

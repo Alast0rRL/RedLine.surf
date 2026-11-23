@@ -1,49 +1,10 @@
 import { EventType, MsgType, type MatrixEvent } from 'matrix-js-sdk';
 import { stripReplyFallback } from './html';
 
-/**
- * Реакции и правки в E2E-комнатах после удаления (redaction) теряют тип и выглядят как
- * «удалённое сообщение». Запоминаем их id (в т.ч. между запусками), чтобы не показывать пустышки.
- */
-const HIDDEN_KEY = 'rl.hiddenRelIds';
-const HIDDEN_MAX = 3000;
-const hiddenRelIds: Set<string> = (() => {
-  try {
-    return new Set<string>(JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? '[]'));
-  } catch {
-    return new Set<string>();
-  }
-})();
-let hiddenSaveTimer = 0;
-
-export function rememberRelationEvent(id: string | undefined | null): void {
-  if (!id || hiddenRelIds.has(id)) return;
-  hiddenRelIds.add(id);
-  if (hiddenRelIds.size > HIDDEN_MAX) hiddenRelIds.delete(hiddenRelIds.values().next().value as string);
-  clearTimeout(hiddenSaveTimer);
-  hiddenSaveTimer = window.setTimeout(() => {
-    try {
-      localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hiddenRelIds]));
-    } catch {
-      /* приватный режим */
-    }
-  }, 1000);
-}
-
-/** Событие-связь (реакция/правка) — запоминаем, когда оно расшифровано. */
-export function trackRelationEvent(ev: MatrixEvent): void {
-  const rel = ev.getRelation()?.rel_type;
-  if (ev.getType() === 'm.reaction' || rel === 'm.annotation' || rel === 'm.replace') rememberRelationEvent(ev.getId());
-}
-
 /** События, которые показываются в ленте как сообщения. */
 export function isMessageLike(ev: MatrixEvent): boolean {
   const type = ev.getType();
-  if (ev.isRedacted()) {
-    const id = ev.getId();
-    if (id && hiddenRelIds.has(id)) return false;
-    return type === EventType.RoomMessage || type === EventType.RoomMessageEncrypted;
-  }
+  if (ev.isRedacted()) return false; // удалённые не показываем вовсе
   if (type === EventType.RoomMessageEncrypted) return true; // ещё не расшифровано / ошибка
   if (type === EventType.Sticker) return true;
   if (type !== EventType.RoomMessage) return false;
@@ -73,7 +34,6 @@ export function isPendingDecryption(ev: MatrixEvent): boolean {
 
 /** Короткий текст для списка чатов и уведомлений. */
 export function previewText(ev: MatrixEvent): string {
-  if (ev.isRedacted()) return 'Сообщение удалено';
   if (isUndecryptable(ev)) return '🔒 Не удалось расшифровать';
   if (isPendingDecryption(ev)) return '🔒 Зашифрованное сообщение';
   const c = ev.getContent();
