@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TOKENS = { tokA: '@alice.0123456789ab:test', tokB: '@bob.0123456789cd:test' };
+const TOKENS = { tokA: '@alice.0123456789ab:test', tokB: '@bob.0123456789cd:test', tokAdmin: '@admin:test' };
 const KEY_A = 'a'.repeat(32);
 const KEY_B = 'b'.repeat(32);
 
@@ -138,4 +138,22 @@ test('db file has no phone, proof or key in clear', () => {
 test('unbind removes own record', async () => {
   await call('DELETE', '/api/phone/bind', null, 'tokB');
   assert.equal((await call('GET', '/api/phone/bind', null, 'tokB')).json.mask, null);
+});
+
+test('admin removes a phone binding; non-admin gets 403; number can be rebound', async () => {
+  const phone = '79003334455';
+  const target = encodeURIComponent('@bob.0123456789cd:test');
+  const put = await call('PUT', '/api/phone/bind', { phone, proof: proof('222222', phone), key: KEY_B }, 'tokB');
+  assert.equal(put.status, 200);
+  assert.equal((await call('DELETE', `/api/phone/user/${target}`)).status, 401);
+  assert.equal((await call('DELETE', `/api/phone/user/${target}`, null, 'tokA')).status, 403);
+  assert.equal((await call('GET', '/api/phone/bind', null, 'tokB')).json.mask, '+7 *** ***-**-55');
+  const ok = await call('DELETE', `/api/phone/user/${target}`, null, 'tokAdmin');
+  assert.equal(ok.status, 200);
+  assert.equal(ok.json.removed, true);
+  assert.equal((await call('DELETE', `/api/phone/user/${target}`, null, 'tokAdmin')).json.removed, false);
+  assert.equal((await call('GET', '/api/phone/bind', null, 'tokB')).json.mask, null);
+  // номер свободен
+  const again = await call('PUT', '/api/phone/bind', { phone, proof: proof('333333', phone), key: KEY_A }, 'tokA');
+  assert.equal(again.status, 200);
 });

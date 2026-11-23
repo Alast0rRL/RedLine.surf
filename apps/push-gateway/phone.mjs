@@ -265,6 +265,26 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
     send(res, 200, { mask: null });
   }
 
+  const admins = new Set(
+    (process.env.PHONE_ADMINS ?? 'admin').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean),
+  );
+
+  /** Администратор удаляет привязку чужого номера (человека удалили из Redline). */
+  async function adminRemove(req, res, mxid) {
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    if (!admins.has(caller)) return send(res, 403, { error: 'Нет прав' });
+    const target = mxid.replace(/^@/, '').split(':')[0];
+    if (!USER_RE.test(target)) return send(res, 400, { error: 'Неверный запрос' });
+    const k = findByUser(target);
+    if (k) {
+      delete db[k];
+      save();
+      log('info', 'phone removed by admin');
+    }
+    send(res, 200, { removed: !!k });
+  }
+
   /** true — маршрут обработан. */
   return async function handle(req, res, url) {
     if (!url.pathname.startsWith('/api/phone/')) return false;
@@ -272,7 +292,15 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
       if (url.pathname === '/api/phone/bind' && req.method === 'PUT') await bind(req, res);
       else if (url.pathname === '/api/phone/bind' && (req.method === 'GET' || req.method === 'DELETE')) await status(req, res);
       else if (url.pathname === '/api/phone/login' && req.method === 'POST') await login(req, res);
-      else send(res, 404, { error: 'not found' });
+      else if (url.pathname.startsWith('/api/phone/user/') && req.method === 'DELETE') {
+        let mxid;
+        try {
+          mxid = decodeURIComponent(url.pathname.slice('/api/phone/user/'.length));
+        } catch {
+          return send(res, 400, { error: 'Неверный запрос' }), true;
+        }
+        await adminRemove(req, res, mxid);
+      } else send(res, 404, { error: 'not found' });
     } catch (e) {
       if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'server error' });
       if (!e.status) log('error', 'phone route failed', { err: String(e?.message).slice(0, 100) });
