@@ -9,6 +9,7 @@ import {
 } from 'matrix-js-sdk';
 import { onOptimistic } from '../lib/optimistic';
 import { isMessageLike, isStateNotice } from '../lib/events';
+import { getClearedTs, visibleAfterClear } from '../lib/clear';
 import { useThrottledVersion } from './useThrottledVersion';
 
 const PAGE = 30;
@@ -24,6 +25,7 @@ export function useTimeline(client: MatrixClient, room: Room) {
       RoomEvent.LocalEchoUpdated,
       RoomEvent.Redaction,
       RoomEvent.Receipt,
+      RoomEvent.AccountData,
     ] as const;
     roomEvents.forEach((e) => room.on(e as never, bump as never));
     client.on(MatrixEventEvent.Decrypted, bump);
@@ -40,11 +42,14 @@ export function useTimeline(client: MatrixClient, room: Room) {
   const events = useMemo(() => {
     const live = room.getLiveTimeline().getEvents().filter((e) => isMessageLike(e) || isStateNotice(e));
     const pending = room.getPendingEvents().filter(isMessageLike);
-    return [...live, ...pending];
+    return [...visibleAfterClear(room, live), ...pending];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room, version]);
 
-  const canLoadOlder = room.getLiveTimeline().getPaginationToken(Direction.Backward) !== null;
+  // всё, что старше метки очистки, скрыто: дальше назад не листаем
+  const clearedTs = getClearedTs(room);
+  const clearedHit = clearedTs > 0 && room.getLiveTimeline().getEvents().some((e) => e.getTs() <= clearedTs);
+  const canLoadOlder = !clearedHit && room.getLiveTimeline().getPaginationToken(Direction.Backward) !== null;
 
   const loadOlder = useCallback(async () => {
     if (loadingOlder) return;
@@ -59,7 +64,7 @@ export function useTimeline(client: MatrixClient, room: Room) {
     }
   }, [client, room, loadingOlder, bump]);
 
-  return { events, loadOlder, loadingOlder, canLoadOlder, version };
+  return { events, loadOlder, loadingOlder, canLoadOlder, cleared: clearedHit, version };
 }
 
 /** Прочитал ли кто-то, кроме автора, это сообщение. */

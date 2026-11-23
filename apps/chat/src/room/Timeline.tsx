@@ -103,7 +103,7 @@ export interface TimelineProps {
 }
 
 export function Timeline({ client, room, onReply, onEdit, searchTarget = null }: TimelineProps) {
-  const { events, loadOlder, loadingOlder, canLoadOlder, version } = useTimeline(client, room);
+  const { events, loadOlder, loadingOlder, canLoadOlder, cleared, version } = useTimeline(client, room);
   const me = client.getUserId()!;
   const pin = isPinUser(me);
   const scroller = useRef<HTMLDivElement>(null);
@@ -352,7 +352,7 @@ export function Timeline({ client, room, onReply, onEdit, searchTarget = null }:
             {loadingOlder ? <span className="rl-spinner" /> : <Button size="sm" variant="ghost" onClick={() => growOrLoad(scroller.current)}>Загрузить ещё</Button>}
           </div>
         ) : (
-          <div className="timeline__start">Начало переписки</div>
+          <div className="timeline__start">{cleared ? 'История очищена' : 'Начало переписки'}</div>
         )}
         {shown.map((ev, i) => {
           // соседей ищем среди реально отрисованных событий (пустые служебные не рвут серию)

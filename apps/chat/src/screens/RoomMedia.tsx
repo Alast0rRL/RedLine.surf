@@ -7,6 +7,7 @@ import { Button, Card, toast } from '../components/ui';
 import { MediaViewer } from '../components/MediaViewer';
 import { InfoFrame } from './infoParts';
 import { FileGlyph, formatSize } from '../room/FileMessage';
+import { visibleAfterClear } from '../lib/clear';
 import { downloadMedia, mediaOf, type RoomMediaItem } from '../lib/roomMedia';
 import { formatDay, formatTime } from '../lib/events';
 import '../styles/viewer.css';
@@ -29,10 +30,12 @@ export function RoomMedia({ roomId }: { roomId: string }) {
     const bump = () => setVersion((v) => v + 1);
     room.on(RoomEvent.Timeline, bump);
     room.on(RoomEvent.Redaction, bump);
+    room.on(RoomEvent.AccountData, bump);
     client.on(MatrixEventEvent.Decrypted, bump);
     return () => {
       room.off(RoomEvent.Timeline, bump);
       room.off(RoomEvent.Redaction, bump);
+      room.off(RoomEvent.AccountData, bump);
       client.off(MatrixEventEvent.Decrypted, bump);
     };
   }, [client, room]);
@@ -40,7 +43,7 @@ export function RoomMedia({ roomId }: { roomId: string }) {
   const items = useMemo(() => {
     const out: RoomMediaItem[] = [];
     if (room) {
-      for (const ev of room.getLiveTimeline().getEvents()) {
+      for (const ev of visibleAfterClear(room, room.getLiveTimeline().getEvents())) {
         const m = mediaOf(ev);
         if (m && m.id) out.push(m);
       }
@@ -78,7 +81,7 @@ export function RoomMedia({ roomId }: { roomId: string }) {
     let alive = true;
     (async () => {
       for (let i = 0; i < AUTO_PAGES && alive; i++) {
-        const have = (room?.getLiveTimeline().getEvents().filter((e) => mediaOf(e)).length ?? 0) >= 30;
+        const have = ((room ? visibleAfterClear(room, room.getLiveTimeline().getEvents()) : []).filter((e) => mediaOf(e)).length ?? 0) >= 30;
         if (have || room?.getLiveTimeline().getPaginationToken(Direction.Backward) === null) return;
         if (!(await loadMore())) return;
       }

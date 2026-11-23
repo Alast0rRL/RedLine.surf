@@ -14,6 +14,7 @@ import { isMessageLike } from '../lib/events';
 import { hasUnreadMention } from '../lib/mentions';
 import { isRoomLeaving, isRoomPinned, roomMutedChecker } from '../lib/rooms';
 import { onOptimistic } from '../lib/optimistic';
+import { getClearedTs } from '../lib/clear';
 import { useThrottledVersion } from './useThrottledVersion';
 
 export interface RoomSummary {
@@ -31,7 +32,9 @@ export interface RoomSummary {
 
 function lastMessage(room: Room): MatrixEvent | null {
   const events = room.getLiveTimeline().getEvents();
+  const cleared = getClearedTs(room);
   for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].getTs() <= cleared) return null;
     if (isMessageLike(events[i])) return events[i];
   }
   return null;
@@ -58,6 +61,7 @@ export function useRoomList(client: MatrixClient) {
       [client, ClientEvent.DeleteRoom],
       [client, ClientEvent.AccountData],
       [client, RoomEvent.Timeline],
+      [client, RoomEvent.AccountData],
       [client, RoomEvent.Name],
       [client, RoomEvent.Tags],
       [client, RoomEvent.Receipt],

@@ -5,7 +5,8 @@ import { plainBody, sendEdit, sendReply } from '../lib/messageActions';
 import { previewText } from '../lib/events';
 import { formatDuration } from '../lib/events';
 import { isVoiceRecordingSupported, VoiceRecorder } from '../lib/voice/recorder';
-import { Avatar, Button, Icon, toast } from '../components/ui';
+import { Avatar, Button, Icon, Modal, toast } from '../components/ui';
+import { canClearForAll, clearForAll, clearForMe, isClearCommand } from '../lib/clear';
 import { buildMentionContent, mentionCandidates } from '../lib/mentions';
 import './room.css';
 
@@ -154,10 +155,38 @@ export function Composer({ client, room, context, onClearContext }: {
 
   const tooLong = text.length > MAX_LEN;
 
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearBusy, setClearBusy] = useState(false);
+  const slashOpen = !editing && text.startsWith('/') && !text.includes(' ');
+
+  const doClear = async (all: boolean) => {
+    setClearBusy(true);
+    try {
+      if (all) {
+        setClearOpen(false);
+        await clearForAll(client, room);
+      } else {
+        await clearForMe(client, room);
+        toast('История очищена', { variant: 'success' });
+      }
+    } catch (e) {
+      console.warn('clear failed', e);
+      toast('Не удалось очистить историю', { variant: 'error' });
+    } finally {
+      setClearBusy(false);
+      setClearOpen(false);
+    }
+  };
+
   const submitText = () => {
     const body = text.trim();
     if (!body || tooLong) return;
     typing(false);
+    if (!editing && isClearCommand(body)) {
+      setText('');
+      setClearOpen(true);
+      return;
+    }
     if (editing) {
       // без изменений — просто выходим
       if (body !== plainBody(editing).trim()) {
@@ -356,6 +385,30 @@ export function Composer({ client, room, context, onClearContext }: {
           </Button>
         </div>
       )}
+      {slashOpen && !mentionOpen && !recording && (
+        <ul className="mention-list" role="listbox" aria-label="Команды">
+          <li role="option" aria-selected="false">
+            <button type="button" className="mention-item" onPointerDown={(e) => e.preventDefault()} onClick={() => { setText('/clear'); textarea.current?.focus(); }}>
+              <span className="mention-item__name">/clear</span>
+              <span className="mention-item__id">очистить историю чата</span>
+            </button>
+          </li>
+        </ul>
+      )}
+      <Modal
+        open={clearOpen}
+        onClose={() => setClearOpen(false)}
+        title="Очистить историю чата?"
+        actions={
+          <>
+            <Button variant="primary" size="lg" busy={clearBusy} onClick={() => void doClear(false)}>Только у меня</Button>
+            {canClearForAll(room, me) && <Button variant="secondary" size="lg" disabled={clearBusy} onClick={() => void doClear(true)}>У всех</Button>}
+            <Button variant="ghost" size="lg" data-rl-close>Отмена</Button>
+          </>
+        }
+      >
+        {canClearForAll(room, me) && <p>У всех: сообщения удалятся у всех участников. Отменить нельзя.</p>}
+      </Modal>
       {mentionOpen && !recording && (
         <ul className="mention-list" role="listbox" aria-label="Упомянуть участника">
           {candidates.map((c, i) => (

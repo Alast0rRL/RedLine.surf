@@ -5,6 +5,7 @@ import { useRoomList, type RoomSummary } from '../hooks/useRoomList';
 import { useSecurityState } from '../hooks/useSecurityState';
 import { usePinUnlock } from '../hooks/usePinUnlock';
 import { navigate } from '../hooks/useHashRoute';
+import { getClearedTs } from '../lib/clear';
 import { formatListTime, previewText } from '../lib/events';
 import { sweepExpiredInvites } from '../lib/invites';
 import { isPinUser } from '../lib/pin';
@@ -105,7 +106,7 @@ function RoomRow({ client, s, active, onMenu }: { client: MatrixClient; s: RoomS
           </span>
           <span className="chat-row__preview">
             {pending ? <Icon name="clock" size={13} /> : null}
-            {lastEvent ? prefix + previewText(lastEvent) : 'Нет сообщений'}
+            {lastEvent ? prefix + previewText(lastEvent) : getClearedTs(room) ? 'История очищена' : 'Нет сообщений'}
           </span>
         </span>
         <span className="chat-row__meta">
