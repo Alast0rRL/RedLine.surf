@@ -220,12 +220,12 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
     }
   };
   const recoveryText = unlock.silent
-    ? 'Не удалось открыть старые сообщения'
+    ? 'Старые сообщения не открылись'
     : pin
       ? 'Нужно заново ввести PIN'
       : security === 'needs-setup'
-        ? 'Укажите номер для восстановления'
-        : 'Введите номер, чтобы открыть старые сообщения';
+        ? 'Укажите номер телефона'
+        : 'Старые сообщения закрыты';
   const recoveryCta = unlock.silent ? 'Повторить' : pin ? 'Ввести' : security === 'needs-setup' ? 'Настроить' : 'Ввести';
 
   const q = query.trim().toLocaleLowerCase('ru');
