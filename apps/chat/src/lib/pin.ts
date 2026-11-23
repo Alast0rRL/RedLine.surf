@@ -117,7 +117,18 @@ export async function unlockSilently(client: MatrixClient): Promise<void> {
   const link = loadLink();
   const own = client.getUserId()?.replace(/^@/, '').split(':')[0];
   if (!link || link.user !== own) throw new Error('Нет ссылки на этом устройстве');
-  await unlockWithRecovery(client, await derive(link, 'storage'));
+  await unlockShared(client, await derive(link, 'storage'));
+}
+
+/** Одна идущая попытка открыть историю на клиента: вход и usePinUnlock не гоняются друг с другом. */
+const unlocking = new WeakMap<MatrixClient, Promise<unknown>>();
+
+function unlockShared(client: MatrixClient, secret: string): Promise<unknown> {
+  const running = unlocking.get(client);
+  if (running) return running;
+  const p = unlockWithRecovery(client, secret).finally(() => unlocking.delete(client));
+  unlocking.set(client, p);
+  return p;
 }
 
 export async function linkState(baseUrl: string, link: PersonalLink): Promise<LinkState> {
@@ -174,12 +185,20 @@ export async function loginWithPin(baseUrl: string, link: PersonalLink, pin: str
 
 /** Всё, что раньше спрашивали у человека: шифрование и история. */
 export async function preparePinSession(client: MatrixClient, link: PersonalLink, login: PinLogin): Promise<void> {
-  if (login.created) {
-    await client.setDisplayName(link.name).catch(() => console.warn('Не удалось задать имя'));
-  }
   const secret = await derive(link, 'storage');
   const state = await getSecurityState(client);
-  if (state === 'needs-setup') await setupRecovery(client, login.password, secret);
-  else if (state === 'needs-unlock') await unlockWithRecovery(client, secret);
-
+  const name = login.created
+    ? client.setDisplayName(link.name).catch(() => console.warn('Не удалось задать имя'))
+    : Promise.resolve();
+  if (state === 'needs-setup') {
+    // разовая настройка должна завершиться; имя задаётся параллельно
+    await Promise.all([setupRecovery(client, login.password, secret), name]);
+    return;
+  }
+  // история открывается в фоне: чат показывается сразу, старые сообщения расшифруются по мере прихода ключей.
+  // Ошибка не критична: тихая разблокировка в usePinUnlock повторит попытку и покажет баннер
+  if (state === 'needs-unlock') {
+    unlockShared(client, secret).catch((e) => console.warn('background unlock failed', e));
+  }
+  await name;
 }

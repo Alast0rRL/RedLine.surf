@@ -27,8 +27,10 @@ export function phraseProblem(phrase: string, password?: string): string | null 
 export async function getSecurityState(client: MatrixClient): Promise<SecurityState> {
   const crypto = client.getCrypto();
   if (!crypto) return 'unavailable';
-  const hasCrossSigning = await crypto.userHasCrossSigningKeys(client.getUserId()!, true);
-  const has4S = await client.secretStorage.hasKey();
+  const [hasCrossSigning, has4S] = await Promise.all([
+    crypto.userHasCrossSigningKeys(client.getUserId()!, true),
+    client.secretStorage.hasKey(),
+  ]);
   if (!hasCrossSigning || !has4S) return 'needs-setup';
   const status = await crypto.getDeviceVerificationStatus(client.getUserId()!, client.getDeviceId()!);
   return status?.crossSigningVerified ? 'ok' : 'needs-unlock';
