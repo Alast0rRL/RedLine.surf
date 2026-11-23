@@ -9,6 +9,7 @@ import { formatLogin } from '../lib/login';
 import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
 import { switchToPin } from '../lib/switchToPin';
+import { restoreWithOldSecret } from '../lib/restoreOld';
 import { normalizePhone } from '../lib/phone';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
@@ -177,6 +178,69 @@ function SwitchToPinSection() {
           {lost && <p className="rl-hint rl-hint--error">Старые сообщения на этом устройстве пропадут.</p>}
           {error && <p className="rl-hint rl-hint--error" role="alert">{error}</p>}
           <Button type="submit" variant="primary" size="lg" block busy={busy}>Перейти</Button>
+        </form>
+      </Modal>
+    </Card>
+  );
+}
+
+/** Старые сообщения, закрытые прежней фразой или номером (для тех, кто уже входит по PIN). */
+function OldMessagesSection() {
+  const client = useClient();
+  const [state, refresh] = useSecurityState(client);
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (state !== 'needs-unlock') return null;
+
+  const close = () => {
+    if (busy) return;
+    setOpen(false);
+    setValue('');
+    setError(null);
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const n = await restoreWithOldSecret(client, value);
+      toast(n ? `Готово, открыто ключей: ${n}` : 'Готово, старые сообщения открыты', { variant: 'success' });
+      setBusy(false);
+      setOpen(false);
+      setValue('');
+      refresh();
+    } catch (err) {
+      setError(friendlyError(err, 'Не получилось. Попробуйте ещё раз'));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card solid className="settings-card">
+      <h2 className="settings-card__title"><Icon name="key" size={18} /> Старые сообщения</h2>
+      <p className="settings-card__text">
+        Старые сообщения закрыты прежним номером или секретной фразой. Введите их один раз, и дальше они будут открываться по номеру и PIN.
+      </p>
+      <Button variant="primary" onClick={() => setOpen(true)}>Открыть</Button>
+      <Modal open={open} onClose={close} title="Открыть старые сообщения">
+        <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
+          <Field
+            label="Старый номер или секретная фраза"
+            name="old-secret"
+            type="password"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            hint="Тот, что указывали для восстановления раньше"
+            value={value}
+            error={error}
+            onChange={(e) => setValue(e.target.value)}
+            disabled={busy}
+          />
+          <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={!value.trim()}>Открыть</Button>
         </form>
       </Modal>
     </Card>
@@ -406,6 +470,7 @@ export function Settings() {
         <AdminSection />
         <PushSection />
         <ThemeSection />
+        {pin && <OldMessagesSection />}
         {pin && <PhoneSection />}
         {!pin && (
           <>
