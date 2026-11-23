@@ -80,20 +80,20 @@ function Status({ client, room, ev, readByOthers }: { client: MatrixClient; room
   if (s === EventStatus.NOT_SENT) {
     return (
       <span className="msg-status msg-status--failed">
-        <Icon name="alert" size={14} />
+        <span className="msg-status__text"><Icon name="alert" size={16} /> Не отправлено</span>
         <button type="button" onClick={() => void client.resendEvent(ev, room)}>Повторить</button>
-        <button type="button" onClick={() => client.cancelPendingEvent(ev)} aria-label="Удалить">
-          <Icon name="trash" size={14} />
+        <button type="button" onClick={() => client.cancelPendingEvent(ev)} aria-label="Удалить сообщение" title="Удалить сообщение">
+          <Icon name="trash" size={16} /> Удалить
         </button>
       </span>
     );
   }
   if (s === EventStatus.SENDING || s === EventStatus.QUEUED || s === EventStatus.ENCRYPTING) {
-    return <span className="msg-status" aria-label="Отправляется"><Icon name="clock" size={13} /></span>;
+    return <span className="msg-status" aria-label="Отправляется" title="Отправляется"><Icon name="clock" size={16} /></span>;
   }
   return (
-    <span className={`msg-status${readByOthers ? ' msg-status--read' : ''}`} aria-label={readByOthers ? 'Прочитано' : 'Доставлено'}>
-      <Icon name={readByOthers ? 'checks' : 'check'} size={14} />
+    <span className={`msg-status${readByOthers ? ' msg-status--read' : ''}`} aria-label={readByOthers ? 'Прочитано' : 'Отправлено'} title={readByOthers ? 'Прочитано' : 'Отправлено'}>
+      <Icon name={readByOthers ? 'checks' : 'check'} size={16} />
     </span>
   );
 }
@@ -178,6 +178,7 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
     : pin ? 'Участник' : ev.getSender() ?? '';
   const isMedia = !ev.isRedacted() && [MsgType.Image].includes(ev.getContent().msgtype as MsgType);
   const isAudio = !ev.isRedacted() && ev.getContent().msgtype === MsgType.Audio;
+  const failed = ev.status === EventStatus.NOT_SENT;
   const edited = !!ev.replacingEventId();
   const isFile = !ev.isRedacted() && [MsgType.File, MsgType.Video].includes(ev.getContent().msgtype as MsgType);
   const actionable = canAct(ev);
@@ -274,8 +275,9 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
           <div className="bubble__meta">
             {edited && <span className="bubble__edited">изменено</span>}
             <time dateTime={new Date(ev.getTs()).toISOString()}>{formatTime(ev.getTs())}</time>
-            {own && <Status client={client} room={room} ev={ev} readByOthers={readByOthers} />}
+            {own && !failed && <Status client={client} room={room} ev={ev} readByOthers={readByOthers} />}
           </div>
+          {own && failed && <div className="bubble__failed"><Status client={client} room={room} ev={ev} readByOthers={readByOthers} /></div>}
         </div>
         {reactions.length > 0 && (
           <div className="msg-reactions">

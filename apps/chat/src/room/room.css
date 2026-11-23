@@ -191,3 +191,26 @@
   padding-left: max(var(--rl-space-2), calc((100% - 720px) / 2 + var(--rl-space-3)));
   padding-right: max(var(--rl-space-2), calc((100% - 720px) / 2 + var(--rl-space-3)));
 }
+
+/* ============ Статус сообщения ============ */
+.msg .msg-status { gap: 4px; }
+.msg .msg-status svg { width: 16px; height: 16px; }
+.msg--own .msg-status { color: rgb(255 255 255 / 0.7); }
+.msg--own .msg-status--read { color: #fff; }
+.msg .msg-status--failed { flex-wrap: wrap; margin-top: 4px; font-size: 0.8125rem; font-weight: var(--rl-weight-semibold); color: #fff; }
+.msg .msg-status--failed .msg-status__text { color: #ffd2d8; }
+.msg .msg-status--failed button { display: inline-flex; align-items: center; gap: 4px; min-height: 1.75rem; padding: 2px 8px; border: 1px solid rgb(255 255 255 / 0.5); border-radius: var(--rl-radius-full); background: rgb(0 0 0 / 0.18); color: #fff; font: inherit; text-decoration: none; cursor: pointer; }
+.msg .msg-status--failed button:hover { background: rgb(0 0 0 / 0.3); }
+.bubble__failed { clear: both; }
+
+/* ============ Мелкий текст: не меньше 12px, в rem ============ */
+.msg .bubble__meta { font-size: 0.75rem; }
+.msg .bubble__sender { font-size: 0.8125rem; }
+.msg .voice__time { font-size: 0.75rem; }
+.msg .msg-reply { font-size: 0.8125rem; }
+.reaction-chip { font-size: 0.8125rem; }
+.reaction-chip__n { font-size: 0.75rem; }
+.file-card__size { font-size: 0.75rem; }
+.msg-video__label { font-size: 0.75rem; }
+.jump-bottom__badge { font-size: 0.75rem; }
+.composer-count { font-size: 0.75rem; }

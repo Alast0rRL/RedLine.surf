@@ -76,9 +76,9 @@ function Uploads({ roomId }: { roomId: string }) {
             )}
             {u.error ? (
               <div className="msg-status msg-status--failed">
-                <Icon name="alert" size={14} /> {u.error}
+                <Icon name="alert" size={16} /> {u.error}
                 {u.retry && <button type="button" onClick={u.retry}>Повторить</button>}
-                <button type="button" onClick={() => uploadStore.remove(u.id)} aria-label="Удалить"><Icon name="trash" size={14} /></button>
+                <button type="button" onClick={() => uploadStore.remove(u.id)} aria-label="Удалить" title="Удалить"><Icon name="trash" size={16} /> Удалить</button>
               </div>
             ) : (
               <div className="upload-progress" role="progressbar" aria-valuenow={Math.round(u.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
