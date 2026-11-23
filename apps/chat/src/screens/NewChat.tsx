@@ -129,7 +129,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
             setWho(e.target.value);
             setError(null);
           }}
-          placeholder={mode === 'dm' ? `ded@${server}` : `ded@${server}, baba@${server}`}
+          placeholder={mode === 'dm' ? `example@${server}` : `example@${server}, friend@${server}`}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}

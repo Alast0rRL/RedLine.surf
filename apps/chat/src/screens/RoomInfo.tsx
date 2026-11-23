@@ -72,7 +72,7 @@ function AddMembers({ client, room, open, onClose }: { client: MatrixClient; roo
             setWho(e.target.value);
             setError(null);
           }}
-          placeholder={`ded@${server}`}
+          placeholder={`example@${server}`}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}

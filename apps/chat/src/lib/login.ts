@@ -23,9 +23,9 @@ export function parseLogin(input: string): { userId: string } | { error: string 
   else if (mxid) {
     local = mxid[1];
     if (mxid[2]) domain = mxid[2];
-  } else return { error: `«${input.trim()}» не похоже на логин. Пример: ded@${server}` };
+  } else return { error: `«${input.trim()}» не похоже на логин. Пример: example@${server}` };
   if (domain !== server) return { error: `Пригласить можно только людей с ${server}` };
-  if (!/^[a-z0-9._=-]+$/.test(local)) return { error: `«${input.trim()}» не похоже на логин. Пример: ded@${server}` };
+  if (!/^[a-z0-9._=-]+$/.test(local)) return { error: `«${input.trim()}» не похоже на логин. Пример: example@${server}` };
   v = `@${local}:${server}`;
   return { userId: v };
 }
