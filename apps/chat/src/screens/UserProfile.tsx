@@ -25,7 +25,7 @@ export function UserProfile({ userId }: { userId: string }) {
     name: cached?.displayName || fallbackName,
     mxc: cached?.avatarUrl ?? null,
   });
-  const [busy, setBusy] = useState<'dm' | 'mute' | null>(null);
+  const [busy, setBusy] = useState<'dm' | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -52,16 +52,12 @@ export function UserProfile({ userId }: { userId: string }) {
     }
   };
 
-  const toggleMute = async () => {
+  const toggleMute = () => {
     if (!dmId) return;
-    setBusy('mute');
-    try {
-      await setRoomMuted(client, dmId, !muted);
-    } catch (e) {
+    setRoomMuted(client, dmId, !muted).catch((e) => {
       console.error(e);
       toast('Не получилось изменить уведомления', { variant: 'error' });
-    }
-    setBusy(null);
+    });
   };
 
   return (
@@ -80,7 +76,7 @@ export function UserProfile({ userId }: { userId: string }) {
             <>
               <Button variant="primary" busy={busy === 'dm'} disabled={!!busy} onClick={() => void write()}>Написать</Button>
               {dmId && (
-                <Button variant="outline" busy={busy === 'mute'} disabled={!!busy} onClick={() => void toggleMute()}>
+                <Button variant="outline" onClick={toggleMute}>
                   <ExtraIcon name="bellOff" /> {muted ? 'Включить звук' : 'Без звука'}
                 </Button>
               )}

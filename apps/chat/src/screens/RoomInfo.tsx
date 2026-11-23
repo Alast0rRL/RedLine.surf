@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { KnownMembership, type MatrixClient, type Room, type RoomMember } from 'matrix-js-sdk';
 import { useClient } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
@@ -127,11 +127,16 @@ export function RoomInfo({ roomId }: { roomId: string }) {
   const [draft, setDraft] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pendingName, setPendingName] = useState<string | null>(null);
   const [kickTarget, setKickTarget] = useState<{ id: string; name: string } | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
   const back = () => navigate.back(`#/room/${encodeURIComponent(roomId)}`);
+
+  useEffect(() => {
+    if (pendingName && client.getRoom(roomId)?.name === pendingName) setPendingName(null);
+  });
 
   if (!room || room.getMyMembership() !== KnownMembership.Join) {
     return (
@@ -145,6 +150,7 @@ export function RoomInfo({ roomId }: { roomId: string }) {
   const joined = room.getMembersWithMembership(KnownMembership.Join);
   const invited = room.getMembersWithMembership(KnownMembership.Invite);
   const muted = isRoomMuted(client, roomId);
+  const shownName = pendingName ?? room.name;
   const mxc = room.getMxcAvatarUrl();
   const meId = client.getUserId();
 
@@ -164,10 +170,14 @@ export function RoomInfo({ roomId }: { roomId: string }) {
     const n = draft.trim();
     if (n.length < 1 || n.length > NAME_MAX) return setNameError(`От 1 до ${NAME_MAX} символов`);
     if (n === room.name) return setEditing(false);
-    void run('name', async () => {
-      await client.setRoomName(roomId, n);
-      setEditing(false);
-    }, 'Не удалось переименовать');
+    // новое имя видно сразу; запрос идёт в фоне, при ошибке возвращаем старое
+    setPendingName(n);
+    setEditing(false);
+    client.setRoomName(roomId, n).catch((err) => {
+      console.error(err);
+      setPendingName(null);
+      toast('Не удалось переименовать', { variant: 'error' });
+    });
   };
 
   const onFile = (file: File | undefined) => {
@@ -193,18 +203,20 @@ export function RoomInfo({ roomId }: { roomId: string }) {
     }, 'Не удалось исключить');
   };
 
-  const leave = () =>
-    run('leave', async () => {
-      await leaveRoom(client, roomId);
-      setLeaveOpen(false);
-      location.hash = '#/';
-    }, 'Не удалось выйти из группы');
+  const leave = () => {
+    setLeaveOpen(false);
+    location.hash = '#/';
+    leaveRoom(client, roomId).catch((e) => {
+      console.error(e);
+      toast('Не удалось выйти из группы', { variant: 'error' });
+    });
+  };
 
   return (
     <InfoFrame title="О группе" onBack={back}>
       <Card solid className="settings-card">
         <div className="info__head" style={{ width: '100%' }}>
-          <BigAvatar client={client} name={room.name} seed={roomId} mxc={mxc} label={`Фото группы ${room.name}`} />
+          <BigAvatar client={client} name={room.name} seed={roomId} mxc={mxc} label={`Фото группы ${shownName}`} />
           {editing ? (
             <form className="info__row" onSubmit={saveName}>
               <Field
@@ -222,7 +234,7 @@ export function RoomInfo({ roomId }: { roomId: string }) {
               <Button variant="ghost" aria-label="Отмена" onClick={() => setEditing(false)}><Icon name="close" /></Button>
             </form>
           ) : (
-            <h1 className="info__name">{room.name}</h1>
+            <h1 className="info__name">{shownName}</h1>
           )}
           <p className="info__muted">{pluralMembers(joined.length)}</p>
         </div>
@@ -250,9 +262,12 @@ export function RoomInfo({ roomId }: { roomId: string }) {
         <div className="info__actions">
           <Button
             variant="outline"
-            busy={busy === 'mute'}
-            disabled={!!busy}
-            onClick={() => void run('mute', () => setRoomMuted(client, roomId, !muted), 'Не получилось изменить уведомления')}
+            onClick={() => {
+              setRoomMuted(client, roomId, !muted).catch((e) => {
+                console.error(e);
+                toast('Не получилось изменить уведомления', { variant: 'error' });
+              });
+            }}
           >
             <ExtraIcon name="bellOff" /> {muted ? 'Включить звук' : 'Без звука'}
           </Button>
@@ -302,8 +317,7 @@ export function RoomInfo({ roomId }: { roomId: string }) {
         title="Покинуть группу"
         text={`Покинуть группу «${room.name}»? История для вас пропадёт.`}
         confirmLabel="Покинуть"
-        busy={busy === 'leave'}
-        onConfirm={() => void leave()}
+        onConfirm={leave}
         onClose={() => setLeaveOpen(false)}
       />
       <AddMembers client={client} room={room} open={addOpen} onClose={() => setAddOpen(false)} />

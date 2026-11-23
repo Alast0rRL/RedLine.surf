@@ -1,6 +1,7 @@
 import { EventType, MsgType, RelationType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events.js';
 import { stripReplyFallback } from './html';
+import { emitOptimistic } from './optimistic';
 
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
 
@@ -31,8 +32,26 @@ export const canDelete = (ev: MatrixEvent, me: string): boolean => ev.getSender(
 export interface ReactionSummary {
   key: string;
   count: number;
-  /** своё событие-реакция (если есть) */
+  /** своё событие-реакция на сервере (если есть) */
   mine: MatrixEvent | null;
+  /** моя реакция с учётом ещё не подтверждённой серверу */
+  own: boolean;
+}
+
+/** Оптимистичные реакции: eventId → (ключ → хочу ли я её поставить). */
+const reactionOverrides = new Map<string, Map<string, { want: boolean; at: number }>>();
+const REACTION_TTL_MS = 30_000;
+
+function setReactionOverride(id: string, key: string, want: boolean | null): void {
+  let m = reactionOverrides.get(id);
+  if (want === null) {
+    m?.delete(key);
+    if (m && !m.size) reactionOverrides.delete(id);
+  } else {
+    if (!m) reactionOverrides.set(id, (m = new Map()));
+    m.set(key, { want, at: Date.now() });
+  }
+  emitOptimistic();
 }
 
 export function getReactions(room: Room, ev: MatrixEvent, me: string): ReactionSummary[] {
@@ -40,42 +59,63 @@ export function getReactions(room: Room, ev: MatrixEvent, me: string): ReactionS
   if (!id || !hasServerId(ev)) return [];
   const container = room.relations ?? room.getUnfilteredTimelineSet().relations;
   const rel = container?.getChildEventsForEvent(id, RelationType.Annotation, EventType.Reaction);
-  if (!rel) return [];
+  const overrides = reactionOverrides.get(id);
   const out: (ReactionSummary & { ts: number })[] = [];
-  for (const [key, set] of rel.getSortedAnnotationsByKey() ?? []) {
+  for (const [key, set] of rel?.getSortedAnnotationsByKey() ?? []) {
     const events = [...set].filter((e) => !e.isRedacted());
-    if (!events.length) continue;
-    out.push({
-      key,
-      count: events.length,
-      mine: events.find((e) => e.getSender() === me) ?? null,
-      ts: Math.min(...events.map((e) => e.getTs())),
-    });
+    let count = events.length;
+    const mine = events.find((e) => e.getSender() === me) ?? null;
+    let own = !!mine;
+    const ov = overrides?.get(key);
+    if (ov) {
+      if (ov.want === own || Date.now() - ov.at > REACTION_TTL_MS) overrides!.delete(key); // сервер догнал
+      else {
+        count += ov.want ? 1 : -1;
+        own = ov.want;
+      }
+    }
+    if (count <= 0) continue;
+    out.push({ key, count, mine, own, ts: events.length ? Math.min(...events.map((e) => e.getTs())) : 0 });
+  }
+  if (overrides) {
+    for (const [key, ov] of overrides) {
+      if (out.some((r) => r.key === key)) continue;
+      if (!ov.want || Date.now() - ov.at > REACTION_TTL_MS) overrides.delete(key);
+      else out.push({ key, count: 1, mine: null, own: true, ts: Date.now() });
+    }
+    if (!overrides.size) reactionOverrides.delete(id);
   }
   // порядок стабильный: кто раньше появился, тот левее
-  return out.sort((x, y) => x.ts - y.ts).map(({ key, count, mine }) => ({ key, count, mine }));
+  return out.sort((x, y) => x.ts - y.ts).map(({ key, count, mine, own }) => ({ key, count, mine, own }));
 }
 
 /** Короткая подпись реакций — для stamp, чтобы мемо-сообщение перерисовалось. */
 export function reactionsStamp(room: Room, ev: MatrixEvent, me: string): string {
-  return getReactions(room, ev, me).map((r) => `${r.key}:${r.count}:${r.mine ? 1 : 0}`).join(',');
+  return getReactions(room, ev, me).map((r) => `${r.key}:${r.count}:${r.own ? 1 : 0}`).join(',');
 }
 
 export async function toggleReaction(client: MatrixClient, room: Room, ev: MatrixEvent, key: string): Promise<void> {
   const id = ev.getId();
   const me = client.getUserId();
   if (!id || !me || !hasServerId(ev)) return;
-  const mine = getReactions(room, ev, me).find((r) => r.key === key)?.mine;
-  if (mine) {
-    const mid = mine.getId();
-    if (mid?.startsWith('$')) {
-      await client.redactEvent(room.roomId, mid);
-    }
-    return;
+  const current = getReactions(room, ev, me).find((r) => r.key === key);
+  const own = !!current?.own;
+  if (own) {
+    const mid = current?.mine?.getId();
+    if (!mid?.startsWith('$')) return; // своя реакция ещё не дошла до сервера
   }
-  await client.sendEvent(room.roomId, EventType.Reaction as never, {
-    'm.relates_to': { rel_type: RelationType.Annotation, event_id: id, key },
-  } as never);
+  setReactionOverride(id, key, !own); // чип меняется сразу
+  try {
+    if (own) await client.redactEvent(room.roomId, current!.mine!.getId()!);
+    else {
+      await client.sendEvent(room.roomId, EventType.Reaction as never, {
+        'm.relates_to': { rel_type: RelationType.Annotation, event_id: id, key },
+      } as never);
+    }
+  } catch (e) {
+    setReactionOverride(id, key, null);
+    throw e;
+  }
 }
 
 /* ---------------- ответ / правка ---------------- */

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ClientEvent, RoomEvent, RoomStateEvent, type MatrixClient, type RoomMember } from 'matrix-js-sdk';
+import { onOptimistic } from '../lib/optimistic';
 import { isPinUser } from '../lib/pin';
 import { useMediaUrl } from '../hooks/useMediaUrl';
 import { Avatar, Button, Icon, Modal } from '../components/ui';
@@ -25,7 +26,9 @@ export function useRoomRefresh(client: MatrixClient): void {
       RoomEvent.MyMembership,
     ] as const;
     for (const e of events) client.on(e as never, bump as never);
+    const offOptimistic = onOptimistic(bump);
     return () => {
+      offOptimistic();
       for (const e of events) client.off(e as never, bump as never);
     };
   }, [client]);

@@ -1,40 +1,103 @@
-import { PushRuleKind, Preset, Visibility, type MatrixClient, type Room } from 'matrix-js-sdk';
+import { PushRuleActionName, PushRuleKind, Preset, RoomEvent, Visibility, type MatrixClient, type Room } from 'matrix-js-sdk';
+import { emitOptimistic } from './optimistic';
 import { addDirect, encryption, findExistingDm } from '../screens/NewChat';
 
 const FAVOURITE = 'm.favourite';
 
-/** Уведомления комнаты выключены: room-правило push с пустым списком действий. */
-export function isRoomMuted(client: MatrixClient, roomId: string): boolean {
+/* Оптимистичные значения: интерфейс меняется сразу, запрос идёт в фоне. */
+const mutedOverride = new Map<string, boolean>();
+const pinnedOverride = new Map<string, boolean>();
+const leavingRooms = new Set<string>();
+const OVERRIDE_TTL_MS = 20_000;
+
+function serverMuted(client: MatrixClient, roomId: string): boolean {
   const rule = client.getRoomPushRule('global', roomId);
   if (!rule || !rule.enabled) return false;
   return rule.actions.length === 0 || (rule.actions as unknown[]).includes('dont_notify');
 }
 
-export async function setRoomMuted(client: MatrixClient, roomId: string, mute: boolean): Promise<void> {
-  if (isRoomMuted(client, roomId) === mute) return;
-  const done = client.setRoomMutePushRule('global', roomId, mute);
-  if (done) {
-    await done;
-    return;
-  }
-  // запасной путь, если SDK не смог сам
-  if (mute) await client.addPushRule('global', PushRuleKind.RoomSpecific, roomId, { actions: [] });
-  else await client.deletePushRule('global', PushRuleKind.RoomSpecific, roomId);
+/** Уведомления комнаты выключены: room-правило push с пустым списком действий или dont_notify. */
+export function isRoomMuted(client: MatrixClient, roomId: string): boolean {
+  return mutedOverride.get(roomId) ?? serverMuted(client, roomId);
+}
+
+export function setRoomMuted(client: MatrixClient, roomId: string, mute: boolean): Promise<void> {
+  if (isRoomMuted(client, roomId) === mute) return Promise.resolve();
+  mutedOverride.set(roomId, mute);
+  emitOptimistic();
+  const drop = () => {
+    if (mutedOverride.get(roomId) === mute) mutedOverride.delete(roomId);
+    emitOptimistic();
+  };
+  const run = async () => {
+    if (mute) await client.addPushRule('global', PushRuleKind.RoomSpecific, roomId, { actions: [PushRuleActionName.DontNotify] });
+    else await client.deletePushRule('global', PushRuleKind.RoomSpecific, roomId);
+    // подтянуть правила, чтобы серверное состояние догнало; затем снять временное значение
+    try {
+      client.setPushRules(await client.getPushRules());
+    } catch {
+      /* придёт со следующей синхронизацией */
+    }
+    drop();
+  };
+  return run().catch((e) => {
+    drop();
+    throw e;
+  });
 }
 
 export function isRoomPinned(room: Room): boolean {
-  return FAVOURITE in (room.tags ?? {});
+  return pinnedOverride.get(room.roomId) ?? FAVOURITE in (room.tags ?? {});
 }
 
-export async function setRoomPinned(client: MatrixClient, roomId: string, pinned: boolean): Promise<void> {
-  if (pinned) await client.setRoomTag(roomId, FAVOURITE, { order: 0.5 });
-  else await client.deleteRoomTag(roomId, FAVOURITE);
+export function setRoomPinned(client: MatrixClient, roomId: string, pinned: boolean): Promise<void> {
+  pinnedOverride.set(roomId, pinned);
+  emitOptimistic();
+  const drop = () => {
+    if (pinnedOverride.get(roomId) === pinned) pinnedOverride.delete(roomId);
+    emitOptimistic();
+  };
+  // снимаем временное значение, когда теги из синхронизации совпали (или по таймауту)
+  const onTags = (_ev: unknown, room: Room) => {
+    if (room.roomId === roomId && (FAVOURITE in (room.tags ?? {})) === pinned) done();
+  };
+  const timer = setTimeout(() => done(), OVERRIDE_TTL_MS);
+  const done = () => {
+    clearTimeout(timer);
+    client.off(RoomEvent.Tags, onTags as never);
+    drop();
+  };
+  client.on(RoomEvent.Tags, onTags as never);
+  const req = pinned ? client.setRoomTag(roomId, FAVOURITE, { order: 0.5 }) : client.deleteRoomTag(roomId, FAVOURITE);
+  return req.then(
+    () => {},
+    (e) => {
+      done();
+      throw e;
+    },
+  );
 }
 
-/** Выйти из комнаты и убрать её из списка. */
+/** Комната сразу пропадает из списка, пока идёт выход. */
+export const isRoomLeaving = (roomId: string): boolean => leavingRooms.has(roomId);
+
+/** Выйти из комнаты и убрать её из списка: список обновляется сразу, запрос идёт в фоне. */
 export async function leaveRoom(client: MatrixClient, roomId: string): Promise<void> {
-  await client.leave(roomId);
-  await client.forget(roomId).catch(() => {});
+  leavingRooms.add(roomId);
+  emitOptimistic();
+  try {
+    await client.leave(roomId);
+    await client.forget(roomId).catch(() => {});
+  } catch (e) {
+    leavingRooms.delete(roomId);
+    emitOptimistic();
+    throw e;
+  }
+  // комната уже не в списке по членству; запись можно снять чуть позже
+  setTimeout(() => {
+    leavingRooms.delete(roomId);
+    emitOptimistic();
+  }, OVERRIDE_TTL_MS);
 }
 
 /** Личный чат с человеком: существующий или новый (как в «Новом чате»). */

@@ -7,6 +7,7 @@ import {
   type MatrixEvent,
   type Room,
 } from 'matrix-js-sdk';
+import { onOptimistic } from '../lib/optimistic';
 import { isMessageLike, isStateNotice } from '../lib/events';
 import { useThrottledVersion } from './useThrottledVersion';
 
@@ -27,7 +28,9 @@ export function useTimeline(client: MatrixClient, room: Room) {
     roomEvents.forEach((e) => room.on(e as never, bump as never));
     client.on(MatrixEventEvent.Decrypted, bump);
     client.on(MatrixEventEvent.Replaced, bump);
+    const offOptimistic = onOptimistic(bump);
     return () => {
+      offOptimistic();
       roomEvents.forEach((e) => room.off(e as never, bump as never));
       client.off(MatrixEventEvent.Decrypted, bump);
       client.off(MatrixEventEvent.Replaced, bump);

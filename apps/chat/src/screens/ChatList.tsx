@@ -191,37 +191,31 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const [query, setQuery] = useState('');
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [leaving, setLeaving] = useState<Room | null>(null);
-  const [leaveBusy, setLeaveBusy] = useState(false);
 
   const q = query.trim().toLocaleLowerCase('ru');
   const shown = useMemo(() => (q ? rooms.filter((s) => s.room.name.toLocaleLowerCase('ru').includes(q)) : rooms), [rooms, q]);
 
-  const toggle = async (kind: 'pin' | 'mute') => {
+  // список меняется сразу (оптимистично), запрос идёт в фоне; при ошибке значение откатывается
+  const toggle = (kind: 'pin' | 'mute') => {
     const target = menu?.s;
     setMenu(null);
     if (!target) return;
-    try {
-      if (kind === 'pin') await setRoomPinned(client, target.room.roomId, !target.pinned);
-      else await setRoomMuted(client, target.room.roomId, !target.muted);
-    } catch (e) {
+    const req = kind === 'pin' ? setRoomPinned(client, target.room.roomId, !target.pinned) : setRoomMuted(client, target.room.roomId, !target.muted);
+    req.catch((e) => {
       console.error(e);
       toast(kind === 'pin' ? 'Не удалось закрепить' : 'Не получилось изменить уведомления', { variant: 'error' });
-    }
+    });
   };
 
-  const doLeave = async () => {
+  const doLeave = () => {
     if (!leaving) return;
-    setLeaveBusy(true);
-    try {
-      const id = leaving.roomId;
-      await leaveRoom(client, id);
-      if (activeRoomId === id) location.hash = '#/';
-      setLeaving(null);
-    } catch (e) {
+    const id = leaving.roomId;
+    setLeaving(null);
+    if (activeRoomId === id) location.hash = '#/';
+    leaveRoom(client, id).catch((e) => {
       console.error(e);
       toast('Не удалось покинуть чат', { variant: 'error' });
-    }
-    setLeaveBusy(false);
+    });
   };
 
   useEffect(() => {
@@ -332,8 +326,7 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
         title="Покинуть чат"
         text={`Покинуть «${leaving?.name ?? ''}»?`}
         confirmLabel="Покинуть"
-        busy={leaveBusy}
-        onConfirm={() => void doLeave()}
+        onConfirm={doLeave}
         onClose={() => setLeaving(null)}
       />
       <NewChatModal open={newChat} onClose={() => setNewChat(false)} />

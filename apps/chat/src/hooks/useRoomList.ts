@@ -11,7 +11,8 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { isMessageLike } from '../lib/events';
-import { isRoomMuted, isRoomPinned } from '../lib/rooms';
+import { isRoomLeaving, isRoomMuted, isRoomPinned } from '../lib/rooms';
+import { onOptimistic } from '../lib/optimistic';
 import { useThrottledVersion } from './useThrottledVersion';
 
 export interface RoomSummary {
@@ -58,7 +59,9 @@ export function useRoomList(client: MatrixClient) {
       [client, MatrixEventEvent.Decrypted],
     ] as const;
     for (const [emitter, name] of events) emitter.on(name as never, bump as never);
+    const offOptimistic = onOptimistic(bump);
     return () => {
+      offOptimistic();
       for (const [emitter, name] of events) emitter.off(name as never, bump as never);
     };
   }, [client, bump]);
@@ -72,7 +75,7 @@ export function useRoomList(client: MatrixClient) {
         invites.push(room);
         continue;
       }
-      if (membership !== KnownMembership.Join) continue;
+      if (membership !== KnownMembership.Join || isRoomLeaving(room.roomId)) continue;
       const lastEvent = lastMessage(room);
       joined.push({
         room,

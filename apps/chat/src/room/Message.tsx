@@ -275,9 +275,9 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
               <button
                 key={r.key}
                 type="button"
-                className={`reaction-chip${r.mine ? ' is-mine' : ''}`}
-                aria-pressed={!!r.mine}
-                aria-label={`${r.key} ${r.count}${r.mine ? ', вы поставили' : ''}`}
+                className={`reaction-chip${r.own ? ' is-mine' : ''}`}
+                aria-pressed={r.own}
+                aria-label={`${r.key} ${r.count}${r.own ? ', вы поставили' : ''}`}
                 onClick={() => onReact(r.key)}
               >
                 <span>{r.key}</span> <span className="reaction-chip__n">{r.count}</span>
