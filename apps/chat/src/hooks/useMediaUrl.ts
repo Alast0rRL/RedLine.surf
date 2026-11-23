@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getMediaUrl, type MediaSource, type Thumb } from '../lib/media';
+import { acquireMedia, type MediaSource, type Thumb } from '../lib/media';
 import { useClient } from '../state/MatrixContext';
 
 /** blob: URL медиа (с авторизацией и расшифровкой). null — грузится, 'error' — не вышло. */
@@ -15,7 +15,8 @@ export function useMediaUrl(src: MediaSource | null, thumb?: Thumb): string | nu
     }
     let alive = true;
     setUrl(null);
-    getMediaUrl(client, src, thumb)
+    const handle = acquireMedia(client, src, thumb);
+    handle.promise
       .then((u) => alive && setUrl(u))
       .catch((e) => {
         console.warn('media load failed', e);
@@ -23,6 +24,7 @@ export function useMediaUrl(src: MediaSource | null, thumb?: Thumb): string | nu
       });
     return () => {
       alive = false;
+      handle.release();
     };
     // src/thumb сравниваем по ключу
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -6,6 +6,7 @@ import {
   type MatrixClient,
   type SecretStorage,
 } from 'matrix-js-sdk';
+import { clearMediaCache } from './media';
 import { clearSession, saveSession, type StoredSession } from './session';
 
 const SYNC_DB = 'rl-sync';
@@ -151,6 +152,7 @@ export function wipeLocalData(client: MatrixClient | null): Promise<void> {
 }
 
 async function wipeStores(client: MatrixClient | null): Promise<void> {
+  await clearMediaCache();
   try {
     // deleteDatabase ждёт закрытия всех соединений: без предела зависнет вход
     if (client) await withTimeout(client.clearStores({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX }), 10_000);
