@@ -177,6 +177,44 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
     prevHeight.current = el.scrollHeight;
   }, [version, shown.length]);
 
+  // непрочитанные: маркер фиксируем в момент открытия комнаты и больше не двигаем
+  const openState = useRef<{ readId: string | null; unread: number } | null>(null);
+  if (!openState.current) {
+    const fullyRead = room.getAccountData('m.fully_read')?.getContent<{ event_id?: string }>()?.event_id ?? null;
+    openState.current = {
+      readId: room.getEventReadUpTo(me) ?? fullyRead,
+      unread: room.getUnreadNotificationCount(NotificationCountType.Total),
+    };
+  }
+  const unreadId = useMemo(() => {
+    const { readId, unread } = openState.current!;
+    if (unread <= 0) return null;
+    let from = 0;
+    if (readId) {
+      const idx = shown.findIndex((e) => e.getId() === readId);
+      if (idx < 0) return null;
+      from = idx + 1;
+    }
+    for (let i = from; i < shown.length; i++) {
+      const e = shown[i];
+      if (!isStateNotice(e) && e.getSender() !== me && e.getId()?.startsWith('$')) return e.getId()!;
+    }
+    return null;
+  }, [shown, me]);
+  const unreadScrolled = useRef(false);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || !unreadId || unreadScrolled.current) return;
+    const mark = el.querySelector<HTMLElement>('[data-unread-divider]');
+    if (!mark) return;
+    unreadScrolled.current = true;
+    stick.current = false;
+    el.scrollTop += mark.getBoundingClientRect().top - el.getBoundingClientRect().top - 12;
+    prevHeight.current = el.scrollHeight;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setFar(dist > el.clientHeight);
+  }, [unreadId, version, shown.length]);
+
   // пусто или мало сообщений — сразу подгружаем историю
   useEffect(() => {
     if (events.length < 15 && canLoadOlder && !loadingOlder) {
@@ -299,6 +337,7 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
           return (
             <Fragment key={ev.getTxnId() ?? ev.getId() ?? i}>
               {dayEl}
+              {ev.getId() === unreadId && <div className="unread-sep" data-unread-divider><span>Новые сообщения</span></div>}
               <Message
                 client={client}
                 room={room}

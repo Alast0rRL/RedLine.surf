@@ -254,3 +254,5 @@
 .voice__body .voice__meta { flex-direction: row; align-items: center; justify-content: space-between; min-width: 0; gap: 8px; }
 .msg .voice__time { font-variant-numeric: tabular-nums; }
 .msg .voice__speed { padding: 2px 8px; font-size: 0.75rem; cursor: pointer; }
+.unread-sep { display: flex; align-items: center; gap: 10px; margin: 12px 0 6px; color: var(--chat-accent-text); font-size: 0.75rem; font-weight: var(--rl-weight-black); }
+.unread-sep::before, .unread-sep::after { content: ""; flex: 1; height: 1px; background: var(--rl-color-accent); opacity: 0.4; }
