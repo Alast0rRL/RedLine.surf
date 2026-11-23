@@ -4,18 +4,12 @@ import { navigate } from '../hooks/useHashRoute';
 import { useSecurityState } from '../hooks/useSecurityState';
 import { changePassword, passwordProblem, friendlyError } from '../lib/account';
 import { findAdminRoom } from '../lib/admin';
-import { isPinUser } from '../lib/pin';
+import { isPinUser, PIN_LENGTH } from '../lib/pin';
 import { formatLogin } from '../lib/login';
 import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
-import {
-  changeRecoveryPhrase,
-  getRecoveryMask,
-  phonePassphrase,
-  saveRecoveryMeta,
-  setupRecovery,
-  unlockWithRecovery,
-} from '../lib/security';
+import { switchToPin } from '../lib/switchToPin';
+import { normalizePhone } from '../lib/phone';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
 import { PhoneSection } from './PhoneSection';
@@ -113,140 +107,76 @@ function AdminSection() {
   );
 }
 
-type SecurityDialog = 'setup' | 'unlock' | 'change' | null;
-
-function SecuritySection() {
+/** Вход по паролю → вход по номеру и PIN. Секретных фраз больше нет. */
+function SwitchToPinSection() {
   const client = useClient();
-  const [state, refresh] = useSecurityState(client);
-  const [dialog, setDialog] = useState<SecurityDialog>(null);
+  const [state] = useSecurityState(client);
+  const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [legacy, setLegacy] = useState(false);
+  const [pin, setPin] = useState('');
+  const [pin2, setPin2] = useState('');
   const [busy, setBusy] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [, setTick] = useState(0);
-  const mask = getRecoveryMask(client);
+  const [error, setError] = useState<string | null>(null);
 
   const close = () => {
-    setDialog(null);
+    if (busy) return;
+    setOpen(false);
     setPassword('');
     setPhone('');
-    setLegacy(false);
-    setErrors({});
-    setBusy(false);
-    setTick((t) => t + 1);
-    refresh();
+    setPin('');
+    setPin2('');
+    setError(null);
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const mode = dialog;
-    if (!mode) return;
-    const next: Record<string, string> = {};
-    const digits = phonePassphrase(phone);
-    if (mode === 'unlock' && legacy) {
-      if (!phone.trim()) next.phone = 'Введите старую секретную фразу';
-    } else {
-      if (mode === 'setup' && !password) next.password = 'Введите пароль от входа';
-      if (!digits) next.phone = 'Проверьте номер';
-    }
-    setErrors(next);
-    if (Object.keys(next).length) return;
-
+    if (!password) return setError('Введите пароль от входа');
+    if (!normalizePhone(phone)) return setError('Проверьте номер');
+    if (pin.length !== PIN_LENGTH) return setError(`PIN — ровно ${PIN_LENGTH} цифр`);
+    if (pin !== pin2) return setError('PIN не совпадает');
+    setError(null);
     setBusy(true);
     try {
-      if (mode === 'setup') {
-        await setupRecovery(client, password, digits!);
-        await saveRecoveryMeta(client, digits!);
-        toast('Номер сохранён', { variant: 'success' });
-      } else if (mode === 'change') {
-        await changeRecoveryPhrase(client, digits!);
-        await saveRecoveryMeta(client, digits!);
-        toast('Номер сохранён', { variant: 'success' });
-      } else {
-        const { imported } = await unlockWithRecovery(client, legacy ? phone : digits!, legacy);
-        toast(imported ? 'Готово, старые сообщения открыты' : 'Готово, этот телефон подтверждён', { variant: 'success' });
-      }
-      close();
+      await switchToPin(client, { password, phone, pin });
+      toast('Готово: теперь вход по номеру и PIN', { variant: 'success' });
+      setBusy(false);
+      setOpen(false);
+      navigate.list();
     } catch (err) {
-      const e2 = err as { errcode?: string; message?: string };
-      const field = mode === 'unlock' ? 'phone' : 'form';
-      setErrors({ [field]: e2.errcode === 'M_FORBIDDEN' ? 'Пароль не подошёл. Проверьте, нет ли опечаток' : friendlyError(err, 'Что-то пошло не так. Попробуйте ещё раз') });
+      setError(friendlyError(err, 'Что-то пошло не так. Попробуйте ещё раз'));
       setBusy(false);
     }
   };
 
-  const text =
-    state === 'ok'
-      ? mask
-        ? `Старые сообщения открываются по номеру ${mask}`
-        : 'Сейчас старые сообщения открываются по старой секретной фразе.'
-      : {
-          checking: 'Проверяем…',
-          unavailable: 'Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari.',
-          'needs-setup': 'Укажите номер телефона — по нему старые сообщения откроются на новом устройстве.',
-          'needs-unlock': 'Введите номер телефона, чтобы открыть старые сообщения на этом устройстве.',
-        }[state];
-  const isLegacyField = dialog === 'unlock' && legacy;
+  const lost = state === 'needs-unlock';
+  const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_LENGTH);
 
   return (
     <Card solid className="settings-card">
-      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Восстановление переписки</h2>
-      <p className="settings-card__text">{text}</p>
-      {state === 'needs-setup' && <Button variant="primary" onClick={() => setDialog('setup')}>Указать номер</Button>}
-      {state === 'needs-unlock' && <Button variant="primary" onClick={() => setDialog('unlock')}>Ввести номер</Button>}
-      {state === 'ok' && mask && <Button variant="secondary" onClick={() => setDialog('change')}>Сменить номер</Button>}
-      {state === 'ok' && !mask && <Button variant="primary" onClick={() => setDialog('change')}>Перевести на номер телефона</Button>}
+      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Вход по номеру и PIN</h2>
+      <p className="settings-card__text">
+        Как у всех: номер телефона и PIN из {PIN_LENGTH} цифр. Пароль и секретная фраза больше не понадобятся,
+        переписка откроется на любом устройстве по номеру и PIN.
+      </p>
+      {lost && (
+        <p className="settings-card__text">
+          На этом устройстве старые сообщения закрыты. Если перейти отсюда, они пропадут. Лучше сделать это там, где переписка открыта.
+        </p>
+      )}
+      <Button variant="primary" disabled={state === 'checking' || state === 'unavailable'} onClick={() => setOpen(true)}>
+        Перейти на номер и PIN
+      </Button>
 
-      <Modal
-        open={dialog !== null}
-        onClose={close}
-        title={dialog === 'setup' ? 'Номер для восстановления' : dialog === 'change' ? (mask ? 'Сменить номер' : 'Перевести на номер телефона') : 'Открыть старые сообщения'}
-      >
-        <form className="stack" onSubmit={submit}>
-          {dialog === 'setup' && (
-            <Field
-              label="Пароль от входа"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              error={errors.password ?? null}
-              onChange={(e) => setPassword(e.target.value)}
-              hint="Нужен, чтобы защитить вашу переписку"
-            />
-          )}
-          {dialog === 'change' && <p>Прежний номер или фраза перестанут работать.</p>}
-          <Field
-            label={isLegacyField ? 'Старая секретная фраза' : 'Номер телефона'}
-            name="phone"
-            type={isLegacyField ? 'password' : 'tel'}
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            value={phone}
-            error={errors.phone ?? null}
-            hint={errors.phone || isLegacyField ? undefined : 'Например, +7 900 123-45-67. Он понадобится, чтобы открыть старые сообщения'}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          {dialog === 'unlock' && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setLegacy((v) => !v);
-                setPhone('');
-                setErrors({});
-              }}
-            >
-              {legacy ? 'Ввести номер телефона' : 'У меня старая секретная фраза'}
-            </Button>
-          )}
-          {errors.form && <p className="rl-hint rl-hint--error" role="alert">{errors.form}</p>}
-          <Button type="submit" variant="primary" size="lg" block busy={busy}>
-            {dialog === 'unlock' ? 'Подтвердить' : 'Сохранить'}
-          </Button>
+      <Modal open={open} onClose={close} title="Вход по номеру и PIN">
+        <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
+          <Field label="Текущий пароль" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} />
+          <Field label="Номер телефона" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+7 900 123-45-67" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={busy} />
+          <Field label="Новый PIN" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_LENGTH} autoComplete="off" className="pin-input" hint={`Ровно ${PIN_LENGTH} цифр. Запомните его`} value={pin} onChange={(e) => setPin(digits(e.target.value))} disabled={busy} />
+          <Field label="PIN ещё раз" name="pin2" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_LENGTH} autoComplete="off" className="pin-input" value={pin2} onChange={(e) => setPin2(digits(e.target.value))} disabled={busy} />
+          {lost && <p className="rl-hint rl-hint--error">Старые сообщения на этом устройстве пропадут.</p>}
+          {error && <p className="rl-hint rl-hint--error" role="alert">{error}</p>}
+          <Button type="submit" variant="primary" size="lg" block busy={busy}>Перейти</Button>
         </form>
       </Modal>
     </Card>
@@ -479,7 +409,7 @@ export function Settings() {
         {pin && <PhoneSection />}
         {!pin && (
           <>
-            <SecuritySection />
+            <SwitchToPinSection />
             <PasswordSection />
           </>
         )}
@@ -501,7 +431,7 @@ export function Settings() {
           </>
         }
       >
-        <p>{pin ? 'Чтобы войти снова, понадобится PIN.' : 'Если номер для восстановления не указан, старые сообщения на этом телефоне могут пропасть.'}</p>
+        <p>{pin ? 'Чтобы войти снова, понадобится PIN.' : 'Чтобы войти снова, понадобится пароль.'}</p>
       </Modal>
     </section>
   );

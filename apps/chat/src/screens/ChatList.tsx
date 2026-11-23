@@ -223,10 +223,8 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
     ? 'Старые сообщения не открылись'
     : pin
       ? 'Нужно заново ввести PIN'
-      : security === 'needs-setup'
-        ? 'Укажите номер телефона'
-        : 'Старые сообщения закрыты';
-  const recoveryCta = unlock.silent ? 'Повторить' : pin ? 'Ввести' : security === 'needs-setup' ? 'Настроить' : 'Ввести';
+      : 'Включите вход по номеру';
+  const recoveryCta = unlock.silent ? 'Повторить' : pin ? 'Ввести' : 'Настроить';
 
   const q = query.trim().toLocaleLowerCase('ru');
   const shown = useMemo(() => (q ? rooms.filter((s) => s.room.name.toLocaleLowerCase('ru').includes(q)) : rooms), [rooms, q]);

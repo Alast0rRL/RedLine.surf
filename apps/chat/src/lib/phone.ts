@@ -10,7 +10,7 @@ import { ACCOUNT_DELETED, isPersonalLink, pinPassword, type PersonalLink } from 
 const PROOF_SALT = 'redline-phone-v1\n';
 const PROOF_ITERATIONS = 200_000;
 /** Токен регистрации после входа по номеру не нужен: аккаунт уже существует. */
-const NO_TOKEN = 'PhoneLogin000000';
+export const NO_TOKEN = 'PhoneLogin000000';
 
 export function normalizePhone(input: string): string | null {
   let d = input.replace(/\D/g, '');
@@ -115,6 +115,11 @@ export async function adminUnbindPhone(token: string, mxid: string): Promise<boo
 
 /** Проверка PIN: заходим с выведенным паролем и сразу закрываем этот лишний сеанс. */
 export async function verifyPin(link: PersonalLink, pin: string): Promise<void> {
+  await checkPassword(link.user, await pinPassword(link, pin), 'Неверный PIN');
+}
+
+/** Подходит ли пароль: пробный вход и сразу выход. Неверный пароль — ошибка с текстом wrong. */
+export async function checkPassword(user: string, password: string, wrong: string): Promise<void> {
   const { homeserverUrl } = await loadConfig();
   const base = homeserverUrl.replace(/\/+$/, '');
   let res: Response;
@@ -124,9 +129,9 @@ export async function verifyPin(link: PersonalLink, pin: string): Promise<void> 
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         type: 'm.login.password',
-        identifier: { type: 'm.id.user', user: link.user },
-        password: await pinPassword(link, pin),
-        initial_device_display_name: 'Redline: проверка PIN',
+        identifier: { type: 'm.id.user', user },
+        password,
+        initial_device_display_name: 'Redline: проверка входа',
       }),
     });
   } catch {
@@ -134,14 +139,14 @@ export async function verifyPin(link: PersonalLink, pin: string): Promise<void> 
   }
   if (res.status === 403) {
     const err = (await res.json().catch(() => null)) as { errcode?: string } | null;
-    throw new Error(err?.errcode === 'M_USER_DEACTIVATED' ? ACCOUNT_DELETED : 'Неверный PIN');
+    throw new Error(err?.errcode === 'M_USER_DEACTIVATED' ? ACCOUNT_DELETED : wrong);
   }
   if (res.status === 429) {
     const lim = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(lim?.error || 'Слишком много попыток входа. Попробуйте позже.');
   }
   const data = (await res.json().catch(() => null)) as { access_token?: string } | null;
-  if (!res.ok || !data?.access_token) throw new Error('Не удалось проверить PIN');
+  if (!res.ok || !data?.access_token) throw new Error('Не удалось проверить вход');
   await fetch(`${base}/_matrix/client/v3/logout`, {
     method: 'POST',
     headers: { authorization: `Bearer ${data.access_token}`, 'content-type': 'application/json' },

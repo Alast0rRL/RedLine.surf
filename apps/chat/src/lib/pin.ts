@@ -133,6 +133,9 @@ async function derive(link: PersonalLink, ...parts: string[]): Promise<string> {
 
 export const resetSecret = (link: PersonalLink) => derive(link, 'reset');
 
+/** Ключ переписки (хранилища секретов) этой ссылки. */
+export const storageSecret = (link: PersonalLink) => derive(link, 'storage');
+
 /** Пароль Matrix для этой ссылки и PIN. */
 export const pinPassword = (link: PersonalLink, pin: string) => derive(link, 'pin', pin);
 

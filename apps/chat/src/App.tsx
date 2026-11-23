@@ -87,7 +87,7 @@ function Onboarding() {
           <Button variant="primary" size="lg" data-rl-close>Понятно</Button>
         ) : (
           <>
-            <Button variant="primary" size="lg" onClick={() => done(true)}>Указать номер</Button>
+            <Button variant="primary" size="lg" onClick={() => done(true)}>Настроить</Button>
             <Button variant="ghost" size="lg" data-rl-close>Позже</Button>
           </>
         )
@@ -97,10 +97,10 @@ function Onboarding() {
         <p>Этот телефон запомнил вас — PIN больше спрашивать не будем.</p>
       ) : (
         <div className="onboarding">
-          <p>Укажите номер телефона для восстановления: по нему старые сообщения откроются на новом телефоне.</p>
+          <p>Перейдите на вход по номеру телефона и PIN: так переписка откроется на любом устройстве.</p>
           <ol>
-            <li>Укажите свой номер в настройках.</li>
-            <li>Он понадобится, если вы войдёте с нового телефона.</li>
+            <li>В настройках нажмите «Перейти на номер и PIN».</li>
+            <li>Пароль больше не понадобится.</li>
             <li>Номер никому не показывается.</li>
           </ol>
         </div>
