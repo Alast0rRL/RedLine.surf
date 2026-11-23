@@ -1,0 +1,14 @@
+.family-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rl-space-2);
+  min-height: 44px;
+  font-size: var(--rl-text-sm);
+  cursor: pointer;
+}
+.family-toggle input {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--rl-color-accent);
+}
+.family-toggle__spin { width: 1rem; height: 1rem; }
