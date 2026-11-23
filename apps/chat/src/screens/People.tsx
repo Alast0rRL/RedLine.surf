@@ -1,3 +1,4 @@
+import { RoomStateEvent } from 'matrix-js-sdk';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyError } from '../lib/account';
 import { deleteUser, findAdminRoom, listUsers, resetPassword, resetPin } from '../lib/admin';
@@ -9,6 +10,8 @@ import { useClient } from '../state/MatrixContext';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { QrCode } from '../components/QrCode';
 import { adminUnbindPhone } from '../lib/phone';
+import { getFamilyRoomId, isInFamily, setInFamily } from '../lib/family';
+import '../styles/people.css';
 
 const LOAD_TIMEOUT_MS = 15_000;
 
@@ -49,6 +52,10 @@ export function People() {
   const [deleteTarget, setDeleteTarget] = useState<Person | null>(null);
   const [logoutDevices, setLogoutDevices] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
+  const [familyId, setFamilyId] = useState<string | null>(null);
+  const [familyTick, setFamilyTick] = useState(0);
+  const [familyBusy, setFamilyBusy] = useState<Record<string, boolean>>({});
+  const [familyOpt, setFamilyOpt] = useState<Record<string, boolean>>({});
   const inflight = useRef<Promise<void> | null>(null);
   const alive = useRef(false);
 
@@ -106,6 +113,53 @@ export function People() {
       alive.current = false;
     };
   }, [client, retry]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getFamilyRoomId(client).then((id) => {
+      if (!cancelled) setFamilyId(id);
+    }).catch(() => undefined);
+    const onMembers = () => setFamilyTick((n) => n + 1);
+    client.on(RoomStateEvent.Members, onMembers);
+    return () => {
+      cancelled = true;
+      client.off(RoomStateEvent.Members, onMembers);
+    };
+  }, [client, retry]);
+
+  const familyChecked = (id: string): boolean => {
+    void familyTick;
+    return id in familyOpt ? familyOpt[id] : isInFamily(client, familyId, id);
+  };
+
+  const familyCount = (() => {
+    void familyTick;
+    if (!familyId) return 0;
+    const members = client.getRoom(familyId)?.getJoinedMembers() ?? [];
+    return members.filter((m) => !isBotUser(m.userId)).length;
+  })();
+
+  const toggleFamily = async (person: Person, value: boolean) => {
+    if (!adminRoom || familyBusy[person.id]) return;
+    setFamilyBusy((b) => ({ ...b, [person.id]: true }));
+    setFamilyOpt((o) => ({ ...o, [person.id]: value }));
+    try {
+      await setInFamily(client, adminRoom, person.id, value);
+      if (!familyId) setFamilyId(await getFamilyRoomId(client));
+    } catch (e) {
+      toast(friendlyError(e, value ? 'Не удалось добавить в семью' : 'Не удалось убрать из семьи'), { variant: 'error' });
+    } finally {
+      setFamilyOpt((o) => {
+        const { [person.id]: _drop, ...rest } = o;
+        return rest;
+      });
+      setFamilyBusy((b) => {
+        const { [person.id]: _drop, ...rest } = b;
+        return rest;
+      });
+      setFamilyTick((n) => n + 1);
+    }
+  };
 
   const reload = () => setRetry((n) => n + 1);
 
@@ -338,6 +392,7 @@ export function People() {
 
           <Card solid className="settings-card">
             <h2 className="settings-card__title"><Icon name="check" size={18} /> Люди</h2>
+            <p className="settings-card__text">Семья: {familyCount} человек</p>
             <ul className="people-list">
               {people.map((person) => {
                 const self = person.id === client.getUserId();
@@ -358,6 +413,24 @@ export function People() {
                       </span>
                       {!pinUser && <span className="people-row__meta">{person.id}</span>}
                     </span>
+                    {!bot && (
+                      self ? (
+                        <span className="people-row__meta">Вы в семье</span>
+                      ) : (
+                        <label className="family-toggle">
+                          {familyBusy[person.id] && <span className="rl-spinner family-toggle__spin" aria-hidden="true" />}
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            aria-checked={familyChecked(person.id)}
+                            checked={familyChecked(person.id)}
+                            disabled={!!familyBusy[person.id]}
+                            onChange={(e) => void toggleFamily(person, e.target.checked)}
+                          />
+                          <span>Семья</span>
+                        </label>
+                      )
+                    )}
                     {!self && !bot && (
                       <span className="people-row__actions">
                         {pinUser ? (
