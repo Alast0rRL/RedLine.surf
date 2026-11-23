@@ -282,6 +282,7 @@ export function Timeline({ client, room, onReply, onEdit, searchTarget = null }:
   // плавающая плашка дня: только во время прокрутки
   const [floatDay, setFloatDay] = useState<string | null>(null);
   const [floatOn, setFloatOn] = useState(false);
+  const [floatHide, setFloatHide] = useState(false);
   const floatTimer = useRef(0);
   const floatRaf = useRef(0);
   useEffect(() => () => {
@@ -293,6 +294,13 @@ export function Timeline({ client, room, onReply, onEdit, searchTarget = null }:
     floatRaf.current = requestAnimationFrame(() => {
       floatRaf.current = 0;
       const top = el.getBoundingClientRect().top;
+      // рядом с верхом уже виден inline-разделитель дня — плавающая плашка не нужна
+      let nearSep = false;
+      for (const s of el.querySelectorAll<HTMLElement>('.day-sep')) {
+        const r = s.getBoundingClientRect();
+        if (r.bottom > top && r.top < top + 44) { nearSep = true; break; }
+      }
+      setFloatHide(nearSep);
       const items = el.querySelectorAll<HTMLElement>('.msg[data-ts]');
       for (const it of items) {
         if (it.getBoundingClientRect().bottom > top + 4) {
@@ -303,7 +311,7 @@ export function Timeline({ client, room, onReply, onEdit, searchTarget = null }:
     });
     setFloatOn(true);
     clearTimeout(floatTimer.current);
-    floatTimer.current = window.setTimeout(() => setFloatOn(false), 1500);
+    floatTimer.current = window.setTimeout(() => setFloatOn(false), 700);
   };
 
   const onScroll = () => {
@@ -325,11 +333,12 @@ export function Timeline({ client, room, onReply, onEdit, searchTarget = null }:
     setUnseen(0);
   };
 
-  // последнее своё сообщение, прочитанное другими — для галочек
+  // самое новое событие, до которого кто-то другой дочитал: всё своё до него — прочитано
+  // (отметка собеседника стоит на его последнем сообщении, а не на нашем)
   const lastReadOwnIdx = (() => {
     for (let i = shown.length - 1; i >= 0; i--) {
       const e = shown[i];
-      if (e.getSender() === me && e.getId()?.startsWith('$') && isReadByOthers(room, e, me)) return i;
+      if (e.getId()?.startsWith('$') && isReadByOthers(room, e, me)) return i;
     }
     return -1;
   })();
@@ -387,7 +396,7 @@ export function Timeline({ client, room, onReply, onEdit, searchTarget = null }:
         <Uploads roomId={room.roomId} />
       </div>
     </div>
-    {floatDay && <div className={`day-float${floatOn ? ' is-on' : ''}`} aria-hidden="true"><span>{floatDay}</span></div>}
+    {floatDay && <div className={`day-float${floatOn && !floatHide ? ' is-on' : ''}`} aria-hidden="true"><span>{floatDay}</span></div>}
     {far && (
       <button type="button" className="jump-bottom" onClick={jumpToBottom} aria-label={unseen > 0 ? `Вниз, новых сообщений: ${unseen}` : 'Вниз'}>
         <Icon name="chevronUp" size={22} />

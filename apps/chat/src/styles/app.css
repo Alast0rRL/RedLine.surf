@@ -17,6 +17,7 @@
   --chat-composer: rgb(255 255 255 / 0.92);
   --chat-float: rgb(255 255 255 / 0.85);
   --chat-card: rgb(255 255 255 / 0.78);
+  --chat-solid: #fff;
   --chat-inset: var(--rl-gray-100);
   --chat-link-box: var(--rl-gray-100);
   --chat-accent-text: var(--rl-red-600);
@@ -56,6 +57,7 @@
   --chat-composer: rgb(var(--rl-ink-950-rgb) / 0.92);
   --chat-float: rgb(18 18 18 / 0.85);
   --chat-card: rgb(18 18 18 / 0.72);
+  --chat-solid: #1a1a1a;
   --chat-inset: rgb(0 0 0 / 0.4);
   --chat-link-box: rgb(0 0 0 / 0.3);
   --chat-accent-text: #ff6b7d;
@@ -695,7 +697,9 @@ a { color: inherit; }
 .profile__form { display: flex; flex-direction: column; align-items: flex-start; gap: var(--rl-space-3); flex: 1 1 14rem; min-width: 0; }
 .profile__form .rl-field { width: 100%; }
 .profile .profile__id { flex-basis: 100%; }
-.profile__id { color: var(--rl-color-text-muted); font-size: var(--rl-text-sm); overflow-wrap: anywhere; }
+.profile__id { min-width: 0; max-width: 100%; color: var(--rl-color-text-muted); font-size: var(--rl-text-sm); overflow-wrap: anywhere; word-break: break-all; }
+/* кольцо фокуса — только для клавиатуры */
+:focus:not(:focus-visible) { outline: none; }
 .settings-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--rl-space-3); }
 .settings-card > form { width: 100%; }
 .settings-card__title { display: flex; align-items: center; gap: var(--rl-space-2); margin: 0; font-size: var(--rl-text-sm); text-transform: uppercase; letter-spacing: var(--rl-tracking-widest); }
@@ -848,9 +852,9 @@ a { color: inherit; }
 .settings-card { padding: var(--rl-space-4); }
 @media (max-width: 599px) {
   .rl-avatar--xl { --_size: 6rem; }
-  .profile { flex-direction: column; align-items: center; }
+  .profile { flex-direction: column; flex-wrap: nowrap; align-items: center; }
   .profile__form { width: 100%; flex-basis: auto; }
-  .profile .profile__id { text-align: center; }
+  .profile .profile__id { flex-basis: auto; text-align: center; }
 }
 .settings-card > .rl-btn:only-child { align-self: stretch; }
 
@@ -878,3 +882,4 @@ a { color: inherit; }
 .onboarding h2 { margin: 0; font-size: var(--rl-text-xl); }
 .onboarding p, .onboarding ol { margin: 0; color: var(--rl-color-text-muted); line-height: var(--rl-leading-relaxed); }
 .onboarding ol { padding-left: 1.25rem; }
+[tabindex="-1"]:focus { outline: none; }

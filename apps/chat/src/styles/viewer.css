@@ -5,7 +5,7 @@
   z-index: var(--rl-z-lightbox);
   display: flex;
   flex-direction: column;
-  background: rgb(0 0 0 / calc(0.96 * var(--mv-fade, 1)));
+  background: rgb(0 0 0 / calc(0.94 * var(--mv-fade, 1)));
   color: #fff;
   overscroll-behavior: contain;
   animation: rl-fade-in var(--rl-duration-base) var(--rl-ease-standard);
@@ -38,8 +38,8 @@
   cursor: grab;
 }
 .mviewer__stage img {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   will-change: transform;
   -webkit-user-drag: none;

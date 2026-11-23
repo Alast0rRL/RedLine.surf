@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { avatarColor, closeModal, initials, openModal } from '@redline/ui';
+import { focusForInput } from '../lib/modality';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { useMediaUrl } from '../hooks/useMediaUrl';
 
@@ -145,7 +146,10 @@ export function Modal({
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) openModal(d);
+    if (open && !d.open) {
+      openModal(d);
+      focusForInput(d.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'), d);
+    }
     if (!open && d.open) void closeModal(d);
   }, [open]);
 
@@ -182,7 +186,7 @@ const ICONS = {
   pause: 'M7 4h4v16H7zM13 4h4v16h-4z',
   lock: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',
   check: 'M5 12l5 5L20 7',
-  checks: 'M2 12l5 5L17 7M12 16l1 1L23 7',
+  checks: 'M1 12.5l4.5 4.5L15 7.5M9.5 16.5l.5.5L22 7',
   clock: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
   alert: 'M12 8v5M12 16.5v.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',

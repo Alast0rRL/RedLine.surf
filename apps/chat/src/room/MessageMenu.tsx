@@ -4,6 +4,7 @@ import { KnownMembership, type MatrixClient, type MatrixEvent, type Room } from 
 import { Avatar, Button, Icon, Modal, toast } from '../components/ui';
 import { ExtraIcon } from '../components/extraIcons';
 import { useBackClose } from '../hooks/useBackClose';
+import { focusForInput } from '../lib/modality';
 import { downloadMedia, mediaOf } from '../lib/roomMedia';
 import { isDirectRoom } from '../hooks/useRoomList';
 import {
@@ -132,7 +133,7 @@ function MenuSheet({ client, room, ev, onClose, items }: MenuProps & { items: It
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+    focusForInput(ref.current?.querySelector<HTMLElement>('[role="menuitem"]'), ref.current);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -228,7 +229,7 @@ function MenuPopover({ client, room, ev, point, onClose, items }: MenuProps & { 
   }, [point.x, point.y]);
 
   useEffect(() => {
-    ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+    focusForInput(ref.current?.querySelector<HTMLElement>('[role="menuitem"]'), ref.current);
   }, []);
 
   useEffect(() => {
