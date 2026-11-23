@@ -29,7 +29,7 @@ function errorText(e: unknown): string {
   const err = e as { errcode?: string; httpStatus?: number; message?: string; data?: { error?: string } };
   if (err?.errcode === 'M_FORBIDDEN') return 'Неверный логин или пароль';
   if (err?.errcode === 'M_USER_DEACTIVATED') return 'Аккаунт отключён';
-  if (err?.errcode === 'M_LIMIT_EXCEEDED') return 'Слишком много попыток. Подождите немного';
+  if (err?.errcode === 'M_LIMIT_EXCEEDED') return err.data?.error || 'Слишком много попыток входа. Попробуйте позже.';
   if (err?.httpStatus === undefined && /fetch|network/i.test(String(err?.message))) return 'Нет связи с сервером';
   return err?.data?.error || err?.message || 'Неизвестная ошибка';
 }

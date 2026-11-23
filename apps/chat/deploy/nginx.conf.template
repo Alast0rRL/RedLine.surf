@@ -32,6 +32,17 @@ server {
         proxy_pass $phone_upstream;
     }
 
+    # вход по паролю: Caddy шлёт сюда только /login, шлюз считает неудачные попытки и пересылает на homeserver.
+    # Ответ предназначен другому origin, поэтому без CSP и security-заголовков; URI с query передаётся как есть
+    location ~ ^/_matrix/client/(r0|v3)/login$ {
+        client_max_body_size 8k;
+        set $push_upstream push:8080;
+        proxy_set_header X-Real-IP $rl_client_ip;
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header Host $host;
+        proxy_pass http://$push_upstream;
+    }
+
     # файлы с хешем в имени — навсегда
     location /assets/ {
         include /etc/nginx/redline-headers.conf;

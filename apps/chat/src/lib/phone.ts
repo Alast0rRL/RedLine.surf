@@ -127,7 +127,10 @@ export async function verifyPin(link: PersonalLink, pin: string): Promise<void> 
     throw new Error('Нет связи с сервером');
   }
   if (res.status === 403) throw new Error('Неверный PIN');
-  if (res.status === 429) throw new Error('Слишком много попыток. Подождите немного');
+  if (res.status === 429) {
+    const lim = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(lim?.error || 'Слишком много попыток входа. Попробуйте позже.');
+  }
   const data = (await res.json().catch(() => null)) as { access_token?: string } | null;
   if (!res.ok || !data?.access_token) throw new Error('Не удалось проверить PIN');
   await fetch(`${base}/_matrix/client/v3/logout`, {

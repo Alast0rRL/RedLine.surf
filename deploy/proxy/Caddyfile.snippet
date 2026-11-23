@@ -18,9 +18,16 @@ matrix.redline.surf:8443 {
     request_body {
         max_size 50MB
     }
-    reverse_proxy 127.0.0.1:8008 {
-        # long-poll /sync
-        flush_interval -1
+    # вход по паролю идёт через шлюз chat (ограничение перебора PIN), остальное напрямую
+    @login path_regexp login ^/_matrix/client/(r0|v3)/login$
+    handle @login {
+        reverse_proxy 127.0.0.1:8090
+    }
+    handle {
+        reverse_proxy 127.0.0.1:8008 {
+            # long-poll /sync
+            flush_interval -1
+        }
     }
 }
 

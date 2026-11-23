@@ -14,6 +14,7 @@
 import http from 'node:http';
 import * as webpush from 'web-push';
 import { createPhoneApi } from './phone.mjs';
+import { createLoginGuard } from './login-guard.mjs';
 
 const env = (name, fallback) => {
   const v = process.env[name] ?? fallback;
@@ -55,6 +56,11 @@ const log = (level, msg, extra = {}) =>
 
 const phoneApi = createPhoneApi({
   dbPath: process.env.PHONE_DB || '/data/phones.json',
+  homeserverUrl: (process.env.HOMESERVER_INTERNAL_URL || 'http://continuwuity:8008').replace(/\/+$/, ''),
+  log,
+});
+
+const loginGuard = createLoginGuard({
   homeserverUrl: (process.env.HOMESERVER_INTERNAL_URL || 'http://continuwuity:8008').replace(/\/+$/, ''),
   log,
 });
@@ -159,6 +165,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://gateway');
   if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true });
   if (await phoneApi(req, res, url)) return;
+  if (await loginGuard(req, res, url)) return;
   if (url.pathname !== '/_matrix/push/v1/notify') return send(res, 404, { errcode: 'M_UNRECOGNIZED' });
   if (req.method !== 'POST') return send(res, 405, { errcode: 'M_UNRECOGNIZED' });
   if (!PUSH_ENABLED) return send(res, 503, { errcode: 'M_UNKNOWN', error: 'push disabled' });
