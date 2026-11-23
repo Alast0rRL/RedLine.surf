@@ -8,6 +8,7 @@ export type Route =
   | { name: 'people' }
   | { name: 'user'; userId: string }
   | { name: 'room-info'; roomId: string }
+  | { name: 'room-media'; roomId: string }
   | { name: 'personal'; link: PersonalLink }
   | { name: 'old-invite' };
 
@@ -17,6 +18,8 @@ function parse(hash: string): Route {
   if (/^#?\/?invite\//.test(hash.trim())) return { name: 'old-invite' };
   const info = hash.match(/^#\/room\/([^/]+)\/info$/);
   if (info) return { name: 'room-info', roomId: decodeURIComponent(info[1]) };
+  const media = hash.match(/^#\/room\/([^/]+)\/media$/);
+  if (media) return { name: 'room-media', roomId: decodeURIComponent(media[1]) };
   const u = hash.match(/^#\/user\/([^/]+)$/);
   if (u) return { name: 'user', userId: decodeURIComponent(u[1]) };
   const m = hash.match(/^#\/room\/(.+)$/);
@@ -66,6 +69,10 @@ export const navigate = {
   },
   roomInfo: (roomId: string) => {
     history.pushState({ rlFromList: true }, '', `#/room/${encodeURIComponent(roomId)}/info`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  },
+  roomMedia: (roomId: string) => {
+    history.pushState({ rlFromList: true }, '', `#/room/${encodeURIComponent(roomId)}/media`);
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   },
   /** Назад из информации/профиля: шаг истории, иначе — запасной экран. */
