@@ -350,6 +350,7 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
                 reactions={reactions}
                 stamp={messageStamp(ev) + (readByOthers ? 'r' : '') + '|' + reactionsStamp(reactions)}
                 onMenu={openMenu}
+                onReply={onReply}
               />
             </Fragment>
           );

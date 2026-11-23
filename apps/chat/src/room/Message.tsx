@@ -8,6 +8,7 @@ import { navigate } from '../hooks/useHashRoute';
 import { canAct, toggleReaction, type ReactionSummary } from '../lib/messageActions';
 import { findRenderer, isBotStyled, isBotUser } from '../bots/registry';
 import { Avatar, Icon, toast } from '../components/ui';
+import { ExtraIcon } from '../components/extraIcons';
 import { FileMessage, VideoMessage } from './FileMessage';
 import { ImageMessage } from './ImageMessage';
 import type { MenuPoint } from './MessageMenu';
@@ -152,6 +153,8 @@ export interface MessageProps {
   reactions: ReactionSummary[];
   /** открыть меню действий (стабильная ссылка) */
   onMenu: (ev: MatrixEvent, point: MenuPoint) => void;
+  /** ответить на сообщение (свайп; стабильная ссылка) */
+  onReply: (ev: MatrixEvent) => void;
 }
 
 export function messageStamp(ev: MatrixEvent): string {
@@ -160,16 +163,22 @@ export function messageStamp(ev: MatrixEvent): string {
 
 const LONG_PRESS_MS = 450;
 const MOVE_TOLERANCE = 10;
+/** Свайп влево: после 10px выбираем направление; ответ — от 64px. */
+const SWIPE_LOCK_PX = 10;
+const SWIPE_REPLY_PX = 64;
+const SWIPE_EDGE_PX = 24;
+/** Сопротивление: сначала почти 1:1, дальше пружинит. */
+const swipeShift = (d: number) => (d <= SWIPE_REPLY_PX ? d * 0.8 : Math.min(84, SWIPE_REPLY_PX * 0.8 + (d - SWIPE_REPLY_PX) * 0.15));
 
 function sameMessage(a: MessageProps, b: MessageProps): boolean {
   return (
     a.stamp === b.stamp && a.ev === b.ev && a.own === b.own && a.first === b.first && a.last === b.last &&
     a.showSenderName === b.showSenderName && a.readByOthers === b.readByOthers && a.client === b.client &&
-    a.room === b.room && a.onMenu === b.onMenu
+    a.room === b.room && a.onMenu === b.onMenu && a.onReply === b.onReply
   );
 }
 
-export const Message = memo(function Message({ client, room, ev, own, first, last, showSenderName, readByOthers, reactions, onMenu }: MessageProps) {
+export const Message = memo(function Message({ client, room, ev, own, first, last, showSenderName, readByOthers, reactions, onMenu, onReply }: MessageProps) {
   const bot = !own && isBotStyled(ev);
   const pin = isPinUser(client.getUserId());
   const sender = ev.sender;
@@ -198,11 +207,76 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
     lastOpen.current = Date.now();
     onMenu(ev, { x, y });
   };
+  // свайп влево = ответить (touch/pen)
+  const colRef = useRef<HTMLDivElement>(null);
+  const arrowRef = useRef<HTMLSpanElement>(null);
+  const swipe = useRef<{ x: number; y: number; mode: 'idle' | 'h'; id: number } | null>(null);
+  const resetSwipe = (animate: boolean) => {
+    swipe.current = null;
+    const col = colRef.current;
+    const arrow = arrowRef.current;
+    if (col) {
+      col.style.transition = animate ? 'transform 0.2s ease-out' : '';
+      col.style.transform = '';
+    }
+    if (arrow) {
+      arrow.style.opacity = '0';
+      arrow.classList.remove('is-armed');
+    }
+  };
+  const onSwipeMove = (e: RPointerEvent) => {
+    const s = swipe.current;
+    if (!s || e.pointerId !== s.id) return;
+    const dx = e.clientX - s.x;
+    const dy = e.clientY - s.y;
+    if (s.mode === 'idle') {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_LOCK_PX) return;
+      if (-dx > Math.abs(dy) * 1.2) {
+        s.mode = 'h';
+        cancelPress();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* указатель уже отпущен */
+        }
+      } else {
+        swipe.current = null; // вертикальная прокрутка или свайп вправо — не наш жест
+        return;
+      }
+    }
+    const d = Math.max(0, -dx);
+    const col = colRef.current;
+    const arrow = arrowRef.current;
+    if (col) {
+      col.style.transition = '';
+      col.style.transform = `translateX(${-swipeShift(d)}px)`;
+    }
+    if (arrow) {
+      arrow.style.opacity = String(Math.min(1, d / (SWIPE_REPLY_PX * 0.7)));
+      arrow.classList.toggle('is-armed', d >= SWIPE_REPLY_PX);
+    }
+  };
+  const onSwipeEnd = (e: RPointerEvent, cancelled: boolean) => {
+    const s = swipe.current;
+    if (!s || e.pointerId !== s.id) return;
+    const fire = s.mode === 'h' && !cancelled && s.x - e.clientX >= SWIPE_REPLY_PX;
+    if (s.mode === 'h') lastOpen.current = Date.now(); // клик после жеста не должен открыть фото/ссылку
+    resetSwipe(true);
+    if (fire) {
+      navigator.vibrate?.(10);
+      onReply(ev);
+    }
+  };
   const onPointerDown = (e: RPointerEvent) => {
     if (!actionable || e.pointerType === 'mouse' || !e.isPrimary) return;
     cancelPress();
     const x = e.clientX;
     const y = e.clientY;
+    const tgt = e.target as HTMLElement;
+    // у самого края — жест «назад»; ползунки и плееры сами едут по горизонтали
+    swipe.current = x > SWIPE_EDGE_PX && !tgt.closest('input, video, audio, .voice__wave, pre, table')
+      ? { x, y, mode: 'idle', id: e.pointerId }
+      : null;
     press.current = {
       x,
       y,
@@ -214,6 +288,7 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
     };
   };
   const onPointerMove = (e: RPointerEvent) => {
+    onSwipeMove(e);
     const p = press.current;
     if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > MOVE_TOLERANCE) cancelPress();
   };
@@ -254,13 +329,20 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
           )}
         </div>
       )}
-      <div className="msg__col">
+      <span ref={arrowRef} className="msg__swipe" aria-hidden="true"><ExtraIcon name="reply" size={18} /></span>
+      <div className="msg__col" ref={colRef}>
         <div
           className={`bubble${isMedia ? ' bubble--media' : ''}${isAudio ? ' bubble--audio' : ''}${isFile ? ' bubble--file' : ''}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerUp={cancelPress}
-          onPointerCancel={cancelPress}
+          onPointerUp={(e) => {
+            cancelPress();
+            onSwipeEnd(e, false);
+          }}
+          onPointerCancel={(e) => {
+            cancelPress();
+            onSwipeEnd(e, true);
+          }}
           onPointerLeave={cancelPress}
           onContextMenu={onContextMenu}
           onClickCapture={onClickCapture}
