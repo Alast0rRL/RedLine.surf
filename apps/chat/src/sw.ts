@@ -41,6 +41,13 @@ function describe(p: PushPayload): string {
   }
 }
 
+function plural(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  const word = m10 === 1 && m100 !== 11 ? 'новое сообщение' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'новых сообщения' : 'новых сообщений';
+  return `${n} ${word}`;
+}
+
 self.addEventListener('push', (event) => {
   let p: PushPayload = {};
   try {
@@ -66,13 +73,17 @@ self.addEventListener('push', (event) => {
 
       const isGroup = p.room_name && p.sender_display_name && p.room_name !== p.sender_display_name;
       const title = (isGroup ? p.room_name : p.sender_display_name || p.room_name) || 'Redline';
-      const body = isGroup ? `${p.sender_display_name}: ${describe(p)}` : describe(p);
+      const preview = isGroup ? `${p.sender_display_name}: ${describe(p)}` : describe(p);
+      // несколько сообщений в одну комнату, пока её не открыли: «N новых сообщений» + последнее
+      const previous = p.room_id ? await self.registration.getNotifications({ tag: p.room_id }) : [];
+      const count = previous.length ? ((previous[0].data as { count?: number } | null)?.count ?? 1) + 1 : 1;
+      const body = count > 1 ? `${plural(count)} · ${preview}` : preview;
       await self.registration.showNotification(title, {
         body,
         tag: p.room_id,
         icon: '/icons/icon-192.png',
         badge: '/icons/badge-96.png',
-        data: { room_id: p.room_id },
+        data: { room_id: p.room_id, count },
         // renotify есть в браузерах, но не в типах TS
         ...({ renotify: true } as object),
       });
@@ -85,12 +96,18 @@ self.addEventListener('notificationclick', (event) => {
   const roomId: string | undefined = event.notification.data?.room_id;
   event.waitUntil(
     (async () => {
-      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      const win = windows[0];
+      const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      // только окна нашего приложения; предпочитаем то, что в фокусе, затем видимое
+      const windows = all.filter((w) => w.url.startsWith(self.location.origin));
+      const win = windows.find((w) => w.focused) ?? windows.find((w) => w.visibilityState === 'visible') ?? windows[0];
       if (win) {
-        await win.focus();
-        if (roomId) win.postMessage({ type: 'open-room', roomId });
-        return;
+        try {
+          await win.focus();
+          if (roomId) win.postMessage({ type: 'open-room', roomId });
+          return;
+        } catch {
+          /* окно не удалось поднять — откроем новое */
+        }
       }
       await self.clients.openWindow(roomId ? `/#/room/${encodeURIComponent(roomId)}` : '/');
     })(),

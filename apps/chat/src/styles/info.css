@@ -37,7 +37,7 @@
 
 /* закрепление / без звука в строке */
 .chat-row__icons { display: inline-flex; align-items: center; gap: 4px; color: var(--rl-color-text-subtle); }
-.rl-badge--muted { background: rgb(var(--chat-tint-rgb) / 0.22); color: var(--rl-color-text-muted); }
+.rl-badge--muted { background: rgb(var(--chat-tint-rgb) / 0.22); color: var(--rl-color-text); }
 .chat-row { user-select: none; -webkit-touch-callout: none; }
 
 /* контекстное меню */

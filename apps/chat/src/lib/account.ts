@@ -37,7 +37,8 @@ function flowsOf(err: Failure): { stages?: string[] }[] | undefined {
 
 function messageOf(e: unknown, fallback: string): string {
   const err = failure(e);
-  return err.data?.error || err.message || fallback;
+  console.warn('Ответ сервера:', err.data?.error || err.message);
+  return fallback;
 }
 
 /** Имя из дисплейного имени: кириллица → латиница, всё лишнее выкидываем. */
@@ -59,7 +60,7 @@ export function slugUsername(displayName: string): string {
 }
 
 export function passwordProblem(v: string): string | null {
-  if (v.length < MIN_PASSWORD) return `Пароль короче ${MIN_PASSWORD} символов`;
+  if (v.length < MIN_PASSWORD) return `Пароль слишком короткий: нужно хотя бы ${MIN_PASSWORD} символов`;
   return null;
 }
 
@@ -67,7 +68,7 @@ export function passwordProblem(v: string): string | null {
 export async function checkInvite(baseUrl: string, token: string): Promise<boolean> {
   const url = `${baseUrl}/_matrix/client/v1/register/m.login.registration_token/validity?token=${encodeURIComponent(token)}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Проверка приглашения: HTTP ${res.status}`);
+  if (!res.ok) throw new Error('Нет связи с сервером. Проверьте интернет и попробуйте ещё раз');
   const data = (await res.json()) as { valid?: unknown };
   return data.valid === true;
 }
@@ -77,21 +78,21 @@ export async function registerWithInvite(
   baseUrl: string,
   { token, username, password }: { token: string; username: string; password: string },
 ): Promise<StoredSession> {
-  const invalidInvite = () => new Error('Приглашение уже использовано или отозвано');
+  const invalidInvite = () => new Error('Приглашение уже использовано или отозвано. Попросите новое');
   if (!(await checkInvite(baseUrl, token))) throw invalidInvite();
 
   const client = createClient({ baseUrl });
   try {
-    if (!(await client.isUsernameAvailable(username))) throw new Error('Этот логин уже занят');
+    if (!(await client.isUsernameAvailable(username))) throw new Error('Этот логин уже занят. Выберите другой');
   } catch (e) {
-    if (failure(e).errcode === 'M_INVALID_USERNAME') throw new Error('Такой логин не подходит');
+    if (failure(e).errcode === 'M_INVALID_USERNAME') throw new Error('Такой логин не подходит. Используйте латинские буквы и цифры');
     throw e;
   }
 
   let session: string;
   try {
     await client.registerRequest({ username, password });
-    throw new Error('Сервер не запросил токен приглашения');
+    throw new Error('Не получилось зарегистрироваться. Попробуйте ещё раз чуть позже');
   } catch (e) {
     const err = failure(e);
     if (statusOf(err) === 403) throw invalidInvite();
@@ -113,13 +114,13 @@ export async function registerWithInvite(
     const err = failure(e);
     // токен списан до проверки имени: логин заняли между проверкой и регистрацией
     if (err.errcode === 'M_USER_IN_USE') throw new Error('Логин только что заняли. Попросите новое приглашение');
-    if (err.errcode === 'M_INVALID_USERNAME') throw new Error('Такой логин не подходит');
+    if (err.errcode === 'M_INVALID_USERNAME') throw new Error('Такой логин не подходит. Используйте латинские буквы и цифры');
     if (statusOf(err) === 401 || statusOf(err) === 403 || err.errcode === 'M_FORBIDDEN' || /token/i.test(err.errcode ?? '')) {
       throw invalidInvite();
     }
-    throw new Error(messageOf(e, 'Не удалось зарегистрироваться'));
+    throw new Error(messageOf(e, 'Не получилось зарегистрироваться. Попробуйте ещё раз'));
   }
-  if (!result.access_token || !result.device_id) throw new Error('Не удалось зарегистрироваться');
+  if (!result.access_token || !result.device_id) throw new Error('Не получилось зарегистрироваться. Попробуйте ещё раз');
 
   const saved: StoredSession = {
     baseUrl,
@@ -139,12 +140,12 @@ export async function changePassword(
   logoutOthers: boolean,
 ): Promise<void> {
   const userId = client.getUserId();
-  if (!userId) throw new Error('Не удалось определить пользователя');
+  if (!userId) throw new Error('Не получилось определить, кто вы. Выйдите и войдите заново');
 
   let session: string;
   try {
     await client.setPassword(undefined as never, next, logoutOthers);
-    throw new Error('Сервер не запросил текущий пароль');
+    throw new Error('Не получилось сменить пароль. Попробуйте ещё раз');
   } catch (e) {
     const err = failure(e);
     const uiaSession = sessionOf(err);
@@ -165,7 +166,23 @@ export async function changePassword(
     );
   } catch (e) {
     const err = failure(e);
-    if (statusOf(err) === 401 || statusOf(err) === 403) throw new Error('Неверный текущий пароль');
+    if (statusOf(err) === 401 || statusOf(err) === 403) throw new Error('Текущий пароль не подошёл. Проверьте, нет ли опечаток');
     throw e;
   }
+}
+
+/**
+ * Текст ошибки для человека: наши русские сообщения показываем как есть,
+ * сетевые сбои и английские ответы сервера заменяем понятной фразой.
+ */
+export function friendlyError(e: unknown, fallback: string): string {
+  const err = e as { name?: string; message?: string } | null;
+  const message = err?.message ?? '';
+  if (/[А-Яа-яЁё]/.test(message)) return message;
+  if (message) console.warn('Ошибка:', e);
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  if (offline || err?.name === 'ConnectionError' || /network|fetch|failed to|timeout|ECONN/i.test(message)) {
+    return 'Нет связи. Проверьте интернет и попробуйте ещё раз';
+  }
+  return fallback;
 }

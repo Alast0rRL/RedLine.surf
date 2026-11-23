@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { friendlyError } from '../lib/account';
 import { EventType, Preset, Visibility, type MatrixClient } from 'matrix-js-sdk';
 import { getConfig } from '../config';
 import { isPinUser } from '../lib/pin';
@@ -138,7 +139,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
       reset();
       navigate.room(roomId);
     } catch (err) {
-      setError(pin ? 'Не удалось создать чат' : (err as Error).message || 'Не удалось создать чат');
+      setError(pin ? 'Не удалось создать чат. Попробуйте ещё раз' : friendlyError(err, 'Не удалось создать чат. Попробуйте ещё раз'));
       setBusy(false);
     }
   };

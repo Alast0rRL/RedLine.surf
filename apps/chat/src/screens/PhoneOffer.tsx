@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { friendlyError } from '../lib/account';
 import { bindPhone, normalizePhone } from '../lib/phone';
 import type { PersonalLink } from '../lib/pin';
 import { Button, Field, RedLines, toast } from '../components/ui';
@@ -29,7 +30,7 @@ export function PhoneOffer({ offer, onClose }: { offer: PhoneOfferData; onClose:
       toast('Номер привязан');
       onClose();
     } catch (err) {
-      setError((err as Error).message || 'Не удалось привязать номер');
+      setError(friendlyError(err, 'Не удалось привязать номер'));
       setBusy(false);
     }
   };

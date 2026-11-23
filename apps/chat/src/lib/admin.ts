@@ -40,7 +40,7 @@ interface AdminReply {
 }
 
 async function sendAndWait(client: MatrixClient, roomId: string, command: string): Promise<AdminReply> {
-  if (/[\r\n]/.test(command)) throw new Error('Команда не должна содержать переводы строк');
+  if (/[\r\n]/.test(command)) throw new Error('Не удалось выполнить действие. Проверьте введённые данные');
   const sent = await client.sendMessage(roomId, { msgtype: MsgType.Text, body: command });
   const deadline = Date.now() + COMMAND_TIMEOUT_MS;
   for (;;) {
@@ -53,7 +53,7 @@ async function sendAndWait(client: MatrixClient, roomId: string, command: string
     if (Date.now() >= deadline) break;
     await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
-  throw new Error('Сервер не ответил на команду');
+  throw new Error('Сервер не ответил. Проверьте интернет и попробуйте ещё раз');
 }
 
 /** Комната администраторов ищется только по алиасу, не по названию. */
@@ -85,7 +85,10 @@ export function runAdminCommand(client: MatrixClient, roomId: string, command: s
 /** Список локальных пользователей из ответа `!admin users list`. */
 export async function listUsers(client: MatrixClient, roomId: string): Promise<string[]> {
   const { body } = await runAdminCommand(client, roomId, '!admin users list');
-  if (!body.startsWith('Found ')) throw new Error('Не удалось получить список пользователей');
+  if (!body.startsWith('Found ')) {
+    console.warn('admin users list: неожиданный ответ сервера', body);
+    throw new Error('Не удалось получить список людей. Попробуйте ещё раз чуть позже');
+  }
   const serverName = getConfig().serverName;
   const line = new RegExp(`^@[a-z0-9._=/+-]+:${escapeRegExp(serverName)}$`);
   return body
@@ -103,16 +106,19 @@ export async function resetPassword(
 ): Promise<string> {
   const serverName = getConfig().serverName;
   const suffix = `:${serverName}`;
-  if (!userId.endsWith(suffix)) throw new Error('Пользователь не на этом сервере');
+  if (!userId.endsWith(suffix)) throw new Error('Этот человек не зарегистрирован в Redline');
   const localpart = userId.slice(0, -suffix.length).replace(/^@/, '');
   if (!/^[a-z0-9._=-]+$/.test(localpart) || localpart.startsWith('-')) {
-    throw new Error('Некорректный логин пользователя');
+    throw new Error('Логин написан неверно. Используйте латинские буквы и цифры');
   }
 
   const command = `!admin users reset-password ${logoutDevices ? '--logout ' : ''}${localpart}`;
   const reply = await runAdminCommand(client, roomId, command);
   const match = /Successfully reset the password for user @[^\s:]+:[^\s:]+:\s*`([^`]+)`/.exec(reply.body);
-  if (!match) throw new Error('Не удалось сбросить пароль');
+  if (!match) {
+    console.warn('admin reset-password: неожиданный ответ сервера', reply.body);
+    throw new Error('Не удалось сбросить пароль. Попробуйте ещё раз');
+  }
 
   try {
     await client.redactEvent(roomId, reply.eventId);
@@ -125,7 +131,7 @@ export async function resetPassword(
 
 /** Сброс PIN: временный пароль в команде и ответ скрываем сразу после ответа. */
 export async function resetPin(client: MatrixClient, room: string, link: PersonalLink): Promise<void> {
-  if (!isPersonalLink(link)) throw new Error('Некорректная личная ссылка');
+  if (!isPersonalLink(link)) throw new Error('Личная ссылка не подходит. Создайте новую');
   const secret = await resetSecret(link);
   const reply = await runAdminCommand(client, room, `!admin users reset-password --logout ${link.user} ${secret}`);
   const redactions = await Promise.allSettled([
@@ -133,7 +139,10 @@ export async function resetPin(client: MatrixClient, room: string, link: Persona
     client.redactEvent(room, reply.eventId),
   ]);
   if (redactions.some((r) => r.status === 'rejected')) console.warn('Не удалось скрыть события сброса PIN');
-  if (!reply.body.trim().startsWith('Successfully reset the password for user')) throw new Error('Не удалось сбросить PIN');
+  if (!reply.body.trim().startsWith('Successfully reset the password for user')) {
+    console.warn('admin reset PIN: неожиданный ответ сервера', reply.body);
+    throw new Error('Не удалось сбросить PIN. Попробуйте ещё раз');
+  }
 }
 
 /** Удаление человека: Continuwuity отключает аккаунт и выводит его из всех комнат. */
@@ -141,12 +150,12 @@ export async function deleteUser(client: MatrixClient, roomId: string, localpart
   const serverName = getConfig().serverName;
   const suffix = `:${serverName}`;
   const raw = localpartOrMxid.trim();
-  if (raw.includes(':') && !raw.endsWith(suffix)) throw new Error('Пользователь не на этом сервере');
+  if (raw.includes(':') && !raw.endsWith(suffix)) throw new Error('Этот человек не зарегистрирован в Redline');
   const localpart = (raw.endsWith(suffix) ? raw.slice(0, -suffix.length) : raw).replace(/^@/, '').toLowerCase();
-  if (!/^[a-z0-9._=-]+$/.test(localpart) || localpart.startsWith('-')) throw new Error('Некорректный логин пользователя');
+  if (!/^[a-z0-9._=-]+$/.test(localpart) || localpart.startsWith('-')) throw new Error('Логин написан неверно. Используйте латинские буквы и цифры');
   const own = client.getUserId()?.replace(/^@/, '').split(':')[0].toLowerCase();
-  if (localpart === own) throw new Error('Нельзя удалить самого себя');
-  if (localpart === 'admin' || localpart === 'conduit') throw new Error('Нельзя удалить администратора сервера');
+  if (localpart === own) throw new Error('Себя удалить нельзя');
+  if (localpart === 'admin' || localpart === 'conduit') throw new Error('Этого человека удалить нельзя');
 
   const reply = await runAdminCommand(client, roomId, `!admin users deactivate @${localpart}${suffix}`);
   if (!/deactivated/i.test(reply.body)) {
