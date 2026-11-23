@@ -11,7 +11,7 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { isMessageLike } from '../lib/events';
-import { isRoomLeaving, isRoomMuted, isRoomPinned } from '../lib/rooms';
+import { isRoomLeaving, isRoomPinned, roomMutedChecker } from '../lib/rooms';
 import { onOptimistic } from '../lib/optimistic';
 import { useThrottledVersion } from './useThrottledVersion';
 
@@ -34,10 +34,15 @@ function lastMessage(room: Room): MatrixEvent | null {
   return null;
 }
 
-/** Личный чат: помечен в m.direct или в комнате ровно двое и у неё нет имени. */
-export function isDirectRoom(client: MatrixClient, room: Room): boolean {
+/** Все комнаты из m.direct одним множеством. */
+function directRoomIds(client: MatrixClient): Set<string> {
   const direct = client.getAccountData(EventType.Direct)?.getContent<Record<string, string[]>>() ?? {};
-  if (Object.values(direct).some((ids) => ids.includes(room.roomId))) return true;
+  return new Set(Object.values(direct).flat());
+}
+
+/** Личный чат: помечен в m.direct или в комнате ровно двое и у неё нет имени. */
+export function isDirectRoom(client: MatrixClient, room: Room, directIds: Set<string> = directRoomIds(client)): boolean {
+  if (directIds.has(room.roomId)) return true;
   return room.getJoinedMemberCount() + room.getInvitedMemberCount() <= 2 && !room.currentState.getStateEvents('m.room.name', '');
 }
 
@@ -69,6 +74,8 @@ export function useRoomList(client: MatrixClient) {
   return useMemo(() => {
     const joined: RoomSummary[] = [];
     const invites: Room[] = [];
+    const directIds = directRoomIds(client);
+    const isMuted = roomMutedChecker(client);
     for (const room of client.getVisibleRooms()) {
       const membership = room.getMyMembership();
       if (membership === KnownMembership.Invite) {
@@ -83,9 +90,9 @@ export function useRoomList(client: MatrixClient) {
         lastTs: lastEvent?.getTs() ?? room.getLastActiveTimestamp() ?? 0,
         unread: room.getUnreadNotificationCount(NotificationCountType.Total),
         highlight: room.getUnreadNotificationCount(NotificationCountType.Highlight),
-        isDm: isDirectRoom(client, room),
+        isDm: isDirectRoom(client, room, directIds),
         pinned: isRoomPinned(room),
-        muted: isRoomMuted(client, room.roomId),
+        muted: isMuted(room.roomId),
       });
     }
     joined.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastTs - a.lastTs);

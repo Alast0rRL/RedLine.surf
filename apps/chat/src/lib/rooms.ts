@@ -21,6 +21,18 @@ export function isRoomMuted(client: MatrixClient, roomId: string): boolean {
   return mutedOverride.get(roomId) ?? serverMuted(client, roomId);
 }
 
+/**
+ * Проверка «выключены ли уведомления» для списка комнат: правила читаются один раз,
+ * а не поиском по всем правилам на каждую комнату.
+ */
+export function roomMutedChecker(client: MatrixClient): (roomId: string) => boolean {
+  const muted = new Set<string>();
+  for (const rule of client.pushRules?.global?.room ?? []) {
+    if (rule.enabled && (rule.actions.length === 0 || (rule.actions as unknown[]).includes('dont_notify'))) muted.add(rule.rule_id);
+  }
+  return (roomId) => mutedOverride.get(roomId) ?? muted.has(roomId);
+}
+
 export function setRoomMuted(client: MatrixClient, roomId: string, mute: boolean): Promise<void> {
   if (isRoomMuted(client, roomId) === mute) return Promise.resolve();
   mutedOverride.set(roomId, mute);
