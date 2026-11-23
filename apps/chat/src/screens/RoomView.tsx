@@ -12,6 +12,7 @@ import { RoomSearch, type SearchTarget } from '../room/RoomSearch';
 import { ExtraIcon } from '../components/extraIcons';
 import { Composer, type ComposerContext } from '../room/Composer';
 import { roomAvatarMxc } from './ChatList';
+import { useTabIcon } from '../hooks/useTabIcon';
 import '../styles/info.css';
 
 function useTyping(client: MatrixClient, room: Room | null): string[] {
@@ -91,7 +92,15 @@ export function RoomView({ roomId }: { roomId: string }) {
     };
   }, [client, roomId]);
 
-  if (!room || room.getMyMembership() !== KnownMembership.Join) {
+  const joined = !!room && room.getMyMembership() === KnownMembership.Join;
+  const tabDm = joined && isDirectRoom(client, room);
+  useTabIcon(
+    joined
+      ? { name: room.name, seed: (tabDm && room.getAvatarFallbackMember()?.userId) || room.roomId, mxc: roomAvatarMxc(room, tabDm) }
+      : null,
+  );
+
+  if (!room || !joined) {
     return (
       <section className="pane pane--room pane--chat">
         <header className="topbar">
