@@ -153,6 +153,15 @@ export function roomPower(client: MatrixClient, room: Room): RoomPower {
   };
 }
 
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+}
+
+export const pluralPeople = (n: number): string => `${n} ${plural(n, 'человек', 'человека', 'человек')}`;
+
 export function pluralMembers(n: number): string {
   const word = n % 10 === 1 && n % 100 !== 11 ? 'участник' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'участника' : 'участников';
   return `${n} ${word}`;

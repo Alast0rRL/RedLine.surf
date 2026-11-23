@@ -1,3 +1,4 @@
+import { pluralPeople } from '../lib/rooms';
 import { RoomStateEvent } from 'matrix-js-sdk';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyError } from '../lib/account';
@@ -392,7 +393,7 @@ export function People() {
 
           <Card solid className="settings-card">
             <h2 className="settings-card__title"><Icon name="check" size={18} /> Люди</h2>
-            <p className="settings-card__text">Семья: {familyCount} человек</p>
+            <p className="settings-card__text">Семья: {pluralPeople(familyCount)}</p>
             <ul className="people-list">
               {people.map((person) => {
                 const self = person.id === client.getUserId();

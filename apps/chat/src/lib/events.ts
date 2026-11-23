@@ -62,12 +62,16 @@ const dayYearFmt = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long'
 const weekdayFmt = new Intl.DateTimeFormat('ru', { weekday: 'short' });
 const shortDateFmt = new Intl.DateTimeFormat('ru', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
-export const formatTime = (ts: number) => timeFmt.format(ts);
+/** Время без метки (локальное эхо, битое событие) не должно ронять экран: Intl бросает RangeError на NaN. */
+const okTs = (ts: number) => Number.isFinite(ts) && ts > 0;
+
+export const formatTime = (ts: number) => (okTs(ts) ? timeFmt.format(ts) : '');
 
 const startOfDay = (ts: number) => new Date(ts).setHours(0, 0, 0, 0);
 
 /** Время в списке чатов: сегодня — часы, на этой неделе — день, раньше — дата. */
 export function formatListTime(ts: number): string {
+  if (!okTs(ts)) return '';
   const today = startOfDay(Date.now());
   const day = startOfDay(ts);
   if (day === today) return timeFmt.format(ts);
@@ -78,6 +82,7 @@ export function formatListTime(ts: number): string {
 
 /** Разделитель дней в ленте. */
 export function formatDay(ts: number): string {
+  if (!okTs(ts)) return '';
   const today = startOfDay(Date.now());
   const day = startOfDay(ts);
   if (day === today) return 'Сегодня';
