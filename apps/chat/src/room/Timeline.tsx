@@ -43,6 +43,12 @@ function stateText(ev: MatrixEvent, pin: boolean): string | null {
   }
 }
 
+const isHidden = (ev: MatrixEvent, pin: boolean) => isStateNotice(ev) && stateText(ev, pin) === null;
+function neighbour(list: MatrixEvent[], i: number, dir: 1 | -1, pin: boolean): MatrixEvent | undefined {
+  for (let j = i + dir; j >= 0 && j < list.length; j += dir) if (!isHidden(list[j], pin)) return list[j];
+  return undefined;
+}
+
 function markRead(client: MatrixClient, room: Room, last: MatrixEvent, me: string) {
   // бейдж гасим сразу, не дожидаясь, пока сервер пришлёт новые счётчики в sync
   if (room.getUnreadNotificationCount(NotificationCountType.Total) > 0) {
@@ -246,8 +252,9 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
           <div className="timeline__start">Начало переписки</div>
         )}
         {shown.map((ev, i) => {
-          const prev = shown[i - 1];
-          const next = shown[i + 1];
+          // соседей ищем среди реально отрисованных событий (пустые служебные не рвут серию)
+          const prev = neighbour(shown, i, -1, pin);
+          const next = neighbour(shown, i, 1, pin);
           const newDay = !prev || !sameDay(prev.getTs(), ev.getTs());
           const dayEl = newDay ? <div className="day-sep"><span>{formatDay(ev.getTs())}</span></div> : null;
 

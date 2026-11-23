@@ -170,3 +170,24 @@
 @media (prefers-reduced-motion: reduce) {
   .msg--flash .bubble { animation: none; outline: 3px solid rgb(var(--rl-red-500-rgb) / 0.7); }
 }
+
+/* ============ Серии сообщений (Telegram-like) ============ */
+.timeline .msg { margin-top: 2px; }
+.timeline .msg--first { margin-top: 10px; }
+.timeline .msg--first:first-child { margin-top: 2px; }
+/* закругления: по умолчанию 18px; на стороне автора во внутренних пузырях 6px, «хвост» 4px у последнего */
+.timeline .msg:not(.msg--bot) .bubble { border-radius: 18px; }
+.timeline .msg:not(.msg--own):not(.msg--bot) .bubble { border-bottom-left-radius: 4px; }
+.timeline .msg:not(.msg--own):not(.msg--bot):not(.msg--last) .bubble { border-bottom-left-radius: 6px; }
+.timeline .msg:not(.msg--own):not(.msg--bot):not(.msg--first) .bubble { border-top-left-radius: 6px; }
+.timeline .msg--own:not(.msg--bot) .bubble { border-bottom-right-radius: 4px; }
+.timeline .msg--own:not(.msg--bot):not(.msg--last) .bubble { border-bottom-right-radius: 6px; }
+.timeline .msg--own:not(.msg--bot):not(.msg--first) .bubble { border-top-right-radius: 6px; }
+.timeline .msg--own:not(.msg--bot).msg--first.msg--last .bubble { border-top-right-radius: 18px; }
+
+/* ============ Колонка по центру на десктопе ============ */
+.timeline .timeline__inner { max-width: 720px; }
+.composer-box .composer, .composer-box .composer-ctx, .composer-box .composer-count {
+  padding-left: max(var(--rl-space-2), calc((100% - 720px) / 2 + var(--rl-space-3)));
+  padding-right: max(var(--rl-space-2), calc((100% - 720px) / 2 + var(--rl-space-3)));
+}
