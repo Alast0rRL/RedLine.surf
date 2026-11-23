@@ -1,5 +1,6 @@
 import type { MatrixClient } from 'matrix-js-sdk';
 import { decodeRecoveryKey, deriveRecoveryKeyFromPassphrase } from 'matrix-js-sdk/lib/crypto-api/index.js';
+import { maskPhone, normalizePhone } from './phone';
 import { cacheSecretStorageKey, setPendingNewSecretStorageKey } from './matrix';
 
 export const MIN_PHRASE = 8;
@@ -22,6 +23,26 @@ export function phraseProblem(phrase: string, password?: string): string | null 
   if (/^(.)\1*$/.test(value)) return 'Фраза не должна состоять из одного символа';
   if (password && value === normalizePhrase(password)) return 'Фраза должна отличаться от пароля';
   return null;
+}
+
+/** Фраза восстановления = номер телефона, нормализованный до цифр (например 79001234567). */
+export function phonePassphrase(input: string): string | null {
+  return normalizePhone(input);
+}
+
+const RECOVERY_META = 'surf.redline.recovery';
+
+export function getRecoveryMask(client: MatrixClient): string | null {
+  const c = client.getAccountData(RECOVERY_META as never)?.getContent() as { kind?: unknown; mask?: unknown } | undefined;
+  return c?.kind === 'phone' && typeof c.mask === 'string' ? c.mask : null;
+}
+
+export async function saveRecoveryMeta(client: MatrixClient, phone: string): Promise<void> {
+  try {
+    await client.setAccountData(RECOVERY_META as never, { kind: 'phone', mask: maskPhone(phone) } as never);
+  } catch {
+    /* метаданные необязательны */
+  }
 }
 
 export async function getSecurityState(client: MatrixClient): Promise<SecurityState> {
@@ -74,7 +95,7 @@ export async function setupRecovery(client: MatrixClient, password: string, phra
 export async function changeRecoveryPhrase(client: MatrixClient, phrase: string): Promise<void> {
   const crypto = client.getCrypto();
   if (!crypto) throw new Error('Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari');
-  const noKeys = new Error('Не получилось сменить фразу на этом телефоне. Сделайте это на том устройстве, где вы уже открывали переписку');
+  const noKeys = new Error('Не получилось сменить номер на этом телефоне. Сделайте это на том устройстве, где вы уже открывали переписку');
 
   try {
     const status = await crypto.getCrossSigningStatus();
@@ -106,14 +127,14 @@ export async function changeRecoveryPhrase(client: MatrixClient, phrase: string)
  * Новое устройство: фраза или ключ восстановления → подтверждаем устройство и
  * подтягиваем ключи старых сообщений из резервной копии.
  */
-export async function unlockWithRecovery(client: MatrixClient, input: string): Promise<{ imported: number }> {
+export async function unlockWithRecovery(client: MatrixClient, input: string, legacy = false): Promise<{ imported: number }> {
   const crypto = client.getCrypto();
   if (!crypto) throw new Error('Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari');
 
   const keyId = await client.secretStorage.getDefaultKeyId();
-  if (!keyId) throw new Error('Секретная фраза ещё не задана. Задайте её на телефоне, где переписка открыта');
+  if (!keyId) throw new Error('Номер для восстановления ещё не указан. Укажите его на телефоне, где переписка открыта');
   const stored = await client.secretStorage.getKey(keyId);
-  if (!stored) throw new Error('Секретная фраза ещё не задана. Задайте её на телефоне, где переписка открыта');
+  if (!stored) throw new Error('Номер для восстановления ещё не указан. Укажите его на телефоне, где переписка открыта');
 
   let key: Uint8Array<ArrayBuffer> | null = null;
   try {
@@ -134,7 +155,11 @@ export async function unlockWithRecovery(client: MatrixClient, input: string): P
     }
   }
   if (!key || !(await client.secretStorage.checkKey(key, stored[1]))) {
-    throw new Error('Фраза не подошла. Проверьте, нет ли опечаток');
+    throw new Error(
+      legacy
+        ? 'Фраза не подошла. Проверьте, нет ли опечаток'
+        : 'Номер не подошёл. Проверьте цифры — нужен тот номер, который вы указывали',
+    );
   }
   cacheSecretStorageKey(keyId, key);
 

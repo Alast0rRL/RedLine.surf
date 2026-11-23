@@ -223,8 +223,8 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
     : pin
       ? 'Нужно заново ввести PIN'
       : security === 'needs-setup'
-        ? 'Задайте секретную фразу'
-        : 'Введите секретную фразу';
+        ? 'Укажите номер для восстановления'
+        : 'Введите номер, чтобы открыть старые сообщения';
   const recoveryCta = unlock.silent ? 'Повторить' : pin ? 'Ввести' : security === 'needs-setup' ? 'Настроить' : 'Ввести';
 
   const q = query.trim().toLocaleLowerCase('ru');

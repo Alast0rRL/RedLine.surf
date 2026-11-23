@@ -5,12 +5,14 @@ import { useSecurityState } from '../hooks/useSecurityState';
 import { changePassword, passwordProblem, friendlyError } from '../lib/account';
 import { findAdminRoom } from '../lib/admin';
 import { isPinUser } from '../lib/pin';
+import { formatLogin } from '../lib/login';
 import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
 import {
   changeRecoveryPhrase,
-  normalizePhrase,
-  phraseProblem,
+  getRecoveryMask,
+  phonePassphrase,
+  saveRecoveryMeta,
   setupRecovery,
   unlockWithRecovery,
 } from '../lib/security';
@@ -25,8 +27,6 @@ const PUSH_TEXT: Record<PushState, string> = {
   off: 'Выключены',
   on: 'Включены',
 };
-
-const PHRASE_HINT = 'Без неё старые сообщения на новом телефоне не откроются. Лучше 3–4 слова. Запишите её на бумаге';
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string }[] = [
   { mode: 'light', label: 'Светлая' },
@@ -120,20 +120,21 @@ function SecuritySection() {
   const [state, refresh] = useSecurityState(client);
   const [dialog, setDialog] = useState<SecurityDialog>(null);
   const [password, setPassword] = useState('');
-  const [phrase, setPhrase] = useState('');
-  const [phrase2, setPhrase2] = useState('');
-  const [recovery, setRecovery] = useState('');
+  const [phone, setPhone] = useState('');
+  const [legacy, setLegacy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [, setTick] = useState(0);
+  const mask = getRecoveryMask(client);
 
   const close = () => {
     setDialog(null);
     setPassword('');
-    setPhrase('');
-    setPhrase2('');
-    setRecovery('');
+    setPhone('');
+    setLegacy(false);
     setErrors({});
     setBusy(false);
+    setTick((t) => t + 1);
     refresh();
   };
 
@@ -142,13 +143,12 @@ function SecuritySection() {
     const mode = dialog;
     if (!mode) return;
     const next: Record<string, string> = {};
-    if (mode === 'unlock') {
-      if (!recovery.trim()) next.recovery = 'Введите секретную фразу';
+    const digits = phonePassphrase(phone);
+    if (mode === 'unlock' && legacy) {
+      if (!phone.trim()) next.phone = 'Введите старую секретную фразу';
     } else {
       if (mode === 'setup' && !password) next.password = 'Введите пароль от входа';
-      const problem = phraseProblem(phrase, mode === 'setup' ? password : undefined);
-      if (problem) next.phrase = problem;
-      else if (normalizePhrase(phrase) !== normalizePhrase(phrase2)) next.phrase2 = 'Фразы разные. Введите одну и ту же дважды';
+      if (!digits) next.phone = 'Проверьте номер';
     }
     setErrors(next);
     if (Object.keys(next).length) return;
@@ -156,44 +156,52 @@ function SecuritySection() {
     setBusy(true);
     try {
       if (mode === 'setup') {
-        await setupRecovery(client, password, phrase);
-        toast('Секретная фраза сохранена', { variant: 'success' });
+        await setupRecovery(client, password, digits!);
+        await saveRecoveryMeta(client, digits!);
+        toast('Номер сохранён', { variant: 'success' });
       } else if (mode === 'change') {
-        await changeRecoveryPhrase(client, phrase);
-        toast('Секретная фраза изменена', { variant: 'success' });
+        await changeRecoveryPhrase(client, digits!);
+        await saveRecoveryMeta(client, digits!);
+        toast('Номер сохранён', { variant: 'success' });
       } else {
-        const { imported } = await unlockWithRecovery(client, recovery);
+        const { imported } = await unlockWithRecovery(client, legacy ? phone : digits!, legacy);
         toast(imported ? 'Готово, старые сообщения открыты' : 'Готово, этот телефон подтверждён', { variant: 'success' });
       }
       close();
     } catch (err) {
       const e2 = err as { errcode?: string; message?: string };
-      const field = mode === 'unlock' ? 'recovery' : 'form';
+      const field = mode === 'unlock' ? 'phone' : 'form';
       setErrors({ [field]: e2.errcode === 'M_FORBIDDEN' ? 'Пароль не подошёл. Проверьте, нет ли опечаток' : friendlyError(err, 'Что-то пошло не так. Попробуйте ещё раз') });
       setBusy(false);
     }
   };
 
-  const text = {
-    checking: 'Проверяем…',
-    unavailable: 'Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari.',
-    'needs-setup': 'Секретная фраза: без неё старые сообщения на новом телефоне не откроются. Запишите её на бумаге.',
-    'needs-unlock': 'Введите секретную фразу, чтобы открыть старые сообщения на этом телефоне.',
-    ok: 'Секретная фраза задана. Если у вас новый телефон, она понадобится для старых сообщений.',
-  }[state];
+  const text =
+    state === 'ok'
+      ? mask
+        ? `Старые сообщения открываются по номеру ${mask}`
+        : 'Сейчас старые сообщения открываются по старой секретной фразе.'
+      : {
+          checking: 'Проверяем…',
+          unavailable: 'Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari.',
+          'needs-setup': 'Укажите номер телефона — по нему старые сообщения откроются на новом устройстве.',
+          'needs-unlock': 'Введите номер телефона, чтобы открыть старые сообщения на этом устройстве.',
+        }[state];
+  const isLegacyField = dialog === 'unlock' && legacy;
 
   return (
     <Card solid className="settings-card">
-      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Защита переписки</h2>
+      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Восстановление переписки</h2>
       <p className="settings-card__text">{text}</p>
-      {state === 'needs-setup' && <Button variant="primary" onClick={() => setDialog('setup')}>Задать фразу</Button>}
-      {state === 'needs-unlock' && <Button variant="primary" onClick={() => setDialog('unlock')}>Ввести фразу</Button>}
-      {state === 'ok' && <Button variant="secondary" onClick={() => setDialog('change')}>Сменить фразу</Button>}
+      {state === 'needs-setup' && <Button variant="primary" onClick={() => setDialog('setup')}>Указать номер</Button>}
+      {state === 'needs-unlock' && <Button variant="primary" onClick={() => setDialog('unlock')}>Ввести номер</Button>}
+      {state === 'ok' && mask && <Button variant="secondary" onClick={() => setDialog('change')}>Сменить номер</Button>}
+      {state === 'ok' && !mask && <Button variant="primary" onClick={() => setDialog('change')}>Перевести на номер телефона</Button>}
 
       <Modal
         open={dialog !== null}
         onClose={close}
-        title={dialog === 'setup' ? 'Секретная фраза' : dialog === 'change' ? 'Сменить фразу' : 'Открыть старые сообщения'}
+        title={dialog === 'setup' ? 'Номер для восстановления' : dialog === 'change' ? (mask ? 'Сменить номер' : 'Перевести на номер телефона') : 'Открыть старые сообщения'}
       >
         <form className="stack" onSubmit={submit}>
           {dialog === 'setup' && (
@@ -208,42 +216,32 @@ function SecuritySection() {
               hint="Нужен, чтобы защитить вашу переписку"
             />
           )}
+          {dialog === 'change' && <p>Прежний номер или фраза перестанут работать.</p>}
+          <Field
+            label={isLegacyField ? 'Старая секретная фраза' : 'Номер телефона'}
+            name="phone"
+            type={isLegacyField ? 'password' : 'tel'}
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={phone}
+            error={errors.phone ?? null}
+            hint={errors.phone || isLegacyField ? undefined : 'Например, +7 900 123-45-67. Он понадобится, чтобы открыть старые сообщения'}
+            onChange={(e) => setPhone(e.target.value)}
+          />
           {dialog === 'unlock' && (
-            <Field
-              label="Секретная фраза"
-              name="recovery"
-              type="password"
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              value={recovery}
-              error={errors.recovery ?? null}
-              onChange={(e) => setRecovery(e.target.value)}
-            />
-          )}
-          {(dialog === 'setup' || dialog === 'change') && (
-            <>
-              {dialog === 'change' && <p>Старая фраза перестанет работать. Запишите новую на бумаге.</p>}
-              <Field
-                label="Секретная фраза"
-                name="phrase"
-                type="password"
-                autoComplete="off"
-                value={phrase}
-                error={errors.phrase ?? null}
-                hint={errors.phrase ? undefined : PHRASE_HINT}
-                onChange={(e) => setPhrase(e.target.value)}
-              />
-              <Field
-                label="Повторите фразу"
-                name="phrase2"
-                type="password"
-                autoComplete="off"
-                value={phrase2}
-                error={errors.phrase2 ?? null}
-                onChange={(e) => setPhrase2(e.target.value)}
-              />
-            </>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setLegacy((v) => !v);
+                setPhone('');
+                setErrors({});
+              }}
+            >
+              {legacy ? 'Ввести номер телефона' : 'У меня старая секретная фраза'}
+            </Button>
           )}
           {errors.form && <p className="rl-hint rl-hint--error" role="alert">{errors.form}</p>}
           <Button type="submit" variant="primary" size="lg" block busy={busy}>
@@ -296,7 +294,7 @@ function PasswordSection() {
   return (
     <Card solid className="settings-card">
       <h2 className="settings-card__title"><Icon name="lock" size={18} /> Пароль</h2>
-      <p className="settings-card__text">Пароль нужен для входа. Старые сообщения на новом телефоне открывает отдельная секретная фраза.</p>
+      <p className="settings-card__text">Пароль нужен для входа. Старые сообщения на новом телефоне открываются по номеру телефона.</p>
       <Button variant="outline" onClick={() => setOpen(true)}>Сменить пароль</Button>
       <Modal open={open} onClose={close} title="Сменить пароль">
         <form className="stack" onSubmit={submit}>
@@ -323,7 +321,7 @@ function PasswordSection() {
             <input type="checkbox" checked={logoutOthers} onChange={(e) => setLogoutOthers(e.target.checked)} />
             <span>Выйти на других устройствах</span>
           </label>
-          {logoutOthers && <p>На других устройствах придётся войти заново, а для старых сообщений понадобится секретная фраза.</p>}
+          {logoutOthers && <p>На других устройствах придётся войти заново, а для старых сообщений понадобится номер телефона.</p>}
           <Button type="submit" variant="primary" size="lg" block busy={busy}>Сохранить</Button>
         </form>
       </Modal>
@@ -457,7 +455,7 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
     </div>
     </Card>
   );
-}
+      {userId && <div className="profile__id">{formatLogin(userId)}</div>}
 
 export function Settings() {
   const client = useClient();
@@ -503,7 +501,7 @@ export function Settings() {
           </>
         }
       >
-        <p>{pin ? 'Чтобы войти снова, понадобится PIN.' : 'Если секретная фраза не записана, старые сообщения на этом телефоне могут пропасть.'}</p>
+        <p>{pin ? 'Чтобы войти снова, понадобится PIN.' : 'Если номер для восстановления не указан, старые сообщения на этом телефоне могут пропасть.'}</p>
       </Modal>
     </section>
   );

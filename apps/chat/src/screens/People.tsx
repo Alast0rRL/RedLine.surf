@@ -573,7 +573,7 @@ export function People() {
               <input type="checkbox" checked={logoutDevices} onChange={(e) => setLogoutDevices(e.target.checked)} />
               <span>Выйти на всех его устройствах</span>
             </label>
-            <p>После выхода старые сообщения откроются только по секретной фразе.</p>
+            <p>После выхода старые сообщения откроются только по номеру телефона.</p>
           </div>
         )}
         {newPassword && (
