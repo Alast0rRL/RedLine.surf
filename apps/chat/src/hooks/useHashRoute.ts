@@ -52,7 +52,7 @@ export const navigate = {
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   },
   backToSettings: () => {
-    // шаг назад, иначе «Назад» в настройках вернёт обратно в «Семью»
+    // шаг назад, иначе «Назад» в настройках вернёт обратно в «Люди»
     if (history.state?.rlFromList) history.back();
     else location.hash = '#/settings';
   },

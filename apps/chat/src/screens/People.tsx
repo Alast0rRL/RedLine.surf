@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { findAdminRoom, listUsers, resetPassword, resetPin } from '../lib/admin';
-import { createInvite, ensureFamilyRoom, loadInvites, loadLinks, revokeInvite, type Invite } from '../lib/invites';
+import { createInvite, loadInvites, loadLinks, revokeInvite, type Invite } from '../lib/invites';
 import { formatLink, isPinUser, type PersonalLink } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { navigate } from '../hooks/useHashRoute';
@@ -15,12 +15,12 @@ interface Person {
 
 function Frame({ children }: { children: ReactNode }) {
   return (
-    <section className="pane pane--room" aria-label="Семья">
+    <section className="pane pane--room" aria-label="Люди">
       <header className="topbar topbar--room">
         <Button variant="ghost" icon aria-label="Назад" onClick={() => navigate.backToSettings()}>
           <Icon name="back" />
         </Button>
-        <span className="topbar__title"><span className="topbar__name">Семья</span></span>
+        <span className="topbar__title"><span className="topbar__name">Люди</span></span>
       </header>
       <div className="settings">{children}</div>
     </section>
@@ -79,7 +79,7 @@ export function People() {
           setLinks(storedLinks);
           setPeople(users);
         } catch (e) {
-          console.warn('Не удалось загрузить раздел «Семья»', e);
+          console.warn('Не удалось загрузить раздел «Люди»', e);
           if (alive.current) setError('Не удалось загрузить список. Повторите попытку.');
         } finally {
           if (alive.current) setBusy(false);
@@ -102,7 +102,6 @@ export function People() {
     if (!adminRoom || !label.trim()) return;
     setAction('create');
     try {
-      await ensureFamilyRoom(client);
       const { link } = await createInvite(client, adminRoom, label.trim());
       setShownLink(formatLink(link));
       setLabel('');
@@ -129,7 +128,7 @@ export function People() {
   const share = async () => {
     if (!shownLink || !navigator.share) return;
     try {
-      await navigator.share({ title: 'Личная ссылка', text: 'Личная ссылка для входа в семейный чат', url: shownLink });
+      await navigator.share({ title: 'Личная ссылка', text: 'Личная ссылка для входа в Redline Chat', url: shownLink });
     } catch (e) {
       if ((e as Error).name !== 'AbortError') console.warn('Не удалось отправить ссылку');
     }
@@ -226,7 +225,7 @@ export function People() {
         <>
           <Card solid className="settings-card">
             <h2 className="settings-card__title"><Icon name="plus" size={18} /> Добавить человека</h2>
-            <p className="settings-card__text">Отправьте ссылку тому, кого хотите добавить в семейный чат.</p>
+            <p className="settings-card__text">Отправьте ссылку тому, кого хотите добавить в Redline Chat.</p>
             <form className="stack" onSubmit={(e) => void create(e)}>
               <Field
                 label="Как зовут"

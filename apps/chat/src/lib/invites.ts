@@ -1,6 +1,4 @@
 import { type MatrixClient } from 'matrix-js-sdk';
-import { Preset, Visibility } from 'matrix-js-sdk/lib/@types/partials.js';
-import { getConfig } from '../config';
 import { findAdminRoom, runAdminCommand } from './admin';
 import { isPersonalLink, newPerson, type PersonalLink } from './pin';
 
@@ -21,7 +19,6 @@ export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const INVITE_DATA_TYPE = 'surf.redline.invites';
 const LINKS_DATA_TYPE = 'surf.redline.links';
 const TOKEN_RE = /^[A-Za-z0-9]{16}$/;
-const OWNER_POWER = 100;
 
 /** Очередь операций: account data не должна перезаписываться гонкой. */
 let inviteQueue: Promise<unknown> = Promise.resolve();
@@ -147,75 +144,6 @@ export function createInvite(client: MatrixClient, adminRoom: string, name: stri
 
 export function revokeInvite(client: MatrixClient, adminRoom: string, token: string): Promise<void> {
   return serialized(() => doRevokeInvite(client, adminRoom, token));
-}
-
-/** Комната по алиасу должна быть нашей: создатель в v12+ отсутствует в users. */
-async function isOwnFamilyRoom(client: MatrixClient, roomId: string): Promise<boolean> {
-  const userId = client.getUserId();
-  if (!userId) return false;
-  const joinedInStore = client.getRoom(roomId)?.getMyMembership() === 'join';
-  let state: {
-    type?: string;
-    state_key?: string;
-    sender?: string;
-    content?: { membership?: unknown };
-  }[] = [];
-  try {
-    const levels = (await client.getStateEvent(roomId, 'm.room.power_levels', '')) as {
-      users?: Record<string, number>;
-      users_default?: number;
-    };
-    const power = levels.users?.[userId] ?? levels.users_default ?? 0;
-    if (power < OWNER_POWER) {
-      state = await client.roomState(roomId);
-      if (state.find((e) => e.type === 'm.room.create')?.sender !== userId) return false;
-    }
-  } catch {
-    return false;
-  }
-  if (joinedInStore) return true;
-  try {
-    if (!state.length) state = await client.roomState(roomId);
-    return state.some(
-      (e) => e.type === 'm.room.member' && e.state_key === userId && e.content?.membership === 'join',
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Комната «Семья»: создаём с публичным правилом входа (сервер invite-only). */
-export async function ensureFamilyRoom(client: MatrixClient): Promise<string> {
-  const alias = `#family:${getConfig().serverName}`;
-  try {
-    const { room_id: roomId } = await client.getRoomIdForAlias(alias);
-    if (!(await isOwnFamilyRoom(client, roomId))) {
-      throw new Error('Адрес #family занят комнатой, которой вы не управляете');
-    }
-    return roomId;
-  } catch (e) {
-    if (!isNotFound(e)) throw e;
-  }
-
-  const { room_id: roomId } = await client.createRoom({
-    name: 'Семья',
-    room_alias_name: 'family',
-    visibility: Visibility.Private,
-    preset: Preset.PrivateChat,
-    initial_state: [
-      {
-        type: 'm.room.encryption',
-        state_key: '',
-        content: { algorithm: 'm.megolm.v1.aes-sha2' },
-      },
-      {
-        type: 'm.room.join_rules',
-        state_key: '',
-        content: { join_rule: 'public' },
-      },
-    ],
-  });
-  return roomId;
 }
 
 const sweptClients = new WeakSet<MatrixClient>();

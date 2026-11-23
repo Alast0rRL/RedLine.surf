@@ -158,7 +158,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
           <button type="button" role="tab" aria-selected={mode === 'group'} onClick={() => { setMode('group'); setError(null); }}>Группа</button>
         </div>
         {mode === 'group' && (
-          <Field label="Название" value={name} onChange={(e) => setName(e.target.value)} placeholder="Семья" maxLength={80} />
+          <Field label="Название" value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Друзья" maxLength={80} />
         )}
         <div className="person-picker" role="group" aria-label="Люди">
           {people.length ? (

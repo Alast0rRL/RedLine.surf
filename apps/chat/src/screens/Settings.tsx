@@ -82,7 +82,7 @@ function AdminSection() {
   if (!adminRoom) return null;
   return (
     <Card solid className="settings-card">
-      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Семья</h2>
+      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Люди</h2>
       <p className="settings-card__text">Здесь можно приглашать родных и управлять ссылками.</p>
       <Button variant="primary" onClick={() => navigate.people()}>Пригласить и управлять</Button>
     </Card>
@@ -307,7 +307,7 @@ function PasswordSection() {
   );
 }
 
-/** Имя и фото: их видят все в семье. */
+/** Имя и фото: их видят все. */
 function ProfileSection({ fallbackName }: { fallbackName: string }) {
   const client = useClient();
   const userId = client.getUserId()!;
@@ -424,7 +424,7 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
             setDraft(e.target.value);
             setNameError(null);
           }}
-          hint="Так вас видят в семье"
+          hint="Так вас видят другие"
         />
         <Button type="submit" variant="primary" busy={savingName} disabled={!changed}>Сохранить</Button>
       </form>

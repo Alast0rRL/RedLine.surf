@@ -63,7 +63,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
       <ThemeToggle className="screen__theme" />
       <div className="login__glow" aria-hidden="true" />
       <div className="login__card rl-card rl-card--lg">
-        <span className="rl-eyebrow">Семейный чат</span>
+        <span className="rl-eyebrow">Redline Chat</span>
         <h1 className="login__title">
           Redline <span>Chat</span>
         </h1>

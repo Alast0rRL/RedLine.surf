@@ -28,7 +28,7 @@ export default defineConfig({
         id: '/',
         name: 'Redline Chat',
         short_name: 'Redline',
-        description: 'Семейный мессенджер Redline',
+        description: 'Мессенджер Redline',
         lang: 'ru',
         start_url: '/',
         scope: '/',

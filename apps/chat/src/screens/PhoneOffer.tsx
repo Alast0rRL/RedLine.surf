@@ -40,7 +40,7 @@ export function PhoneOffer({ offer, onClose }: { offer: PhoneOfferData; onClose:
         <RedLines />
         <div className="login__glow" aria-hidden="true" />
         <div className="login__card rl-card rl-card--lg">
-          <span className="rl-eyebrow">Семейный чат</span>
+          <span className="rl-eyebrow">Redline Chat</span>
           <h1 className="login__title">Вход по номеру телефона</h1>
           <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
             <p className="login__note">

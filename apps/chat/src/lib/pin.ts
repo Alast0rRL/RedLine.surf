@@ -8,7 +8,6 @@
  *  - пароль «PIN сброшен» = H(ключ, логин, reset): его ставит админ, дальше человек задаёт новый PIN.
  */
 import { createClient, type MatrixClient } from 'matrix-js-sdk';
-import { getConfig } from '../config';
 import { changePassword, checkInvite, registerWithInvite, slugUsername } from './account';
 import { loginWithPassword } from './matrix';
 import { getSecurityState, setupRecovery, unlockWithRecovery } from './security';
@@ -173,7 +172,7 @@ export async function loginWithPin(baseUrl: string, link: PersonalLink, pin: str
   return { session, created: false, password };
 }
 
-/** Всё, что раньше спрашивали у человека: шифрование, история, семейный чат. */
+/** Всё, что раньше спрашивали у человека: шифрование и история. */
 export async function preparePinSession(client: MatrixClient, link: PersonalLink, login: PinLogin): Promise<void> {
   if (login.created) {
     await client.setDisplayName(link.name).catch(() => console.warn('Не удалось задать имя'));
@@ -183,11 +182,4 @@ export async function preparePinSession(client: MatrixClient, link: PersonalLink
   if (state === 'needs-setup') await setupRecovery(client, login.password, secret);
   else if (state === 'needs-unlock') await unlockWithRecovery(client, secret);
 
-  try {
-    const alias = `#family:${getConfig().serverName}`;
-    const { room_id: roomId } = await client.getRoomIdForAlias(alias);
-    if (client.getRoom(roomId)?.getMyMembership() !== 'join') await client.joinRoom(roomId);
-  } catch {
-    console.warn('Не удалось присоединиться к комнате «Семья»');
-  }
 }
