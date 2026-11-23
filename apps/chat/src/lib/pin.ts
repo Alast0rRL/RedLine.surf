@@ -13,7 +13,11 @@ import { loginWithPassword } from './matrix';
 import { getSecurityState, setupRecovery, unlockWithRecovery } from './security';
 import { clearSession, type StoredSession } from './session';
 
-export const PIN_LENGTH = 6;
+export const PIN_MIN = 4;
+export const PIN_MAX = 6;
+export const PIN_HINT = `От ${PIN_MIN} до ${PIN_MAX} цифр`;
+/** PIN — только цифры, от PIN_MIN до PIN_MAX. */
+export const pinOk = (pin: string) => /^[0-9]+$/.test(pin) && pin.length >= PIN_MIN && pin.length <= PIN_MAX;
 
 export interface PersonalLink {
   user: string;

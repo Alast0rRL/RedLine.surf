@@ -4,7 +4,7 @@ import { navigate } from '../hooks/useHashRoute';
 import { useSecurityState } from '../hooks/useSecurityState';
 import { changePassword, passwordProblem, friendlyError } from '../lib/account';
 import { findAdminRoom } from '../lib/admin';
-import { isPinUser, PIN_LENGTH } from '../lib/pin';
+import { isPinUser, PIN_MAX, PIN_MIN, PIN_HINT, pinOk } from '../lib/pin';
 import { formatLogin } from '../lib/login';
 import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
@@ -133,7 +133,7 @@ function SwitchToPinSection() {
     e.preventDefault();
     if (!password) return setError('Введите пароль от входа');
     if (!normalizePhone(phone)) return setError('Проверьте номер');
-    if (pin.length !== PIN_LENGTH) return setError(`PIN — ровно ${PIN_LENGTH} цифр`);
+    if (!pinOk(pin)) return setError(`PIN — ${PIN_HINT.toLowerCase()}`);
     if (pin !== pin2) return setError('PIN не совпадает');
     setError(null);
     setBusy(true);
@@ -150,13 +150,13 @@ function SwitchToPinSection() {
   };
 
   const lost = state === 'needs-unlock';
-  const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_LENGTH);
+  const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
 
   return (
     <Card solid className="settings-card">
       <h2 className="settings-card__title"><Icon name="shield" size={18} /> Вход по номеру и PIN</h2>
       <p className="settings-card__text">
-        Как у всех: номер телефона и PIN из {PIN_LENGTH} цифр. Пароль и секретная фраза больше не понадобятся,
+        Как у всех: номер телефона и PIN из {PIN_MIN}–{PIN_MAX} цифр. Пароль и секретная фраза больше не понадобятся,
         переписка откроется на любом устройстве по номеру и PIN.
       </p>
       {lost && (
@@ -172,8 +172,8 @@ function SwitchToPinSection() {
         <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
           <Field label="Текущий пароль" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} />
           <Field label="Номер телефона" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+7 900 123-45-67" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={busy} />
-          <Field label="Новый PIN" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_LENGTH} autoComplete="off" className="pin-input" hint={`Ровно ${PIN_LENGTH} цифр. Запомните его`} value={pin} onChange={(e) => setPin(digits(e.target.value))} disabled={busy} />
-          <Field label="PIN ещё раз" name="pin2" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_LENGTH} autoComplete="off" className="pin-input" value={pin2} onChange={(e) => setPin2(digits(e.target.value))} disabled={busy} />
+          <Field label="Новый PIN" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" hint={`${PIN_HINT}. Запомните его`} value={pin} onChange={(e) => setPin(digits(e.target.value))} disabled={busy} />
+          <Field label="PIN ещё раз" name="pin2" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" value={pin2} onChange={(e) => setPin2(digits(e.target.value))} disabled={busy} />
           {lost && <p className="rl-hint rl-hint--error">Старые сообщения на этом устройстве пропадут.</p>}
           {error && <p className="rl-hint rl-hint--error" role="alert">{error}</p>}
           <Button type="submit" variant="primary" size="lg" block busy={busy}>Перейти</Button>

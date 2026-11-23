@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { loadConfig } from '../config';
-import { ACCOUNT_DELETED, forgetLink, linkState, PIN_LENGTH, type LinkState, type PersonalLink } from '../lib/pin';
+import { ACCOUNT_DELETED, forgetLink, linkState, PIN_MAX, PIN_HINT, pinOk, type LinkState, type PersonalLink } from '../lib/pin';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -46,7 +46,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy || pin.length !== PIN_LENGTH) return;
+    if (busy || !pinOk(pin)) return;
     setBusy(true);
     setError(null);
     try {
@@ -113,17 +113,17 @@ export function PinEntry({ link }: { link: PersonalLink }) {
             <Field
               name="pin"
               label={state === 'create' ? 'Придумай PIN' : 'Введи PIN'}
-              hint={state === 'create' ? `Ровно ${PIN_LENGTH} цифр. Запомни его: PIN нужен для входа на других устройствах` : `${PIN_LENGTH} цифр`}
+              hint={state === 'create' ? `${PIN_HINT}. Запомни его: PIN нужен для входа на других устройствах` : PIN_HINT}
               type={state === 'create' ? 'text' : 'password'}
               inputMode="numeric"
               pattern="[0-9]*"
-              maxLength={PIN_LENGTH}
+              maxLength={PIN_MAX}
               autoComplete="off"
               autoFocus
               className="pin-input"
               value={pin}
               error={shownError || null}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_MAX))}
               disabled={busy}
             />
             <Button
@@ -132,7 +132,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
               size="lg"
               block
               busy={busy}
-              disabled={busy || pin.length !== PIN_LENGTH}
+              disabled={busy || !pinOk(pin)}
             >
               Войти
             </Button>

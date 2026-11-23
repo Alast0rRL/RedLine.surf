@@ -12,7 +12,7 @@
 import type { MatrixClient } from 'matrix-js-sdk';
 import { changePassword } from './account';
 import { bindPhone, checkPassword, NO_TOKEN, normalizePhone } from './phone';
-import { newPerson, pinPassword, saveLink, storageSecret, type PersonalLink, isPersonalLink, PIN_LENGTH } from './pin';
+import { newPerson, pinPassword, saveLink, storageSecret, type PersonalLink, isPersonalLink, PIN_HINT, pinOk } from './pin';
 import { changeRecoveryPhrase, getSecurityState, setupRecovery } from './security';
 
 const PENDING = 'rl.pendingLink';
@@ -40,7 +40,7 @@ export async function switchToPin(
   { password, phone, pin }: { password: string; phone: string; pin: string },
 ): Promise<void> {
   if (!normalizePhone(phone)) throw new Error('Проверьте номер');
-  if (!new RegExp(`^\\d{${PIN_LENGTH}}$`).test(pin)) throw new Error(`PIN — ровно ${PIN_LENGTH} цифр`);
+  if (!pinOk(pin)) throw new Error(`PIN — ${PIN_HINT.toLowerCase()}`);
   const userId = client.getUserId()!;
   const own = userId.replace(/^@/, '').split(':')[0];
   const name = client.getUser(userId)?.displayName || own;

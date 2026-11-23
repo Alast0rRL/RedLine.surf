@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { useClient } from '../state/MatrixContext';
 import { bindPhone, getBoundPhone, normalizePhone, unbindPhone, verifyPin } from '../lib/phone';
-import { loadLink, PIN_LENGTH } from '../lib/pin';
+import { loadLink, PIN_MAX, PIN_HINT, pinOk } from '../lib/pin';
 import { Button, Card, Field, Icon, toast } from '../components/ui';
 
 /** Настройки: вход по номеру телефона и PIN (только для тех, кто входит по ссылке). */
@@ -33,7 +33,7 @@ export function PhoneSection() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy || pin.length !== PIN_LENGTH) return;
+    if (busy || !pinOk(pin)) return;
     if (!normalizePhone(phone)) {
       setError('Проверьте номер');
       return;
@@ -83,20 +83,20 @@ export function PhoneSection() {
           />
           <Field
             label="Ваш PIN"
-            hint={`${PIN_LENGTH} цифр`}
+            hint={PIN_HINT}
             name="pin"
             type="password"
             inputMode="numeric"
             pattern="[0-9]*"
-            maxLength={PIN_LENGTH}
+            maxLength={PIN_MAX}
             autoComplete="off"
             className="pin-input"
             value={pin}
             error={error}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_MAX))}
             disabled={busy}
           />
-          <Button type="submit" variant="primary" busy={busy} disabled={busy || !phone.trim() || pin.length !== PIN_LENGTH}>
+          <Button type="submit" variant="primary" busy={busy} disabled={busy || !phone.trim() || !pinOk(pin)}>
             Привязать
           </Button>
           <Button variant="ghost" size="sm" disabled={busy} onClick={close}>Отмена</Button>

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
-import { PIN_LENGTH } from '../lib/pin';
+import { PIN_MAX, PIN_HINT, pinOk } from '../lib/pin';
 import { fetchLinkByPhone, normalizePhone } from '../lib/phone';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
@@ -15,7 +15,7 @@ export function Login() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy || pin.length !== PIN_LENGTH) return;
+    if (busy || !pinOk(pin)) return;
     if (!normalizePhone(phone)) {
       setError('Проверьте номер');
       return;
@@ -60,20 +60,20 @@ export function Login() {
           <Field
             label="PIN"
             name="pin"
-            hint={`${PIN_LENGTH} цифр`}
+            hint={PIN_HINT}
             type="password"
             inputMode="numeric"
             pattern="[0-9]*"
-            maxLength={PIN_LENGTH}
+            maxLength={PIN_MAX}
             autoComplete="off"
             className="pin-input"
             value={pin}
             error={error ?? sessionError}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_MAX))}
             disabled={busy}
             required
           />
-          <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !phone.trim() || pin.length !== PIN_LENGTH}>
+          <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !phone.trim() || !pinOk(pin)}>
             Войти
           </Button>
         </form>
