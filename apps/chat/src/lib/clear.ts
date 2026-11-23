@@ -23,12 +23,11 @@ export function isClearCommand(text: string): boolean {
   return t === '/clear' || t === '/очистить';
 }
 
-/** Можно ли удалять чужие сообщения в этой комнате. */
+/** Можно ли удалять чужие сообщения в этой комнате.
+ *  Уровень берём у SDK: в комнатах версии 12 создатель не записан в power_levels, но права у него максимальные. */
 export function canClearForAll(room: Room, me: string): boolean {
-  const pl = room.currentState.getStateEvents('m.room.power_levels', '')?.getContent() as { redact?: number; users?: Record<string, number>; users_default?: number } | undefined;
-  if (!pl) return false;
-  const mine = pl.users?.[me] ?? pl.users_default ?? 0;
-  return mine >= (pl.redact ?? 50);
+  const level = room.getMember(me)?.powerLevel ?? 0;
+  return room.currentState.hasSufficientPowerLevelFor('redact', level);
 }
 
 export async function clearForMe(client: MatrixClient, room: Room): Promise<void> {
