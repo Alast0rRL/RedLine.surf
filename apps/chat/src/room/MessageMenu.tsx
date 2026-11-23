@@ -1,7 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { KnownMembership, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
-import { Avatar, Button, Modal, toast } from '../components/ui';
+import { Avatar, Button, Icon, Modal, toast } from '../components/ui';
+import { ExtraIcon } from '../components/extraIcons';
+import { useBackClose } from '../hooks/useBackClose';
+import { downloadMedia, mediaOf } from '../lib/roomMedia';
 import { isDirectRoom } from '../hooks/useRoomList';
 import {
   QUICK_REACTIONS,
@@ -15,6 +18,7 @@ import {
 } from '../lib/messageActions';
 import { roomAvatarMxc } from '../screens/ChatList';
 import './room.css';
+import '../styles/viewer.css';
 
 export interface MenuPoint {
   x: number;
@@ -35,19 +39,32 @@ interface MenuProps {
   onDelete: (ev: MatrixEvent) => void;
 }
 
-/** Меню действий над сообщением: быстрые реакции + список. Закрывается по Esc и тапу снаружи. */
-export function MessageMenu({ client, room, ev, point, onClose, onReply, onEdit, onForward, onDelete }: MenuProps) {
-  const me = client.getUserId() ?? '';
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+type Item = { key: string; label: string; icon: ReactNode; danger?: boolean; run: () => void };
 
-  const items: { key: string; label: string; danger?: boolean; run: () => void }[] = [];
-  items.push({ key: 'reply', label: 'Ответить', run: () => onReply(ev) });
-  if (canEdit(ev, me)) items.push({ key: 'edit', label: 'Изменить', run: () => onEdit(ev) });
+const PATHS = {
+  reply: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 6 6v3',
+  forward: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0-6 6v3',
+  download: 'M12 3v12M7 10l5 5 5-5M5 21h14',
+} as const;
+
+function Svg({ d }: { d: string }) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  );
+}
+
+function useMenuItems({ client, ev, onReply, onEdit, onForward, onDelete }: MenuProps): Item[] {
+  const me = client.getUserId() ?? '';
+  const items: Item[] = [];
+  items.push({ key: 'reply', label: 'Ответить', icon: <Svg d={PATHS.reply} />, run: () => onReply(ev) });
+  if (canEdit(ev, me)) items.push({ key: 'edit', label: 'Изменить', icon: <ExtraIcon name="edit" size={22} />, run: () => onEdit(ev) });
   if (isTextMessage(ev)) {
     items.push({
       key: 'copy',
       label: 'Копировать',
+      icon: <Icon name="copy" size={22} />,
       run: () => {
         navigator.clipboard?.writeText(plainBody(ev)).then(
           () => toast('Скопировано'),
@@ -56,8 +73,146 @@ export function MessageMenu({ client, room, ev, point, onClose, onReply, onEdit,
       },
     });
   }
-  items.push({ key: 'forward', label: 'Переслать', run: () => onForward(ev) });
-  if (canDelete(ev, me)) items.push({ key: 'delete', label: 'Удалить', danger: true, run: () => onDelete(ev) });
+  const media = mediaOf(ev);
+  if (media) {
+    items.push({
+      key: 'save',
+      label: 'Сохранить',
+      icon: <Svg d={PATHS.download} />,
+      run: () => {
+        downloadMedia(client, media.src, media.name).catch((e) => {
+          console.warn('save failed', e);
+          toast('Не удалось сохранить', { variant: 'error' });
+        });
+      },
+    });
+  }
+  items.push({ key: 'forward', label: 'Переслать', icon: <Svg d={PATHS.forward} />, run: () => onForward(ev) });
+  if (canDelete(ev, me)) items.push({ key: 'delete', label: 'Удалить', icon: <Icon name="trash" size={22} />, danger: true, run: () => onDelete(ev) });
+  return items;
+}
+
+const isTouchLayout = () => window.matchMedia('(pointer: coarse), (max-width: 599px)').matches;
+
+/** Меню действий над сообщением: на телефоне нижняя шторка, на десктопе всплывающее меню у точки нажатия. */
+export function MessageMenu(props: MenuProps) {
+  const items = useMenuItems(props);
+  const [sheet] = useState(isTouchLayout);
+  return sheet ? <MenuSheet {...props} items={items} /> : <MenuPopover {...props} items={items} />;
+}
+
+function Reactions({ client, room, ev, close }: { client: MatrixClient; room: Room; ev: MatrixEvent; close: () => void }) {
+  return (
+    <div className="msg-menu__reactions">
+      {QUICK_REACTIONS.map((k) => (
+        <button
+          key={k}
+          type="button"
+          role="menuitem"
+          className="msg-menu__emoji"
+          aria-label={`Реакция ${k}`}
+          onClick={() => {
+            close();
+            toggleReaction(client, room, ev, k).catch(() => toast('Не удалось отправить реакцию', { variant: 'error' }));
+          }}
+        >
+          {k}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Нижняя шторка: закрывается по тапу на фон, свайпу вниз, Esc и кнопке «назад». */
+function MenuSheet({ client, room, ev, onClose, items }: MenuProps & { items: Item[] }) {
+  const dismiss = useBackClose(onClose);
+  const [dy, setDy] = useState(0);
+  const [phase, setPhase] = useState<'idle' | 'drag' | 'settle'>('idle');
+  const start = useRef<{ y: number; t: number; scroll: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        dismiss();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dismiss]);
+
+  const onDown = (e: React.PointerEvent) => {
+    start.current = { y: e.clientY, t: Date.now(), scroll: ref.current?.scrollTop ?? 0 };
+  };
+  const onMove = (e: React.PointerEvent) => {
+    const s = start.current;
+    if (!s || s.scroll > 0) return;
+    const d = e.clientY - s.y;
+    if (d > 6) {
+      setPhase('drag');
+      setDy(d);
+    }
+  };
+  const onUp = (e: React.PointerEvent) => {
+    const s = start.current;
+    start.current = null;
+    if (!s || phase !== 'drag') return;
+    const d = e.clientY - s.y;
+    if (d > 90 || (d > 40 && Date.now() - s.t < 250)) dismiss();
+    else {
+      setPhase('settle');
+      setDy(0);
+    }
+  };
+
+  const close = () => dismiss();
+  return createPortal(
+    <div
+      className="msg-sheet-backdrop"
+      style={{ ['--sheet-fade' as string]: Math.max(0.2, 1 - dy / 400) }}
+      onPointerDown={close}
+      onContextMenu={(e) => { e.preventDefault(); close(); }}
+    >
+      <div
+        ref={ref}
+        className={`msg-sheet${phase === 'drag' ? ' is-dragging' : ''}${phase === 'settle' ? ' is-settling' : ''}`}
+        role="menu"
+        aria-label="Действия с сообщением"
+        style={{ transform: dy ? `translateY(${dy}px)` : undefined }}
+        onPointerDown={(e) => { e.stopPropagation(); onDown(e); }}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={() => { start.current = null; setPhase('settle'); setDy(0); }}
+        onTransitionEnd={() => setPhase('idle')}
+      >
+        <div className="msg-sheet__grip" aria-hidden="true" />
+        <Reactions client={client} room={room} ev={ev} close={close} />
+        {items.map((it) => (
+          <button
+            key={it.key}
+            type="button"
+            role="menuitem"
+            className={`msg-menu__item${it.danger ? ' is-danger' : ''}`}
+            onClick={() => {
+              close();
+              it.run();
+            }}
+          >
+            {it.icon}
+            {it.label}
+          </button>
+        ))}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function MenuPopover({ client, room, ev, point, onClose, items }: MenuProps & { items: Item[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
   // позиция: у точки нажатия, но целиком внутри экрана
   useLayoutEffect(() => {
@@ -120,23 +275,7 @@ export function MessageMenu({ client, room, ev, point, onClose, onReply, onEdit,
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={onMenuKey}
       >
-        <div className="msg-menu__reactions">
-          {QUICK_REACTIONS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="menuitem"
-              className="msg-menu__emoji"
-              aria-label={`Реакция ${k}`}
-              onClick={() => {
-                onClose();
-                toggleReaction(client, room, ev, k).catch(() => toast('Не удалось отправить реакцию', { variant: 'error' }));
-              }}
-            >
-              {k}
-            </button>
-          ))}
-        </div>
+        <Reactions client={client} room={room} ev={ev} close={onClose} />
         {items.map((it) => (
           <button
             key={it.key}
