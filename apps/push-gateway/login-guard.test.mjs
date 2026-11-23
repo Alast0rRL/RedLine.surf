@@ -2,7 +2,7 @@
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { createLoginGuard, normalizeUser, PAIR_FAILS } from './login-guard.mjs';
+import { createLoginGuard, normalizeUser, PAIR_FAILS, USER_LIMIT } from './login-guard.mjs';
 
 const SECRET = 'S3cretPassw0rd-xyz';
 const MIN = 60 * 1000;
@@ -111,11 +111,11 @@ test('PAIR_FAILS неверных, следующий — 429 без обращ�
   assert.equal(j.retry_after_ms, 15 * MIN);
 });
 
-test('другой IP того же логина не заблокирован по паре, но блокируется по логину после 20 неудач', async () => {
+test('другой IP того же логина не заблокирован по паре, но блокируется по логину после USER_LIMIT неудач', async () => {
   for (let i = 0; i < PAIR_FAILS - 1; i++) await login(user, 'bad', '10.0.1.1');
   assert.equal((await login(user, 'good', '10.0.1.2')).status, 200);
-  // ещё неудачи с разных IP: всего 20 по логину
-  for (let i = PAIR_FAILS - 1; i < 20; i++) assert.equal((await login(user, 'bad', `10.0.2.${i}`)).status, 403);
+  // ещё неудачи с разных IP: всего USER_LIMIT по логину
+  for (let i = PAIR_FAILS - 1; i < USER_LIMIT; i++) assert.equal((await login(user, 'bad', `10.0.${2 + (i >> 8)}.${i & 255}`)).status, 403);
   const before = calls;
   const r = await login(user, 'good', '10.0.3.1');
   assert.equal(r.status, 429);

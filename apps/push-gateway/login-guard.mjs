@@ -12,7 +12,9 @@ export const PAIR_FAILS = 10;
 const PAIR_BASE_LOCK_MS = 15 * 60 * 1000;
 const PAIR_MAX_LOCK_MS = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
-const USER_LIMIT = 20;
+// Логины угадываемы (ded, mama): порог по аккаунту высокий, чтобы чужой не мог держать человека заблокированным.
+// Подбор PIN без ссылки невозможен (пароль = ключ ссылки + PIN), с украденной ссылкой — 100/ч, это месяцы.
+export const USER_LIMIT = 100;
 const IP_LIMIT = 50;
 const UPSTREAM_TIMEOUT_MS = 30_000;
 
