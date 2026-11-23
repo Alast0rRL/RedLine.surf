@@ -271,6 +271,9 @@ export function RoomInfo({ roomId }: { roomId: string }) {
           >
             <ExtraIcon name="bellOff" /> {muted ? 'Включить звук' : 'Без звука'}
           </Button>
+          <Button variant="outline" onClick={() => navigate.roomMedia(roomId)}>
+            <Icon name="image" /> Фото и файлы
+          </Button>
         </div>
       </Card>
 

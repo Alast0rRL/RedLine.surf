@@ -13,6 +13,7 @@ import { RoomView } from './screens/RoomView';
 import { Settings } from './screens/Settings';
 import { People } from './screens/People';
 import { RoomInfo } from './screens/RoomInfo';
+import { RoomMedia } from './screens/RoomMedia';
 import { UserProfile } from './screens/UserProfile';
 
 const OFFLINE_DELAY_MS = 5000;
@@ -190,9 +191,10 @@ export function App() {
       <AppLines />
       <OfflineBar />
       <Onboarding />
-      <ChatList activeRoomId={route.name === 'room' || route.name === 'room-info' ? route.roomId : undefined} />
+      <ChatList activeRoomId={route.name === 'room' || route.name === 'room-info' || route.name === 'room-media' ? route.roomId : undefined} />
       {route.name === 'room' && <RoomView key={route.roomId} roomId={route.roomId} />}
       {route.name === 'room-info' && <RoomInfo key={route.roomId} roomId={route.roomId} />}
+      {route.name === 'room-media' && <RoomMedia key={route.roomId} roomId={route.roomId} />}
       {route.name === 'user' && <UserProfile key={route.userId} userId={route.userId} />}
       {route.name === 'settings' && <Settings />}
       {route.name === 'people' && <People />}
