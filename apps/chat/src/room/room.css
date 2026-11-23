@@ -285,3 +285,29 @@
 .msg .voice__speed { padding: 2px 8px; font-size: 0.75rem; cursor: pointer; }
 .unread-sep { display: flex; align-items: center; gap: 10px; margin: 12px 0 6px; color: var(--chat-accent-text); font-size: 0.75rem; font-weight: var(--rl-weight-black); }
 .unread-sep::before, .unread-sep::after { content: ""; flex: 1; height: 1px; background: var(--rl-color-accent); opacity: 0.4; }
+
+/* упоминания */
+.bubble--mention:not(.bubble--own) { border-left: 3px solid var(--rl-color-accent); background-image: linear-gradient(rgb(var(--rl-red-500-rgb) / 0.08), rgb(var(--rl-red-500-rgb) / 0.08)); }
+.msg-text--html a[href^="https://matrix.to/#/@"] {
+  padding: 0 5px; border-radius: 999px; text-decoration: none;
+  background: rgb(var(--rl-red-500-rgb) / 0.16); color: var(--rl-color-accent);
+}
+.chat-row__at {
+  display: inline-grid; place-items: center; min-width: 1.25rem; height: 1.25rem; border-radius: 999px;
+  background: var(--rl-color-accent); color: #fff; font-size: 0.75rem; font-weight: var(--rl-weight-semibold); line-height: 1;
+}
+.composer-box { position: relative; }
+.mention-list {
+  position: absolute; left: var(--rl-space-2); right: var(--rl-space-2); bottom: 100%; z-index: 5;
+  margin: 0 0 4px; padding: 4px; list-style: none; max-height: 15rem; overflow-y: auto;
+  background: var(--chat-bar, var(--rl-color-surface)); border: 1px solid var(--rl-color-border-strong); border-radius: 14px;
+  backdrop-filter: blur(var(--rl-blur-md)); -webkit-backdrop-filter: blur(var(--rl-blur-md));
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
+}
+.mention-item {
+  display: flex; align-items: center; gap: var(--rl-space-2); width: 100%; padding: 6px 8px;
+  border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.mention-item.is-active, .mention-item:hover { background: var(--rl-color-fill); }
+.mention-item__name { font-weight: var(--rl-weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mention-item__id { font-size: var(--rl-text-xs); color: var(--rl-color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

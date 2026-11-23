@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
 import type { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
 import { sendFile, sendImage, sendText, sendVoice } from '../lib/send';
 import { plainBody, sendEdit, sendReply } from '../lib/messageActions';
 import { previewText } from '../lib/events';
 import { formatDuration } from '../lib/events';
 import { isVoiceRecordingSupported, VoiceRecorder } from '../lib/voice/recorder';
-import { Button, Icon, toast } from '../components/ui';
+import { Avatar, Button, Icon, toast } from '../components/ui';
+import { buildMentionContent, mentionCandidates } from '../lib/mentions';
 import './room.css';
 
 export const MAX_LEN = 2000;
@@ -58,6 +59,35 @@ export function Composer({ client, room, context, onClearContext }: {
   const origin = useRef({ x: 0, y: 0 });
   const released = useRef(false);
   const typingTimer = useRef(0);
+  // «@» в группе: список участников по тексту до курсора
+  const [caret, setCaret] = useState(0);
+  const [mentionOff, setMentionOff] = useState(false);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const me = client.getUserId() ?? '';
+  const isGroup = room.getJoinedMemberCount() > 2;
+  const mentionCtx = !isGroup || editing || mentionOff ? null : /(^|s)@([^s@]*)$/.exec(text.slice(0, caret));
+  const mentionQuery = mentionCtx ? mentionCtx[2] : null;
+  const candidates = useMemo(
+    () => (mentionQuery === null ? [] : mentionCandidates(room, me, mentionQuery)),
+    // состав комнаты читаем при каждом изменении запроса
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [room, me, mentionQuery],
+  );
+  const mentionOpen = candidates.length > 0;
+  useEffect(() => setMentionIdx(0), [mentionQuery]);
+  const pickMention = (i: number) => {
+    const c = candidates[i];
+    if (!c || !mentionCtx) return;
+    const start = mentionCtx.index + mentionCtx[1].length;
+    const next = `${text.slice(0, start)}@${c.name} ${text.slice(caret)}`.slice(0, MAX_LEN);
+    const pos = Math.min(start + c.name.length + 2, next.length);
+    setText(next);
+    setCaret(pos);
+    requestAnimationFrame(() => {
+      textarea.current?.focus();
+      textarea.current?.setSelectionRange(pos, pos);
+    });
+  };
   const voiceOk = isVoiceRecordingSupported();
 
   // черновик на комнату
@@ -137,18 +167,37 @@ export function Composer({ client, room, context, onClearContext }: {
       onClearContext();
       return;
     }
+    const mention = isGroup ? buildMentionContent(room, me, body) : null;
     setText('');
     if (replying?.getId()) {
-      sendReply(client, room.roomId, body, replying.getId()!).catch((e) => console.warn('send failed (shown in timeline)', e));
+      sendReply(client, room.roomId, body, replying.getId()!, mention ?? undefined).catch((e) => console.warn('send failed (shown in timeline)', e));
       onClearContext();
     } else {
-      sendText(client, room.roomId, body).catch((e) => console.warn('send failed (shown in timeline)', e));
+      sendText(client, room.roomId, body, mention ?? undefined).catch((e) => console.warn('send failed (shown in timeline)', e));
     }
     window.dispatchEvent(new Event('rl:sent'));
     textarea.current?.focus();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionOpen && !e.nativeEvent.isComposing) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const n = candidates.length;
+        setMentionIdx((i) => (i + (e.key === 'ArrowDown' ? 1 : n - 1)) % n);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        pickMention(mentionIdx);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionOff(true);
+        return;
+      }
+    }
     if (e.key === 'Escape' && context) {
       e.preventDefault();
       onClearContext();
@@ -307,6 +356,24 @@ export function Composer({ client, room, context, onClearContext }: {
           </Button>
         </div>
       )}
+      {mentionOpen && !recording && (
+        <ul className="mention-list" role="listbox" aria-label="Упомянуть участника">
+          {candidates.map((c, i) => (
+            <li key={c.member.userId} role="option" aria-selected={i === mentionIdx}>
+              <button
+                type="button"
+                className={`mention-item${i === mentionIdx ? ' is-active' : ''}`}
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => pickMention(i)}
+              >
+                <Avatar client={client} name={c.name} seed={c.member.userId} mxc={c.member.getMxcAvatarUrl()} size="sm" />
+                <span className="mention-item__name">{c.name}</span>
+                <span className="mention-item__id">{c.member.userId}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {text.length >= COUNTER_FROM && !recording && (
         <div className={`composer-count${text.length >= MAX_LEN ? ' is-max' : ''}`} aria-live="polite">{text.length}/{MAX_LEN}</div>
       )}
@@ -346,8 +413,11 @@ export function Composer({ client, room, context, onClearContext }: {
             onChange={(e) => {
               const v = e.target.value.slice(0, MAX_LEN);
               setText(v);
+              setCaret(e.target.selectionStart ?? v.length);
+              setMentionOff(false);
               if (v && !editing) typing(true);
             }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             onBlur={() => typing(false)}

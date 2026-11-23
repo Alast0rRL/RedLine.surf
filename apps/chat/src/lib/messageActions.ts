@@ -120,10 +120,11 @@ export async function toggleReaction(client: MatrixClient, room: Room, ev: Matri
 
 /* ---------------- ответ / правка ---------------- */
 
-export function sendReply(client: MatrixClient, roomId: string, text: string, replyToId: string): Promise<unknown> {
+export function sendReply(client: MatrixClient, roomId: string, text: string, replyToId: string, extra?: Record<string, unknown>): Promise<unknown> {
   const content = {
     msgtype: 'm.text',
     body: text,
+    ...extra,
     'm.relates_to': { 'm.in_reply_to': { event_id: replyToId } },
   } as unknown as RoomMessageEventContent;
   return client.sendMessage(roomId, content);

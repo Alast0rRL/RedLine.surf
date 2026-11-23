@@ -42,7 +42,7 @@ interface MenuState {
 }
 
 function RoomRow({ client, s, active, onMenu }: { client: MatrixClient; s: RoomSummary; active: boolean; onMenu: (m: MenuState) => void }) {
-  const { room, lastEvent, unread, isDm, pinned, muted } = s;
+  const { room, lastEvent, unread, isDm, pinned, muted, mentioned } = s;
   const timer = useRef<number | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const fired = useRef(false);
@@ -113,6 +113,7 @@ function RoomRow({ client, s, active, onMenu }: { client: MatrixClient; s: RoomS
           <span className="chat-row__icons">
             {muted && <span role="img" aria-label="Без звука"><ExtraIcon name="bellOff" size={14} /></span>}
             {pinned && <span role="img" aria-label="Закреплён"><ExtraIcon name="pin" size={14} /></span>}
+            {unread > 0 && mentioned && <span className="chat-row__at" role="img" aria-label="Вас упомянули">@</span>}
             {unread > 0 && (
               <span className={`rl-badge${muted ? ' rl-badge--muted' : ''}`}>{unread > 99 ? '99+' : unread}</span>
             )}

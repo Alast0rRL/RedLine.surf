@@ -41,8 +41,8 @@ async function uploadBlob(
 
 const uid = () => crypto.randomUUID();
 
-export function sendText(client: MatrixClient, roomId: string, text: string): Promise<unknown> {
-  const content: RoomMessageEventContent = { msgtype: 'm.text', body: text } as RoomMessageEventContent;
+export function sendText(client: MatrixClient, roomId: string, text: string, extra?: Record<string, unknown>): Promise<unknown> {
+  const content = { msgtype: 'm.text', body: text, ...extra } as unknown as RoomMessageEventContent;
   return client.sendMessage(roomId, content);
 }
 

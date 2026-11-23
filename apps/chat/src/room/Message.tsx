@@ -3,6 +3,7 @@ import { EventStatus, EventType, MsgType, type MatrixClient, type MatrixEvent, t
 import { formatTime, isPendingDecryption, isUndecryptable, isVoice, previewText } from '../lib/events';
 import { sanitizeMatrixHtml, splitPhones, stripReplyFallback } from '../lib/html';
 import { markHtml, splitMarks } from '../lib/search';
+import { isMentioningMe } from '../lib/mentions';
 import type { MediaSource } from '../lib/media';
 import { isPinUser } from '../lib/pin';
 import { navigate } from '../hooks/useHashRoute';
@@ -38,6 +39,15 @@ function Linkified({ text, q }: { text: string; q?: string }) {
   );
 }
 
+/** Ссылка на человека (matrix.to/#/@user:server) открывает его профиль, а не внешний сайт. */
+function onHtmlClick(e: RMouseEvent<HTMLDivElement>) {
+  const a = (e.target as HTMLElement).closest('a');
+  const m = a?.getAttribute('href')?.match(/^https:\/\/matrix\.to\/#\/(@[^?/]+)/);
+  if (!m) return;
+  e.preventDefault();
+  navigate.user(decodeURIComponent(m[1]));
+}
+
 function Body({ ev, name, q }: { ev: MatrixEvent; name: string; q?: string }) {
   const content = ev.getContent();
   const html = useMemo(
@@ -47,7 +57,7 @@ function Body({ ev, name, q }: { ev: MatrixEvent; name: string; q?: string }) {
     [content.format, content.formatted_body],
   );
   const marked = useMemo(() => (html && q ? markHtml(html, q) : html), [html, q]);
-  if (marked) return <div className="msg-text msg-text--html" dangerouslySetInnerHTML={{ __html: marked }} />;
+  if (marked) return <div className="msg-text msg-text--html" onClick={onHtmlClick} dangerouslySetInnerHTML={{ __html: marked }} />;
   const body = stripReplyFallback(String(content.body ?? ''));
   // одни эмодзи — крупно
   const onlyEmoji = /^(\p{Extended_Pictographic}|\p{Emoji_Component}|\s){1,8}$/u.test(body) && !/\d/.test(body);
@@ -197,6 +207,7 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
   const isMedia = !ev.isRedacted() && [MsgType.Image].includes(ev.getContent().msgtype as MsgType);
   const isAudio = !ev.isRedacted() && ev.getContent().msgtype === MsgType.Audio;
   const failed = ev.status === EventStatus.NOT_SENT;
+  const mentioned = !own && isMentioningMe(ev, client.getUserId());
   const edited = !!ev.replacingEventId();
   const isFile = !ev.isRedacted() && [MsgType.File, MsgType.Video].includes(ev.getContent().msgtype as MsgType);
   const actionable = canAct(ev);
@@ -341,7 +352,7 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
       <span ref={arrowRef} className="msg__swipe" aria-hidden="true"><ExtraIcon name="reply" size={18} /></span>
       <div className="msg__col" ref={colRef}>
         <div
-          className={`bubble${isMedia ? ' bubble--media' : ''}${isAudio ? ' bubble--audio' : ''}${isFile ? ' bubble--file' : ''}`}
+          className={`bubble${mentioned ? ' bubble--mention' : ''}${isMedia ? ' bubble--media' : ''}${isAudio ? ' bubble--audio' : ''}${isFile ? ' bubble--file' : ''}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={(e) => {

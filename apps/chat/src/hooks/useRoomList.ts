@@ -11,6 +11,7 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { isMessageLike } from '../lib/events';
+import { hasUnreadMention } from '../lib/mentions';
 import { isRoomLeaving, isRoomPinned, roomMutedChecker } from '../lib/rooms';
 import { onOptimistic } from '../lib/optimistic';
 import { useThrottledVersion } from './useThrottledVersion';
@@ -21,6 +22,8 @@ export interface RoomSummary {
   lastTs: number;
   unread: number;
   highlight: number;
+  /** среди непрочитанных есть сообщение, где упомянули меня */
+  mentioned: boolean;
   isDm: boolean;
   pinned: boolean;
   muted: boolean;
@@ -76,6 +79,7 @@ export function useRoomList(client: MatrixClient) {
     const invites: Room[] = [];
     const directIds = directRoomIds(client);
     const isMuted = roomMutedChecker(client);
+    const me = client.getUserId();
     for (const room of client.getVisibleRooms()) {
       const membership = room.getMyMembership();
       if (membership === KnownMembership.Invite) {
@@ -90,6 +94,7 @@ export function useRoomList(client: MatrixClient) {
         lastTs: lastEvent?.getTs() ?? room.getLastActiveTimestamp() ?? 0,
         unread: room.getUnreadNotificationCount(NotificationCountType.Total),
         highlight: room.getUnreadNotificationCount(NotificationCountType.Highlight),
+        mentioned: hasUnreadMention(room, me),
         isDm: isDirectRoom(client, room, directIds),
         pinned: isRoomPinned(room),
         muted: isMuted(room.roomId),
