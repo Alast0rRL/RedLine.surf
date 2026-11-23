@@ -18,6 +18,24 @@
 }
 .msg-reply { cursor: pointer; }
 
+/* поиск по чату */
+.searchbar { flex: none; display: flex; flex-direction: column; }
+.searchbar .topbar { gap: var(--rl-space-1); padding-left: var(--rl-space-3); }
+.searchbar__icon { display: grid; place-items: center; color: var(--rl-color-text-muted); }
+.searchbar__input {
+  flex: 1; min-width: 0; height: 2.5rem; padding: 0 var(--rl-space-2);
+  border: 0; background: transparent; color: inherit; font: inherit; font-size: 1rem; outline: none;
+  appearance: none; -webkit-appearance: none;
+}
+.searchbar__input::-webkit-search-cancel-button { display: none; }
+.searchbar__count { flex: none; font-size: var(--rl-text-xs); color: var(--rl-color-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.searchbar__more {
+  display: flex; justify-content: center; align-items: center; padding: var(--rl-space-1);
+  background: var(--chat-bar); border-bottom: 1px solid var(--rl-color-border); font-size: var(--rl-text-sm);
+}
+.searchbar__progress { display: inline-flex; align-items: center; gap: var(--rl-space-2); color: var(--rl-color-text-muted); }
+.bubble mark { background: rgb(255 214 10 / 0.55); color: inherit; border-radius: 3px; padding: 0 1px; }
+
 /* touch: без выделения текста и системного меню при долгом нажатии */
 @media (pointer: coarse) {
   .msg .bubble { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-y; }

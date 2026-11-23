@@ -8,6 +8,8 @@ import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { Avatar, Button, Icon } from '../components/ui';
 import { Timeline } from '../room/Timeline';
+import { RoomSearch, type SearchTarget } from '../room/RoomSearch';
+import { ExtraIcon } from '../components/extraIcons';
 import { Composer, type ComposerContext } from '../room/Composer';
 import { roomAvatarMxc } from './ChatList';
 import '../styles/info.css';
@@ -67,7 +69,14 @@ export function RoomView({ roomId }: { roomId: string }) {
   const onEdit = useCallback((ev: MatrixEvent) => setContext({ kind: 'edit', ev }), []);
   const clearContext = useCallback(() => setContext(null), []);
 
-  useEffect(() => setContext(null), [roomId]);
+  const [searching, setSearching] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
+  const closeSearch = useCallback(() => setSearching(false), []);
+
+  useEffect(() => {
+    setContext(null);
+    setSearching(false);
+  }, [roomId]);
 
   useEffect(() => {
     setCurrentRoom(roomId);
@@ -100,6 +109,9 @@ export function RoomView({ roomId }: { roomId: string }) {
 
   return (
     <section className="pane pane--room pane--chat" aria-label={room.name}>
+      {searching ? (
+        <RoomSearch client={client} room={room} onClose={closeSearch} onTarget={setSearchTarget} />
+      ) : (
       <header className="topbar topbar--room">
         <Button variant="ghost" icon aria-label="Назад к чатам" className="topbar__back" onClick={() => navigate.list()}>
           <Icon name="back" />
@@ -118,8 +130,12 @@ export function RoomView({ roomId }: { roomId: string }) {
             </span>
           </span>
         </button>
+        <Button variant="ghost" icon aria-label="Поиск в чате" onClick={() => setSearching(true)}>
+          <ExtraIcon name="search" size={20} />
+        </Button>
       </header>
-      <Timeline key={room.roomId} client={client} room={room} onReply={onReply} onEdit={onEdit} />
+      )}
+      <Timeline key={room.roomId} client={client} room={room} onReply={onReply} onEdit={onEdit} searchTarget={searching ? searchTarget : null} />
       <Composer key={room.roomId} client={client} room={room} context={context} onClearContext={clearContext} />
     </section>
   );

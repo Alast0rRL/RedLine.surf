@@ -8,6 +8,7 @@ import { uploadStore } from '../lib/uploads';
 import { Button, Icon } from '../components/ui';
 import { FileGlyph, formatSize } from './FileMessage';
 import { Message, messageStamp } from './Message';
+import type { SearchTarget } from './RoomSearch';
 import { DeleteDialog, ForwardDialog, MessageMenu, type MenuPoint } from './MessageMenu';
 import './room.css';
 
@@ -97,9 +98,11 @@ export interface TimelineProps {
   room: Room;
   onReply: (ev: MatrixEvent) => void;
   onEdit: (ev: MatrixEvent) => void;
+  /** результат поиска, к которому надо прокрутить и подсветить текст */
+  searchTarget?: SearchTarget | null;
 }
 
-export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
+export function Timeline({ client, room, onReply, onEdit, searchTarget = null }: TimelineProps) {
   const { events, loadOlder, loadingOlder, canLoadOlder, version } = useTimeline(client, room);
   const me = client.getUserId()!;
   const pin = isPinUser(me);
@@ -176,6 +179,31 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
     }
     prevHeight.current = el.scrollHeight;
   }, [version, shown.length]);
+
+  // переход к результату поиска: при необходимости расширяем окно отрисовки
+  const jumpedNonce = useRef(-1);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || !searchTarget || jumpedNonce.current === searchTarget.nonce) return;
+    const idx = events.findIndex((e) => e.getId() === searchTarget.id);
+    if (idx < 0) return;
+    if (idx < hidden) {
+      setLimit(events.length - idx + 40); // после перерисовки эффект сработает снова (hidden изменится)
+      return;
+    }
+    const node = el.querySelector<HTMLElement>(`[data-evid="${CSS.escape(searchTarget.id)}"]`);
+    if (!node) return;
+    jumpedNonce.current = searchTarget.nonce;
+    stick.current = false;
+    unreadScrolled.current = true;
+    node.scrollIntoView({ block: 'center' });
+    prevHeight.current = el.scrollHeight;
+    node.classList.remove('msg--flash');
+    void node.offsetWidth;
+    node.classList.add('msg--flash');
+    window.setTimeout(() => node.classList.remove('msg--flash'), 1600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTarget, hidden, events.length]);
 
   // непрочитанные: маркер фиксируем в момент открытия комнаты и больше не двигаем
   const openState = useRef<{ readId: string | null; unread: number } | null>(null);
@@ -351,6 +379,7 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
                 stamp={messageStamp(ev) + (readByOthers ? 'r' : '') + '|' + reactionsStamp(reactions)}
                 onMenu={openMenu}
                 onReply={onReply}
+                highlight={searchTarget && searchTarget.id === ev.getId() ? searchTarget.query : undefined}
               />
             </Fragment>
           );

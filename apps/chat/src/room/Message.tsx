@@ -2,6 +2,7 @@ import { memo, useMemo, useRef, type KeyboardEvent as RKeyEvent, type MouseEvent
 import { EventStatus, EventType, MsgType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { formatTime, isPendingDecryption, isUndecryptable, isVoice, previewText } from '../lib/events';
 import { sanitizeMatrixHtml, splitPhones, stripReplyFallback } from '../lib/html';
+import { markHtml, splitMarks } from '../lib/search';
 import type { MediaSource } from '../lib/media';
 import { isPinUser } from '../lib/pin';
 import { navigate } from '../hooks/useHashRoute';
@@ -17,22 +18,27 @@ import { VoicePlayer } from './VoicePlayer';
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?])/g;
 
 /** Простой текст: переносы строк + кликабельные ссылки. */
-function Linkified({ text }: { text: string }) {
+function Marked({ text, q }: { text: string; q?: string }) {
+  if (!q) return <>{text}</>;
+  return <>{splitMarks(text, q).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : p.text))}</>;
+}
+
+function Linkified({ text, q }: { text: string; q?: string }) {
   const parts = text.split(URL_RE);
   return (
     <>
       {parts.map((p, i) =>
         i % 2 === 1 ? (
-          <a key={i} href={p} target="_blank" rel="noopener noreferrer nofollow">{p}</a>
+          <a key={i} href={p} target="_blank" rel="noopener noreferrer nofollow"><Marked text={p} q={q} /></a>
         ) : (
-          splitPhones(p).map((s, j) => (s.tel ? <a key={`${i}-${j}`} href={`tel:${s.tel}`}>{s.text}</a> : s.text))
+          splitPhones(p).map((s, j) => (s.tel ? <a key={`${i}-${j}`} href={`tel:${s.tel}`}><Marked text={s.text} q={q} /></a> : <Marked key={`${i}-${j}`} text={s.text} q={q} />))
         ),
       )}
     </>
   );
 }
 
-function Body({ ev, name }: { ev: MatrixEvent; name: string }) {
+function Body({ ev, name, q }: { ev: MatrixEvent; name: string; q?: string }) {
   const content = ev.getContent();
   const html = useMemo(
     () => (content.format === 'org.matrix.custom.html' && typeof content.formatted_body === 'string'
@@ -40,14 +46,15 @@ function Body({ ev, name }: { ev: MatrixEvent; name: string }) {
       : null),
     [content.format, content.formatted_body],
   );
-  if (html) return <div className="msg-text msg-text--html" dangerouslySetInnerHTML={{ __html: html }} />;
+  const marked = useMemo(() => (html && q ? markHtml(html, q) : html), [html, q]);
+  if (marked) return <div className="msg-text msg-text--html" dangerouslySetInnerHTML={{ __html: marked }} />;
   const body = stripReplyFallback(String(content.body ?? ''));
   // одни эмодзи — крупно
   const onlyEmoji = /^(\p{Extended_Pictographic}|\p{Emoji_Component}|\s){1,8}$/u.test(body) && !/\d/.test(body);
   return (
     <div className={`msg-text${onlyEmoji ? ' msg-text--emoji' : ''}`}>
       {content.msgtype === MsgType.Emote && <em>* {name} </em>}
-      <Linkified text={body} />
+      <Linkified text={body} q={q} />
     </div>
   );
 }
@@ -99,7 +106,7 @@ function Status({ client, room, ev, readByOthers }: { client: MatrixClient; room
   );
 }
 
-function Content({ ev, name }: { ev: MatrixEvent; name: string }): ReactNode {
+function Content({ ev, name, q }: { ev: MatrixEvent; name: string; q?: string }): ReactNode {
   if (isUndecryptable(ev)) {
     return (
       <div className="msg-text msg-text--muted">
@@ -130,7 +137,7 @@ function Content({ ev, name }: { ev: MatrixEvent; name: string }): ReactNode {
   if (c.msgtype === MsgType.File) {
     return <FileMessage src={src} name={c.filename ?? c.body ?? 'Файл'} size={c.info?.size} />;
   }
-  return <Body ev={ev} name={name} />;
+  return <Body ev={ev} name={name} q={q} />;
 }
 
 export interface MessageProps {
@@ -155,6 +162,8 @@ export interface MessageProps {
   onMenu: (ev: MatrixEvent, point: MenuPoint) => void;
   /** ответить на сообщение (свайп; стабильная ссылка) */
   onReply: (ev: MatrixEvent) => void;
+  /** подсветить совпадения поиска в тексте (только у выбранного результата) */
+  highlight?: string;
 }
 
 export function messageStamp(ev: MatrixEvent): string {
@@ -174,11 +183,11 @@ function sameMessage(a: MessageProps, b: MessageProps): boolean {
   return (
     a.stamp === b.stamp && a.ev === b.ev && a.own === b.own && a.first === b.first && a.last === b.last &&
     a.showSenderName === b.showSenderName && a.readByOthers === b.readByOthers && a.client === b.client &&
-    a.room === b.room && a.onMenu === b.onMenu && a.onReply === b.onReply
+    a.room === b.room && a.onMenu === b.onMenu && a.onReply === b.onReply && a.highlight === b.highlight
   );
 }
 
-export const Message = memo(function Message({ client, room, ev, own, first, last, showSenderName, readByOthers, reactions, onMenu, onReply }: MessageProps) {
+export const Message = memo(function Message({ client, room, ev, own, first, last, showSenderName, readByOthers, reactions, onMenu, onReply, highlight }: MessageProps) {
   const bot = !own && isBotStyled(ev);
   const pin = isPinUser(client.getUserId());
   const sender = ev.sender;
@@ -354,7 +363,7 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
             </div>
           )}
           <ReplyQuote room={room} ev={ev} pin={pin} />
-          <Content ev={ev} name={name} />
+          <Content ev={ev} name={name} q={highlight} />
           <div className="bubble__meta">
             {edited && <span className="bubble__edited">изменено</span>}
             <time dateTime={new Date(ev.getTs()).toISOString()}>{formatTime(ev.getTs())}</time>
