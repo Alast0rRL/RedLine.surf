@@ -93,10 +93,15 @@ async function storeGet(key: string): Promise<Blob | null> {
   }
 }
 
-async function storePut(key: string, data: ArrayBuffer, type: string): Promise<void> {
+/** Поколение кеша: растёт при выходе, чтобы запоздавшие загрузки прежнего аккаунта ничего не сохранили. */
+let generation = 0;
+
+async function storePut(key: string, data: ArrayBuffer, type: string, gen: number): Promise<void> {
   try {
+    if (gen !== generation) return;
     if (typeof caches === 'undefined' || data.byteLength > PERSIST_MAX_BYTES) return;
     const c = await caches.open(STORE);
+    if (gen !== generation) return;
     await c.put(
       storeRequest(key),
       new Response(data, {
@@ -133,6 +138,7 @@ async function trimStore(c: Cache): Promise<void> {
 
 /** Выход: стираем сохранённые миниатюры и освобождаем blob: URL. */
 export async function clearMediaCache(): Promise<void> {
+  generation++;
   for (const e of cache.values()) if (e.url) URL.revokeObjectURL(e.url);
   cache.clear();
   try {
@@ -168,6 +174,7 @@ function getEntry(client: MatrixClient, src: MediaSource, thumb?: Thumb): Entry 
 
   // на диск кладём только миниатюры и аватары незашифрованного медиа: расшифрованное содержимое E2E-чатов не храним
   const persist = !src.file && !!thumb;
+  const gen = generation;
   const job = (async () => {
     if (persist) {
       const stored = await storeGet(key);
@@ -182,13 +189,17 @@ function getEntry(client: MatrixClient, src: MediaSource, thumb?: Thumb): Entry 
     let data = await fetchAuthed(client, httpUrl, thumb ? 'high' : 'low');
     if (src.file) data = await decryptAttachment(data, src.file);
     const type = src.mimetype || 'application/octet-stream';
-    if (persist) void storePut(key, data, type);
+    if (persist) void storePut(key, data, type, gen);
     return URL.createObjectURL(new Blob([data], { type }));
   })();
   const entry: Entry = { promise: job, refs: 0, url: null };
   cache.set(key, entry);
   job.then(
     (u) => {
+      if (gen !== generation) {
+        URL.revokeObjectURL(u); // аккаунт сменился, пока шла загрузка
+        return;
+      }
       entry.url = u;
       evict();
     },

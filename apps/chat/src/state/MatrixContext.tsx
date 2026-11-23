@@ -7,7 +7,6 @@ import { bindPhone, getBoundPhone, savedPhone } from '../lib/phone';
 import { PhoneOffer, type PhoneOfferData } from '../screens/PhoneOffer';
 import { loginWithPassword, logout as doLogout, startMatrix, wipeLocalData } from '../lib/matrix';
 import { attachForegroundNotifications } from '../lib/notifications';
-import { toast } from '../components/ui';
 
 export type AppStatus = 'boot' | 'logged-out' | 'starting' | 'ready' | 'fatal';
 
@@ -141,13 +140,9 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       try {
         await start(r.session, async (c) => {
           setProgress('Открываем чат…');
-          try {
-            await preparePinSession(c, link, r);
-          } catch (e) {
-            // вход уже удался: ошибка настройки шифрования не должна выбрасывать из чата
-            console.error('post-login setup failed', e);
-            toast('Шифрование настроено не полностью. Подсказка появится в чате');
-          }
+          // Разовая настройка шифрования (needs-setup) должна завершиться: при ошибке — назад к PIN,
+          // повторный ввод повторит настройку. Разблокировка (needs-unlock) идёт в фоне и сюда не бросает.
+          await preparePinSession(c, link, r);
           history.replaceState(null, '', '/#/');
           window.dispatchEvent(new HashChangeEvent('hashchange'));
         });
