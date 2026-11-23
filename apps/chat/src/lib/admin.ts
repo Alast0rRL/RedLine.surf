@@ -135,3 +135,21 @@ export async function resetPin(client: MatrixClient, room: string, link: Persona
   if (redactions.some((r) => r.status === 'rejected')) console.warn('Не удалось скрыть события сброса PIN');
   if (!reply.body.trim().startsWith('Successfully reset the password for user')) throw new Error('Не удалось сбросить PIN');
 }
+
+/** Удаление человека: Continuwuity отключает аккаунт и выводит его из всех комнат. */
+export async function deleteUser(client: MatrixClient, roomId: string, localpartOrMxid: string): Promise<void> {
+  const serverName = getConfig().serverName;
+  const suffix = `:${serverName}`;
+  const raw = localpartOrMxid.trim();
+  if (raw.includes(':') && !raw.endsWith(suffix)) throw new Error('Пользователь не на этом сервере');
+  const localpart = (raw.endsWith(suffix) ? raw.slice(0, -suffix.length) : raw).replace(/^@/, '').toLowerCase();
+  if (!/^[a-z0-9._=-]+$/.test(localpart) || localpart.startsWith('-')) throw new Error('Некорректный логин пользователя');
+  const own = client.getUserId()?.replace(/^@/, '').split(':')[0].toLowerCase();
+  if (localpart === own) throw new Error('Нельзя удалить самого себя');
+  if (localpart === 'admin' || localpart === 'conduit') throw new Error('Нельзя удалить администратора сервера');
+
+  const reply = await runAdminCommand(client, roomId, `!admin users deactivate @${localpart}${suffix}`);
+  if (!/deactivated/i.test(reply.body)) {
+    throw new Error(reply.body.trim().split(/\r?\n/)[0].slice(0, 200) || 'Не удалось удалить пользователя');
+  }
+}

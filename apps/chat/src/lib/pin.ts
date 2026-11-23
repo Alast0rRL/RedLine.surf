@@ -144,11 +144,28 @@ export interface PinLogin {
   password: string;
 }
 
+/** Текст для человека, чей аккаунт удалил администратор. */
+export const ACCOUNT_DELETED = 'Аккаунт удалён администратором';
+
+export function isDeactivated(e: unknown): boolean {
+  return (e as { errcode?: string } | null)?.errcode === 'M_USER_DEACTIVATED';
+}
+
 function isForbidden(e: unknown): boolean {
   return (e as { errcode?: string } | null)?.errcode === 'M_FORBIDDEN';
 }
 
 export async function loginWithPin(baseUrl: string, link: PersonalLink, pin: string): Promise<PinLogin> {
+  try {
+    return await loginWithPinInner(baseUrl, link, pin);
+  } catch (e) {
+    // удалённый аккаунт — не неверный PIN
+    if (isDeactivated(e)) throw new Error(ACCOUNT_DELETED);
+    throw e;
+  }
+}
+
+async function loginWithPinInner(baseUrl: string, link: PersonalLink, pin: string): Promise<PinLogin> {
   const password = await derive(link, 'pin', pin);
   const state = await linkState(baseUrl, link);
   if (state === 'invalid') throw new Error('Ссылка больше не действует. Попросите новую');

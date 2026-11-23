@@ -5,7 +5,7 @@
  * PBKDF2(PIN, соль из номера). Личный ключ сервер хранит зашифрованным ключом из proof.
  */
 import { loadConfig } from '../config';
-import { isPersonalLink, pinPassword, type PersonalLink } from './pin';
+import { ACCOUNT_DELETED, isPersonalLink, pinPassword, type PersonalLink } from './pin';
 
 const PROOF_SALT = 'redline-phone-v1\n';
 const PROOF_ITERATIONS = 200_000;
@@ -107,6 +107,12 @@ export async function unbindPhone(token: string): Promise<void> {
   localStorage.removeItem(SAVED_PHONE);
 }
 
+/** Администратор снимает привязку номера удалённого человека. */
+export async function adminUnbindPhone(token: string, mxid: string): Promise<boolean> {
+  const r = await api<{ removed: boolean }>('DELETE', `user/${encodeURIComponent(mxid)}`, undefined, token);
+  return r.removed;
+}
+
 /** Проверка PIN: заходим с выведенным паролем и сразу закрываем этот лишний сеанс. */
 export async function verifyPin(link: PersonalLink, pin: string): Promise<void> {
   const { homeserverUrl } = await loadConfig();
@@ -126,7 +132,10 @@ export async function verifyPin(link: PersonalLink, pin: string): Promise<void> 
   } catch {
     throw new Error('Нет связи с сервером');
   }
-  if (res.status === 403) throw new Error('Неверный PIN');
+  if (res.status === 403) {
+    const err = (await res.json().catch(() => null)) as { errcode?: string } | null;
+    throw new Error(err?.errcode === 'M_USER_DEACTIVATED' ? ACCOUNT_DELETED : 'Неверный PIN');
+  }
   if (res.status === 429) {
     const lim = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(lim?.error || 'Слишком много попыток входа. Попробуйте позже.');

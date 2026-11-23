@@ -808,3 +808,6 @@ a { color: inherit; }
 }
 
 .settings-card .rl-btn { max-width: 100%; white-space: normal; }
+
+.rl-btn--danger { color: var(--rl-red-400); border-color: rgb(var(--rl-red-500-rgb) / 0.6); }
+.rl-btn--danger:hover:not(:disabled) { background: rgb(var(--rl-red-500-rgb) / 0.15); }

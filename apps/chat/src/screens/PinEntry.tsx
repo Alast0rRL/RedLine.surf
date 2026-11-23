@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { loadConfig } from '../config';
-import { forgetLink, linkState, PIN_LENGTH, type LinkState, type PersonalLink } from '../lib/pin';
+import { ACCOUNT_DELETED, forgetLink, linkState, PIN_LENGTH, type LinkState, type PersonalLink } from '../lib/pin';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -14,6 +14,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletedByAdmin, setDeletedByAdmin] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -33,6 +34,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
     // loadLink() каждый раз отдаёт новый объект: следим за значениями, иначе форма сбрасывается при вводе
   }, [link.user, link.key, link.token, attempt]);
 
+  const deleted = deletedByAdmin || sessionError === ACCOUNT_DELETED;
   const shownError = [error, sessionError].filter(Boolean).join(' ');
 
   const otherLink = () => {
@@ -49,7 +51,13 @@ export function PinEntry({ link }: { link: PersonalLink }) {
     try {
       await enterPin(link, pin);
     } catch (err) {
-      setError((err as Error).message || 'Не удалось войти');
+      const message = (err as Error).message;
+      if (message === ACCOUNT_DELETED) {
+        setDeletedByAdmin(true);
+        setPin('');
+        return;
+      }
+      setError(message || 'Не удалось войти');
       setPin('');
       setAttempt((n) => n + 1);
     } finally {
@@ -68,14 +76,21 @@ export function PinEntry({ link }: { link: PersonalLink }) {
           Redline <span>Chat</span>
         </h1>
 
-        {state === 'checking' && (
+        {deleted && (
+          <div className="stack">
+            <p className="login__note" role="alert">{ACCOUNT_DELETED}</p>
+            <Button variant="ghost" size="sm" className="login__link" onClick={otherLink}>Другая ссылка</Button>
+          </div>
+        )}
+
+        {!deleted && state === 'checking' && (
           <div className="splash__content">
             <span className="rl-spinner" />
             <p className="splash__text">Проверяем ссылку…</p>
           </div>
         )}
 
-        {state === 'network-error' && (
+        {!deleted && state === 'network-error' && (
           <div className="stack">
             <p className="login__note">Не удалось проверить ссылку. Проверь интернет и попробуй ещё раз.</p>
             {shownError && <p className="rl-hint rl-hint--error" role="alert">{shownError}</p>}
@@ -83,7 +98,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
           </div>
         )}
 
-        {state === 'invalid' && (
+        {!deleted && state === 'invalid' && (
           <div className="stack">
             <p className="login__note">Ссылка больше не действует. Попроси новую</p>
             {shownError && <p className="rl-hint rl-hint--error" role="alert">{shownError}</p>}
@@ -91,7 +106,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
           </div>
         )}
 
-        {(state === 'create' || state === 'enter') && (
+        {!deleted && (state === 'create' || state === 'enter') && (
           <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
             <p className="login__note">Привет, {link.name}!</p>
             <Field

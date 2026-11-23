@@ -146,6 +146,31 @@ export function revokeInvite(client: MatrixClient, adminRoom: string, token: str
   return serialized(() => doRevokeInvite(client, adminRoom, token));
 }
 
+/** Забыть человека: его личная ссылка и ещё не использованный токен регистрации. */
+export function removeLink(client: MatrixClient, adminRoom: string, user: string): Promise<void> {
+  return serialized(async () => {
+    const links = await loadLinks(client);
+    const mine = links.filter((l) => l.user === user);
+    if (!mine.length) return;
+    await saveLinks(client, links.filter((l) => l.user !== user));
+    const invites = await readMetadata(client);
+    const pending = new Set(invites.map((i) => i.token));
+    for (const { token } of mine) {
+      // токен у человека, уже зашедшего по ссылке, использован: отзываем только ещё ждущие
+      if (!pending.has(token)) continue;
+      try {
+        await doRevokeInvite(client, adminRoom, token);
+      } catch {
+        /* уже использован или отозван */
+      }
+    }
+    const tokens = new Set(mine.map((l) => l.token));
+    if (invites.some((i) => tokens.has(i.token))) {
+      await saveMetadata(client, invites.filter((i) => !tokens.has(i.token))).catch(() => console.warn('Не удалось обновить метаданные приглашений'));
+    }
+  });
+}
+
 const sweptClients = new WeakSet<MatrixClient>();
 
 /** При открытии приложения: проверить даты без команд, а чистить только если есть просроченные. */

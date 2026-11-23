@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { findAdminRoom, listUsers, resetPassword, resetPin } from '../lib/admin';
-import { createInvite, loadInvites, loadLinks, revokeInvite, type Invite } from '../lib/invites';
+import { deleteUser, findAdminRoom, listUsers, resetPassword, resetPin } from '../lib/admin';
+import { createInvite, loadInvites, loadLinks, removeLink, revokeInvite, type Invite } from '../lib/invites';
 import { formatLink, isPinUser, type PersonalLink } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { navigate } from '../hooks/useHashRoute';
 import { useClient } from '../state/MatrixContext';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { QrCode } from '../components/QrCode';
+import { adminUnbindPhone } from '../lib/phone';
 
 interface Person {
   id: string;
@@ -42,6 +43,7 @@ export function People() {
   const [revokeTarget, setRevokeTarget] = useState<Invite | null>(null);
   const [resetTarget, setResetTarget] = useState<Person | null>(null);
   const [pinResetTarget, setPinResetTarget] = useState<{ person: Person; link: PersonalLink } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Person | null>(null);
   const [logoutDevices, setLogoutDevices] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const inflight = useRef<Promise<void> | null>(null);
@@ -188,6 +190,40 @@ export function People() {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!adminRoom || !deleteTarget) return;
+    const person = deleteTarget;
+    setAction(`delete:${person.id}`);
+    try {
+      await deleteUser(client, adminRoom, person.id);
+    } catch (e) {
+      toast((e as Error).message || 'Не удалось удалить', { variant: 'error' });
+      setAction(null);
+      return;
+    }
+    setPeople((list) => list.filter((p) => p.id !== person.id));
+    setDeleteTarget(null);
+    const local = person.id.replace(/^@/, '').split(':')[0];
+    const warnings: string[] = [];
+    try {
+      await removeLink(client, adminRoom, local);
+      setLinks((list) => list.filter((l) => l.user !== local));
+    } catch {
+      warnings.push('личную ссылку');
+    }
+    try {
+      const token = client.getAccessToken();
+      if (!token) throw new Error('no token');
+      await adminUnbindPhone(token, person.id);
+    } catch {
+      warnings.push('привязку номера');
+    }
+    toast(`${person.name} удалён(а) из Redline`, { variant: 'success' });
+    if (warnings.length) toast(`Не удалось убрать ${warnings.join(' и ')}`, { variant: 'default' });
+    setAction(null);
+    reload();
+  };
+
   const copyPassword = async () => {
     if (!newPassword) return;
     try {
@@ -291,6 +327,7 @@ export function People() {
                 const self = person.id === client.getUserId();
                 const bot = isBotUser(person.id);
                 const pinUser = isPinUser(person.id);
+                const admin = /^@(admin|conduit):/.test(person.id);
                 const pinLink = pinUser
                   ? links.find((l) => l.user === person.id.replace(/^@/, '').split(':')[0])
                   : undefined;
@@ -325,6 +362,17 @@ export function People() {
                         ) : (
                           <Button size="sm" variant="secondary" onClick={() => openReset(person)}>
                             Сбросить пароль
+                          </Button>
+                        )}
+                        {!admin && (
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            busy={action === `delete:${person.id}`}
+                            disabled={!!action}
+                            onClick={() => setDeleteTarget(person)}
+                          >
+                            Удалить из Redline
                           </Button>
                         )}
                       </span>
@@ -387,6 +435,26 @@ export function People() {
         {pinResetTarget && (
           <p>{pinResetTarget.person.name} выйдет на всех устройствах и задаст новый PIN по той же ссылке. Переписка сохранится.</p>
         )}
+      </Modal>
+
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => !action && setDeleteTarget(null)}
+        title={`Удалить ${deleteTarget?.name ?? ''}?`}
+        actions={
+          <>
+            <Button
+              variant="danger"
+              busy={action === `delete:${deleteTarget?.id ?? ''}`}
+              onClick={() => void confirmDelete()}
+            >
+              Удалить
+            </Button>
+            <Button variant="ghost" disabled={!!action} onClick={() => setDeleteTarget(null)}>Отмена</Button>
+          </>
+        }
+      >
+        <p>Аккаунт отключится навсегда: человек выйдет из всех чатов и больше не сможет войти, ни по ссылке, ни по номеру. Его сообщения у других останутся. Отменить нельзя.</p>
       </Modal>
 
       <Modal

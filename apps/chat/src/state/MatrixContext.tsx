@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ClientEvent, HttpApiEvent, SyncState, type MatrixClient } from 'matrix-js-sdk';
 import { loadConfig } from '../config';
-import { loginWithPin, preparePinSession, saveLink, type PersonalLink } from '../lib/pin';
+import { ACCOUNT_DELETED, loginWithPin, preparePinSession, saveLink, type PersonalLink } from '../lib/pin';
 import { loadSession } from '../lib/session';
 import { bindPhone, getBoundPhone, savedPhone } from '../lib/phone';
 import { PhoneOffer, type PhoneOfferData } from '../screens/PhoneOffer';
@@ -28,7 +28,7 @@ const Ctx = createContext<MatrixState | null>(null);
 function errorText(e: unknown): string {
   const err = e as { errcode?: string; httpStatus?: number; message?: string; data?: { error?: string } };
   if (err?.errcode === 'M_FORBIDDEN') return 'Неверный логин или пароль';
-  if (err?.errcode === 'M_USER_DEACTIVATED') return 'Аккаунт отключён';
+  if (err?.errcode === 'M_USER_DEACTIVATED') return ACCOUNT_DELETED;
   if (err?.errcode === 'M_LIMIT_EXCEEDED') return err.data?.error || 'Слишком много попыток входа. Попробуйте позже.';
   if (err?.httpStatus === undefined && /fetch|network/i.test(String(err?.message))) return 'Нет связи с сервером';
   return err?.data?.error || err?.message || 'Неизвестная ошибка';
@@ -50,12 +50,12 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       clientRef.current = c;
       setClient(c);
 
-      c.on(HttpApiEvent.SessionLoggedOut, async () => {
+      c.on(HttpApiEvent.SessionLoggedOut, async (err?: { errcode?: string }) => {
         c.stopClient();
         await wipeLocalData(c);
         clientRef.current = null;
         setClient(null);
-        setError('Вход сброшен. Войди снова');
+        setError(err?.errcode === 'M_USER_DEACTIVATED' ? ACCOUNT_DELETED : 'Вход сброшен. Войди снова');
         setStatus('logged-out');
       });
 

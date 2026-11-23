@@ -21,7 +21,7 @@ const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boo
 
 /* ---------------- Button ---------------- */
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'outline' | 'default';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'outline' | 'danger' | 'default';
   size?: 'sm' | 'md' | 'lg' | 'xl';
   icon?: boolean;
   round?: boolean;
@@ -40,7 +40,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-busy={busy || undefined}
       className={cx(
         'rl-btn',
-        variant !== 'default' && `rl-btn--${variant}`,
+        variant === 'danger' ? 'rl-btn--secondary rl-btn--danger' : variant !== 'default' && `rl-btn--${variant}`,
         size !== 'md' && `rl-btn--${size}`,
         icon && 'rl-btn--icon',
         round && 'rl-btn--round',
