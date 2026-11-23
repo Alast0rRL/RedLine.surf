@@ -52,6 +52,26 @@ export function toggleTheme() {
   }
 }
 
+export type ThemeMode = Theme | 'system';
+
+export function getThemeMode(): ThemeMode {
+  return readSaved() ?? 'system';
+}
+
+export function useThemeMode(): ThemeMode {
+  return useSyncExternalStore(subscribe, getThemeMode, () => 'system');
+}
+
+export function setThemeMode(mode: ThemeMode) {
+  try {
+    if (mode === 'system') localStorage.removeItem(KEY);
+    else localStorage.setItem(KEY, mode);
+  } catch {
+    /* хранилище недоступно — тема всё равно переключена */
+  }
+  apply(mode === 'system' ? systemTheme() : mode);
+}
+
 export function initTheme() {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (!readSaved()) apply(systemTheme());

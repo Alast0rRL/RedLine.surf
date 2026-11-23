@@ -15,6 +15,7 @@ import {
   unlockWithRecovery,
 } from '../lib/security';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
+import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
 import { PhoneSection } from './PhoneSection';
 
 const PUSH_TEXT: Record<PushState, string> = {
@@ -26,6 +27,29 @@ const PUSH_TEXT: Record<PushState, string> = {
 };
 
 const PHRASE_HINT = 'Без неё старые сообщения на новом телефоне не откроются. Лучше 3–4 слова. Запишите её на бумаге';
+
+const THEME_OPTIONS: { mode: ThemeMode; label: string }[] = [
+  { mode: 'light', label: 'Светлая' },
+  { mode: 'dark', label: 'Тёмная' },
+  { mode: 'system', label: 'Как в системе' },
+];
+
+function ThemeSection() {
+  const mode = useThemeMode();
+  const current = THEME_OPTIONS.find((o) => o.mode === mode)!;
+  return (
+    <Card solid className="settings-card">
+      <h2 className="settings-card__title"><Icon name="settings" size={18} /> Тема: {current.label}</h2>
+      <div className="segmented" role="group" aria-label="Тема оформления">
+        {THEME_OPTIONS.map((o) => (
+          <button key={o.mode} type="button" aria-pressed={o.mode === mode} onClick={() => setThemeMode(o.mode)}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function PushSection() {
   const client = useClient();
@@ -389,6 +413,7 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
   const changed = draft.trim() !== name;
 
   return (
+    <Card solid className="settings-card profile-card">
     <div className="profile">
       <div className="profile__photo">
         <button
@@ -426,10 +451,11 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
           }}
           hint="Так вас видят другие"
         />
-        <Button type="submit" variant="primary" busy={savingName} disabled={!changed}>Сохранить</Button>
+        <Button type="submit" variant="primary" busy={savingName} disabled={!changed || savingName}>Сохранить</Button>
       </form>
       {userId && !isPinUser(userId) && <div className="profile__id">{userId}</div>}
     </div>
+    </Card>
   );
 }
 
@@ -451,6 +477,7 @@ export function Settings() {
         <ProfileSection fallbackName={name} />
         <AdminSection />
         <PushSection />
+        <ThemeSection />
         {pin && <PhoneSection />}
         {!pin && (
           <>

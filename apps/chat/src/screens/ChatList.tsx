@@ -191,7 +191,7 @@ function RowMenu({ menu, onClose, onToggle, onLeave }: { menu: MenuState; onClos
 
 export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const client = useClient();
-  const { syncProblem, logout } = useMatrix();
+  const { logout } = useMatrix();
   const pin = isPinUser(client.getUserId());
   const { rooms, invites, totalUnread } = useRoomList(client);
   const [security, refreshSecurity] = useSecurityState(client);
@@ -276,11 +276,6 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
         </span>
       </header>
 
-      {syncProblem && (
-        <div className="banner banner--warn" role="status">
-          <span className="rl-spinner" /> {syncProblem === 'error' ? 'Нет связи с сервером' : 'Переподключение…'}
-        </div>
-      )}
       {showRecovery && !recoveryHidden && (
         <div className="banner banner--action banner--compact">
           <button

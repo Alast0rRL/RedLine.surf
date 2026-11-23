@@ -10,6 +10,8 @@ import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/u
 import { QrCode } from '../components/QrCode';
 import { adminUnbindPhone } from '../lib/phone';
 
+const LOAD_TIMEOUT_MS = 15_000;
+
 interface Person {
   id: string;
   name: string;
@@ -54,6 +56,10 @@ export function People() {
     alive.current = true;
     setBusy(true);
     setError(null);
+    // долгая загрузка — не вечный экран: через 15 секунд предлагаем повторить
+    const slowTimer = window.setTimeout(() => {
+      if (alive.current) setError('Загрузка идёт слишком долго. Проверьте интернет и попробуйте ещё раз');
+    }, LOAD_TIMEOUT_MS);
     if (!inflight.current) {
       const task = (async () => {
         try {
@@ -81,10 +87,12 @@ export function People() {
           setInvites(liveInvites);
           setLinks(storedLinks);
           setPeople(users);
+          setError(null);
         } catch (e) {
           console.warn('Не удалось загрузить раздел «Люди»', e);
           if (alive.current) setError('Не удалось загрузить список. Проверьте интернет и попробуйте ещё раз');
         } finally {
+          window.clearTimeout(slowTimer);
           if (alive.current) setBusy(false);
         }
       })();
@@ -94,6 +102,7 @@ export function People() {
       });
     }
     return () => {
+      window.clearTimeout(slowTimer);
       alive.current = false;
     };
   }, [client, retry]);
@@ -239,10 +248,16 @@ export function People() {
 
   return (
     <Frame>
-      {busy && adminRoom === undefined && (
-        <Card solid className="settings-card">
-          <p className="settings-card__text">Загружаем…</p>
-        </Card>
+      {busy && adminRoom === undefined && !error && (
+        <div className="people-skeleton" aria-busy="true" aria-label="Загружаем список">
+          {[0, 1, 2].map((i) => (
+            <Card solid className="settings-card" key={i}>
+              <span className="skeleton-line skeleton-line--title" />
+              <span className="skeleton-line" />
+              <span className="skeleton-line skeleton-line--short" />
+            </Card>
+          ))}
+        </div>
       )}
 
       {error && (
