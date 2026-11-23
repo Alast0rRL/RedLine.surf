@@ -3,10 +3,17 @@
 # Наружу ничего не торчит: порты только на 127.0.0.1, TLS и домены — на обратном прокси (Caddy).
 name: redline-chat
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   continuwuity:
     image: forgejo.ellis.link/continuwuation/continuwuity:${CONTINUWUITY_VERSION:?укажите версию в .env}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       CONTINUWUITY_CONFIG: /etc/continuwuity.toml
       CONTINUWUITY_SERVER_NAME: ${SERVER_NAME:?}
@@ -22,6 +29,7 @@ services:
       context: ..
       dockerfile: apps/push-gateway/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     environment:
       VAPID_SUBJECT: ${VAPID_SUBJECT:?}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?}
@@ -38,6 +46,7 @@ services:
       context: ..
       dockerfile: apps/chat/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     environment:
       HOMESERVER_URL: ${HOMESERVER_URL:?}
       SERVER_NAME: ${SERVER_NAME:?}
