@@ -318,7 +318,7 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
         <Uploads roomId={room.roomId} />
       </div>
     </div>
-    {floatDay && <div className={} aria-hidden="true"><span>{floatDay}</span></div>}
+    {floatDay && <div className={`day-float${floatOn ? ' is-on' : ''}`} aria-hidden="true"><span>{floatDay}</span></div>}
     {far && (
       <button type="button" className="jump-bottom" onClick={jumpToBottom} aria-label={unseen > 0 ? `Вниз, новых сообщений: ${unseen}` : 'Вниз'}>
         <Icon name="chevronUp" size={22} />

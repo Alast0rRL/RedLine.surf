@@ -245,3 +245,12 @@
   line-height: 1.5;
 }
 @media (prefers-reduced-motion: reduce) { .day-float { transition: none; } }
+
+/* ============ Голосовое ============ */
+.msg .bubble--audio { width: 15rem; max-width: 100%; min-width: 0; }
+.voice { align-items: flex-start; gap: 10px; }
+.voice__body { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
+.msg .voice__wave { min-width: 0; height: 2.5rem; }
+.voice__body .voice__meta { flex-direction: row; align-items: center; justify-content: space-between; min-width: 0; gap: 8px; }
+.msg .voice__time { font-variant-numeric: tabular-nums; }
+.msg .voice__speed { padding: 2px 8px; font-size: 0.75rem; cursor: pointer; }

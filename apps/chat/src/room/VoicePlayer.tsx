@@ -130,7 +130,6 @@ export function VoicePlayer({
   };
 
   const progress = duration ? Math.min(1, position / duration) : 0;
-  const shown = isPlaying || position > 0 ? position : duration;
 
   return (
     <div className={`voice${own ? ' voice--own' : ''}`}>
@@ -144,40 +143,40 @@ export function VoicePlayer({
       >
         {loading ? <span className="rl-spinner" /> : <Icon name={isPlaying ? 'pause' : 'play'} size={18} />}
       </button>
-      <div
-        ref={waveRef}
-        className="voice__wave"
-        role="slider"
-        aria-label="Перемотка"
-        aria-valuemin={0}
-        aria-valuemax={Math.round(duration / 1000)}
-        aria-valuenow={Math.round(position / 1000)}
-        tabIndex={0}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onKeyDown={(e) => {
-          const a = audioRef.current;
-          if (!a) return;
-          if (e.key === 'ArrowRight') a.currentTime = Math.min(a.duration, a.currentTime + 5);
-          if (e.key === 'ArrowLeft') a.currentTime = Math.max(0, a.currentTime - 5);
-        }}
-      >
-        {(bars ?? new Array(BARS).fill(0.12)).map((v, i) => (
-          <span
-            key={i}
-            className={(i + 0.5) / BARS <= progress ? 'is-played' : undefined}
-            style={{ height: `${Math.max(12, v * 100)}%` }}
-          />
-        ))}
-      </div>
-      <span className="voice__meta">
-        <span className="voice__time">{failed ? 'ошибка' : formatDuration(shown)}</span>
-        {isPlaying && (
-          <button type="button" className="voice__speed" onClick={cycleSpeed} aria-label="Скорость">
+      <div className="voice__body">
+        <div
+          ref={waveRef}
+          className="voice__wave"
+          role="slider"
+          aria-label="Перемотка"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(duration / 1000)}
+          aria-valuenow={Math.round(position / 1000)}
+          tabIndex={0}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onKeyDown={(e) => {
+            const a = audioRef.current;
+            if (!a) return;
+            if (e.key === 'ArrowRight') a.currentTime = Math.min(a.duration, a.currentTime + 5);
+            if (e.key === 'ArrowLeft') a.currentTime = Math.max(0, a.currentTime - 5);
+          }}
+        >
+          {(bars ?? new Array(BARS).fill(0.12)).map((v, i) => (
+            <span
+              key={i}
+              className={(i + 0.5) / BARS <= progress ? 'is-played' : undefined}
+              style={{ height: `${Math.max(12, v * 100)}%` }}
+            />
+          ))}
+        </div>
+        <div className="voice__meta">
+          <span className="voice__time">{failed ? 'ошибка' : isPlaying || position > 0 ? `${formatDuration(position)} / ${formatDuration(duration)}` : formatDuration(duration)}</span>
+          <button type="button" className="voice__speed" onClick={cycleSpeed} aria-label={`Скорость ${speed}×`}>
             {speed}×
           </button>
-        )}
-      </span>
+        </div>
+      </div>
     </div>
   );
 }
