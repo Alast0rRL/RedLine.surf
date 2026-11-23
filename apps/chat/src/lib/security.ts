@@ -43,7 +43,7 @@ export async function getSecurityState(client: MatrixClient): Promise<SecuritySt
  */
 export async function setupRecovery(client: MatrixClient, password: string, phrase: string): Promise<void> {
   const crypto = client.getCrypto();
-  if (!crypto) throw new Error('Шифрование недоступно');
+  if (!crypto) throw new Error('Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari');
   const userId = client.getUserId()!;
 
   await crypto.bootstrapCrossSigning({
@@ -73,8 +73,8 @@ export async function setupRecovery(client: MatrixClient, password: string, phra
  */
 export async function changeRecoveryPhrase(client: MatrixClient, phrase: string): Promise<void> {
   const crypto = client.getCrypto();
-  if (!crypto) throw new Error('Шифрование недоступно');
-  const noKeys = new Error('На этом устройстве нет всех ключей. Смените фразу на другом подтверждённом устройстве');
+  if (!crypto) throw new Error('Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari');
+  const noKeys = new Error('Не получилось сменить фразу на этом телефоне. Сделайте это на том устройстве, где вы уже открывали переписку');
 
   try {
     const status = await crypto.getCrossSigningStatus();
@@ -108,12 +108,12 @@ export async function changeRecoveryPhrase(client: MatrixClient, phrase: string)
  */
 export async function unlockWithRecovery(client: MatrixClient, input: string): Promise<{ imported: number }> {
   const crypto = client.getCrypto();
-  if (!crypto) throw new Error('Шифрование недоступно');
+  if (!crypto) throw new Error('Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari');
 
   const keyId = await client.secretStorage.getDefaultKeyId();
-  if (!keyId) throw new Error('На аккаунте нет хранилища ключей');
+  if (!keyId) throw new Error('Секретная фраза ещё не задана. Задайте её на телефоне, где переписка открыта');
   const stored = await client.secretStorage.getKey(keyId);
-  if (!stored) throw new Error('На аккаунте нет хранилища ключей');
+  if (!stored) throw new Error('Секретная фраза ещё не задана. Задайте её на телефоне, где переписка открыта');
 
   let key: Uint8Array<ArrayBuffer> | null = null;
   try {
@@ -134,7 +134,7 @@ export async function unlockWithRecovery(client: MatrixClient, input: string): P
     }
   }
   if (!key || !(await client.secretStorage.checkKey(key, stored[1]))) {
-    throw new Error('Неверная фраза или ключ');
+    throw new Error('Фраза не подошла. Проверьте, нет ли опечаток');
   }
   cacheSecretStorageKey(keyId, key);
 

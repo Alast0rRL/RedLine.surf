@@ -47,7 +47,7 @@ export function UserProfile({ userId }: { userId: string }) {
       navigate.room(await openDm(client, userId));
     } catch (e) {
       console.error(e);
-      toast('Не удалось открыть чат', { variant: 'error' });
+      toast('Не удалось открыть чат. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
       setBusy(null);
     }
   };
@@ -56,7 +56,7 @@ export function UserProfile({ userId }: { userId: string }) {
     if (!dmId) return;
     setRoomMuted(client, dmId, !muted).catch((e) => {
       console.error(e);
-      toast('Не получилось изменить уведомления', { variant: 'error' });
+      toast('Не получилось изменить уведомления. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     });
   };
 

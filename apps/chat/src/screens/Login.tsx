@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { friendlyError } from '../lib/account';
 import { getConfig } from '../config';
 import { formatLink, parseLink, PIN_LENGTH, saveLink, type PersonalLink } from '../lib/pin';
 import { fetchLinkByPhone, normalizePhone } from '../lib/phone';
@@ -46,7 +47,7 @@ export function Login() {
       const link = await fetchLinkByPhone(phone, pin);
       await enterPin(link, pin);
     } catch (err) {
-      setError((err as Error).message || 'Не удалось войти');
+      setError(friendlyError(err, 'Не удалось войти'));
       setPin('');
       setBusy(false);
     }
@@ -60,7 +61,7 @@ export function Login() {
     try {
       await login(username, password);
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err, 'Не удалось войти. Проверьте логин и пароль'));
       setBusy(false);
     }
   };

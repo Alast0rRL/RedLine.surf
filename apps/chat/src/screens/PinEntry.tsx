@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { friendlyError } from '../lib/account';
 import { loadConfig } from '../config';
 import { ACCOUNT_DELETED, forgetLink, linkState, PIN_LENGTH, type LinkState, type PersonalLink } from '../lib/pin';
 import { useMatrix } from '../state/MatrixContext';
@@ -57,7 +58,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
         setPin('');
         return;
       }
-      setError(message || 'Не удалось войти');
+      setError(friendlyError(err, 'Не удалось войти. Попробуйте ещё раз'));
       setPin('');
       setAttempt((n) => n + 1);
     } finally {

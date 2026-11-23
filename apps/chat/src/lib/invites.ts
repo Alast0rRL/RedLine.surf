@@ -83,15 +83,15 @@ async function saveLinks(client: MatrixClient, items: PersonalLink[]): Promise<v
 }
 
 async function doRevokeInvite(client: MatrixClient, adminRoom: string, token: string): Promise<void> {
-  if (!TOKEN_RE.test(token)) throw new Error('Некорректный токен приглашения');
+  if (!TOKEN_RE.test(token)) throw new Error('Приглашение не подходит. Создайте новое');
   const { body } = await runAdminCommand(client, adminRoom, `!admin token revoke ${token}`);
-  if (!body.trim().startsWith('Token revoked successfully.')) throw new Error('Не удалось отозвать приглашение');
+  if (!body.trim().startsWith('Token revoked successfully.')) throw new Error('Не удалось отозвать приглашение. Попробуйте ещё раз');
 }
 
 async function doCreateInvite(client: MatrixClient, adminRoom: string, name: string): Promise<CreatedInvite> {
   const { body } = await runAdminCommand(client, adminRoom, '!admin token issue --once');
   const match = /New registration token issued:\s*`([A-Za-z0-9]{16})`/.exec(body);
-  if (!match) throw new Error('Не удалось получить токен приглашения');
+  if (!match) throw new Error('Не удалось создать приглашение. Попробуйте ещё раз');
   const invite: Invite = { token: match[1], createdAt: Date.now(), label: name };
   const link: PersonalLink = { ...newPerson(name), token: invite.token };
   try {
@@ -111,7 +111,7 @@ async function doCreateInvite(client: MatrixClient, adminRoom: string, name: str
 
 async function doLoadInvites(client: MatrixClient, adminRoom: string): Promise<Invite[]> {
   const { body } = await runAdminCommand(client, adminRoom, '!admin token list');
-  if (!body.startsWith('Found ')) throw new Error('Не удалось получить список приглашений');
+  if (!body.startsWith('Found ')) throw new Error('Не удалось получить список приглашений. Попробуйте ещё раз');
   const metadata = new Map((await readMetadata(client)).map((i) => [i.token, i]));
   const now = Date.now();
   const live: Invite[] = [];

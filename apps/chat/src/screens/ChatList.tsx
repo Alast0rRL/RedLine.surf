@@ -248,7 +248,7 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
     if (activeRoomId === id) location.hash = '#/';
     leaveRoom(client, id).catch((e) => {
       console.error(e);
-      toast('Не удалось покинуть чат', { variant: 'error' });
+      toast('Не удалось покинуть чат. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     });
   };
 

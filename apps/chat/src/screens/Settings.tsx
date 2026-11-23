@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useClient, useMatrix } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
 import { useSecurityState } from '../hooks/useSecurityState';
-import { changePassword, passwordProblem } from '../lib/account';
+import { changePassword, passwordProblem, friendlyError } from '../lib/account';
 import { findAdminRoom } from '../lib/admin';
 import { isPinUser } from '../lib/pin';
 import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
@@ -18,14 +18,14 @@ import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/u
 import { PhoneSection } from './PhoneSection';
 
 const PUSH_TEXT: Record<PushState, string> = {
-  unsupported: 'Этот браузер не поддерживает push. На iPhone добавьте приложение на экран «Домой».',
-  'not-configured': 'Push не настроен на сервере.',
-  denied: 'Уведомления запрещены в настройках браузера.',
+  unsupported: 'Этот браузер не умеет присылать уведомления. На iPhone сначала добавьте Redline на экран «Домой»',
+  'not-configured': 'Уведомления пока недоступны. Напишите тому, кто вас пригласил',
+  denied: 'Уведомления выключены в настройках телефона. Включите их там для Redline',
   off: 'Выключены',
   on: 'Включены',
 };
 
-const PHRASE_HINT = 'Нужна на новом телефоне, чтобы прочитать старую переписку. Лучше 3–4 слова. Запишите её';
+const PHRASE_HINT = 'Без неё старые сообщения на новом телефоне не откроются. Лучше 3–4 слова. Запишите её на бумаге';
 
 function PushSection() {
   const client = useClient();
@@ -42,7 +42,7 @@ function PushSection() {
       setState(state === 'on' ? await disablePush(client) : await enablePush(client));
     } catch (e) {
       console.error(e);
-      toast('Не удалось включить уведомления', { variant: 'error' });
+      toast(friendlyError(e, 'Не удалось включить уведомления. Попробуйте ещё раз'), { variant: 'error' });
     } finally {
       setBusy(false);
     }
@@ -83,7 +83,7 @@ function AdminSection() {
   return (
     <Card solid className="settings-card">
       <h2 className="settings-card__title"><Icon name="shield" size={18} /> Люди</h2>
-      <p className="settings-card__text">Здесь можно приглашать родных и управлять ссылками.</p>
+      <p className="settings-card__text">Здесь можно приглашать родных и близких и управлять доступом.</p>
       <Button variant="primary" onClick={() => navigate.people()}>Пригласить и управлять</Button>
     </Card>
   );
@@ -119,12 +119,12 @@ function SecuritySection() {
     if (!mode) return;
     const next: Record<string, string> = {};
     if (mode === 'unlock') {
-      if (!recovery.trim()) next.recovery = 'Введите фразу или ключ';
+      if (!recovery.trim()) next.recovery = 'Введите секретную фразу';
     } else {
-      if (mode === 'setup' && !password) next.password = 'Введите пароль от аккаунта';
+      if (mode === 'setup' && !password) next.password = 'Введите пароль от входа';
       const problem = phraseProblem(phrase, mode === 'setup' ? password : undefined);
       if (problem) next.phrase = problem;
-      else if (normalizePhrase(phrase) !== normalizePhrase(phrase2)) next.phrase2 = 'Фразы не совпадают';
+      else if (normalizePhrase(phrase) !== normalizePhrase(phrase2)) next.phrase2 = 'Фразы разные. Введите одну и ту же дважды';
     }
     setErrors(next);
     if (Object.keys(next).length) return;
@@ -133,34 +133,34 @@ function SecuritySection() {
     try {
       if (mode === 'setup') {
         await setupRecovery(client, password, phrase);
-        toast('Фраза восстановления создана', { variant: 'success' });
+        toast('Секретная фраза сохранена', { variant: 'success' });
       } else if (mode === 'change') {
         await changeRecoveryPhrase(client, phrase);
-        toast('Фраза восстановления изменена', { variant: 'success' });
+        toast('Секретная фраза изменена', { variant: 'success' });
       } else {
         const { imported } = await unlockWithRecovery(client, recovery);
-        toast(imported ? `Устройство подтверждено, восстановлено ключей: ${imported}` : 'Устройство подтверждено', { variant: 'success' });
+        toast(imported ? 'Готово, старые сообщения открыты' : 'Готово, этот телефон подтверждён', { variant: 'success' });
       }
       close();
     } catch (err) {
       const e2 = err as { errcode?: string; message?: string };
       const field = mode === 'unlock' ? 'recovery' : 'form';
-      setErrors({ [field]: e2.errcode === 'M_FORBIDDEN' ? 'Неверный пароль' : e2.message || 'Ошибка' });
+      setErrors({ [field]: e2.errcode === 'M_FORBIDDEN' ? 'Пароль не подошёл. Проверьте, нет ли опечаток' : friendlyError(err, 'Что-то пошло не так. Попробуйте ещё раз') });
       setBusy(false);
     }
   };
 
   const text = {
     checking: 'Проверяем…',
-    unavailable: 'Шифрование недоступно в этом браузере.',
-    'needs-setup': 'Задайте фразу восстановления, чтобы не потерять переписку.',
-    'needs-unlock': 'Введите фразу восстановления, чтобы читать старые сообщения.',
-    ok: 'Устройство подтверждено, фраза восстановления задана.',
+    unavailable: 'Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari.',
+    'needs-setup': 'Секретная фраза: без неё старые сообщения на новом телефоне не откроются. Запишите её на бумаге.',
+    'needs-unlock': 'Введите секретную фразу, чтобы открыть старые сообщения на этом телефоне.',
+    ok: 'Секретная фраза задана. Если у вас новый телефон, она понадобится для старых сообщений.',
   }[state];
 
   return (
     <Card solid className="settings-card">
-      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Шифрование</h2>
+      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Защита переписки</h2>
       <p className="settings-card__text">{text}</p>
       {state === 'needs-setup' && <Button variant="primary" onClick={() => setDialog('setup')}>Задать фразу</Button>}
       {state === 'needs-unlock' && <Button variant="primary" onClick={() => setDialog('unlock')}>Ввести фразу</Button>}
@@ -169,24 +169,24 @@ function SecuritySection() {
       <Modal
         open={dialog !== null}
         onClose={close}
-        title={dialog === 'setup' ? 'Фраза восстановления' : dialog === 'change' ? 'Сменить фразу' : 'Подтвердить устройство'}
+        title={dialog === 'setup' ? 'Секретная фраза' : dialog === 'change' ? 'Сменить фразу' : 'Открыть старые сообщения'}
       >
         <form className="stack" onSubmit={submit}>
           {dialog === 'setup' && (
             <Field
-              label="Пароль от аккаунта"
+              label="Пароль от входа"
               name="password"
               type="password"
               autoComplete="current-password"
               value={password}
               error={errors.password ?? null}
               onChange={(e) => setPassword(e.target.value)}
-              hint="Сервер просит подтвердить создание ключей"
+              hint="Нужен, чтобы защитить вашу переписку"
             />
           )}
           {dialog === 'unlock' && (
             <Field
-              label="Фраза или старый ключ восстановления"
+              label="Секретная фраза"
               name="recovery"
               type="password"
               autoComplete="off"
@@ -199,9 +199,9 @@ function SecuritySection() {
           )}
           {(dialog === 'setup' || dialog === 'change') && (
             <>
-              {dialog === 'change' && <p>Старая фраза и старый ключ перестанут работать. Запишите новую фразу.</p>}
+              {dialog === 'change' && <p>Старая фраза перестанет работать. Запишите новую на бумаге.</p>}
               <Field
-                label="Фраза восстановления"
+                label="Секретная фраза"
                 name="phrase"
                 type="password"
                 autoComplete="off"
@@ -252,7 +252,7 @@ function PasswordSection() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const local: Record<string, string> = {};
-    if (!current) local.current = 'Введите текущий пароль';
+    if (!current) local.current = 'Введите нынешний пароль';
     const problem = passwordProblem(next);
     if (problem) local.next = problem;
     setErrors(local);
@@ -264,7 +264,7 @@ function PasswordSection() {
       toast('Пароль изменён', { variant: 'success' });
       close();
     } catch (err) {
-      setErrors({ current: (err as Error).message || 'Не удалось сменить пароль' });
+      setErrors({ current: friendlyError(err, 'Не удалось сменить пароль') });
       setBusy(false);
     }
   };
@@ -272,7 +272,7 @@ function PasswordSection() {
   return (
     <Card solid className="settings-card">
       <h2 className="settings-card__title"><Icon name="lock" size={18} /> Пароль</h2>
-      <p className="settings-card__text">Пароль нужен для входа. Переписку открывает отдельная фраза восстановления.</p>
+      <p className="settings-card__text">Пароль нужен для входа. Старые сообщения на новом телефоне открывает отдельная секретная фраза.</p>
       <Button variant="outline" onClick={() => setOpen(true)}>Сменить пароль</Button>
       <Modal open={open} onClose={close} title="Сменить пароль">
         <form className="stack" onSubmit={submit}>
@@ -293,13 +293,13 @@ function PasswordSection() {
             value={next}
             error={errors.next ?? null}
             onChange={(e) => setNext(e.target.value)}
-            hint="Не короче 8 символов"
+            hint="Не меньше 8 символов"
           />
           <label className="check-row">
             <input type="checkbox" checked={logoutOthers} onChange={(e) => setLogoutOthers(e.target.checked)} />
             <span>Выйти на других устройствах</span>
           </label>
-          {logoutOthers && <p>На этих устройствах для чтения старой переписки понадобится фраза восстановления.</p>}
+          {logoutOthers && <p>На других устройствах придётся войти заново, а для старых сообщений понадобится секретная фраза.</p>}
           <Button type="submit" variant="primary" size="lg" block busy={busy}>Сохранить</Button>
         </form>
       </Modal>
@@ -351,7 +351,7 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
       edited.current = false;
       toast('Имя сохранено', { variant: 'success' });
     } catch (err) {
-      setNameError((err as Error).message || 'Не удалось сохранить имя');
+      setNameError(friendlyError(err, 'Не удалось сохранить имя'));
     } finally {
       setSavingName(false);
     }
@@ -367,7 +367,7 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
       setAvatarState(p?.avatar_url || null);
       toast('Фото обновлено', { variant: 'success' });
     } catch (err) {
-      toast((err as Error).message || 'Не удалось загрузить фото', { variant: 'error' });
+      toast(friendlyError(err, 'Не удалось загрузить фото'), { variant: 'error' });
     } finally {
       setPhotoBusy(false);
     }
@@ -379,7 +379,7 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
       await removeAvatar(client);
       setAvatarState(null);
     } catch (err) {
-      toast((err as Error).message || 'Не удалось убрать фото', { variant: 'error' });
+      toast(friendlyError(err, 'Не удалось убрать фото'), { variant: 'error' });
     } finally {
       setPhotoBusy(false);
     }
@@ -476,7 +476,7 @@ export function Settings() {
           </>
         }
       >
-        <p>{pin ? 'Чтобы войти снова, понадобится PIN.' : 'Если фраза восстановления не сохранена, зашифрованные сообщения на этом устройстве будут потеряны.'}</p>
+        <p>{pin ? 'Чтобы войти снова, понадобится PIN.' : 'Если секретная фраза не записана, старые сообщения на этом телефоне могут пропасть.'}</p>
       </Modal>
     </section>
   );

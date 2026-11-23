@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { friendlyError } from '../lib/account';
 import { deleteUser, findAdminRoom, listUsers, resetPassword, resetPin } from '../lib/admin';
 import { createInvite, loadInvites, loadLinks, removeLink, revokeInvite, type Invite } from '../lib/invites';
 import { formatLink, isPinUser, type PersonalLink } from '../lib/pin';
@@ -82,7 +83,7 @@ export function People() {
           setPeople(users);
         } catch (e) {
           console.warn('Не удалось загрузить раздел «Люди»', e);
-          if (alive.current) setError('Не удалось загрузить список. Повторите попытку.');
+          if (alive.current) setError('Не удалось загрузить список. Проверьте интернет и попробуйте ещё раз');
         } finally {
           if (alive.current) setBusy(false);
         }
@@ -109,7 +110,7 @@ export function People() {
       setLabel('');
       reload();
     } catch {
-      toast('Не удалось создать ссылку', { variant: 'error' });
+      toast('Не удалось создать ссылку. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     } finally {
       setAction(null);
     }
@@ -123,7 +124,7 @@ export function People() {
       await navigator.clipboard.writeText(shownLink);
       toast('Ссылка скопирована', { variant: 'success' });
     } catch {
-      toast('Не удалось скопировать', { variant: 'error' });
+      toast('Не получилось скопировать. Выделите текст и скопируйте вручную', { variant: 'error' });
     }
   };
 
@@ -145,7 +146,7 @@ export function People() {
       toast('Ссылка отозвана', { variant: 'success' });
       reload();
     } catch {
-      toast('Не удалось отозвать ссылку', { variant: 'error' });
+      toast('Не удалось отозвать ссылку. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     } finally {
       setAction(null);
     }
@@ -169,7 +170,7 @@ export function People() {
     try {
       setNewPassword(await resetPassword(client, adminRoom, resetTarget.id, logoutDevices));
     } catch {
-      toast('Не удалось сбросить пароль', { variant: 'error' });
+      toast('Не удалось сбросить пароль. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     } finally {
       setAction(null);
     }
@@ -184,7 +185,7 @@ export function People() {
       setPinResetTarget(null);
       setShownLink(formatLink(pinResetTarget.link));
     } catch {
-      toast('Не удалось сбросить PIN', { variant: 'error' });
+      toast('Не удалось сбросить PIN. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     } finally {
       setAction(null);
     }
@@ -197,7 +198,7 @@ export function People() {
     try {
       await deleteUser(client, adminRoom, person.id);
     } catch (e) {
-      toast((e as Error).message || 'Не удалось удалить', { variant: 'error' });
+      toast(friendlyError(e, 'Не удалось удалить'), { variant: 'error' });
       setAction(null);
       return;
     }
@@ -230,7 +231,7 @@ export function People() {
       await navigator.clipboard.writeText(newPassword);
       toast('Пароль скопирован', { variant: 'success' });
     } catch {
-      toast('Не удалось скопировать', { variant: 'error' });
+      toast('Не получилось скопировать. Выделите текст и скопируйте вручную', { variant: 'error' });
     }
   };
 
@@ -483,7 +484,7 @@ export function People() {
               <input type="checkbox" checked={logoutDevices} onChange={(e) => setLogoutDevices(e.target.checked)} />
               <span>Выйти на всех его устройствах</span>
             </label>
-            <p>После выхода для чтения старой переписки понадобится фраза восстановления.</p>
+            <p>После выхода старые сообщения откроются только по секретной фразе.</p>
           </div>
         )}
         {newPassword && (

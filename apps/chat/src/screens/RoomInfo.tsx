@@ -54,7 +54,7 @@ function AddMembers({ client, room, open, onClose }: { client: MatrixClient; roo
         console.error(err);
       }
     }
-    if (failed) toast(failed === picked.length ? 'Не удалось пригласить' : 'Не всех удалось пригласить', { variant: 'error' });
+    if (failed) toast(failed === picked.length ? 'Не удалось пригласить. Попробуйте ещё раз' : 'Приглашены не все. Попробуйте ещё раз', { variant: 'error' });
     close();
   };
 
@@ -176,7 +176,7 @@ export function RoomInfo({ roomId }: { roomId: string }) {
     client.setRoomName(roomId, n).catch((err) => {
       console.error(err);
       setPendingName(null);
-      toast('Не удалось переименовать', { variant: 'error' });
+      toast('Не удалось переименовать. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     });
   };
 
@@ -186,13 +186,13 @@ export function RoomInfo({ roomId }: { roomId: string }) {
       const blob = await squareAvatar(file);
       const { content_uri: url } = await client.uploadContent(blob, { name: 'avatar.jpg', type: 'image/jpeg' });
       await client.sendStateEvent(roomId, 'm.room.avatar' as never, { url } as never, '');
-    }, 'Не удалось сменить фото');
+    }, 'Не удалось сменить фото. Попробуйте ещё раз');
   };
 
   const removePhoto = () =>
     run('photo', async () => {
       await client.sendStateEvent(roomId, 'm.room.avatar' as never, {} as never, '');
-    }, 'Не удалось убрать фото');
+    }, 'Не удалось убрать фото. Попробуйте ещё раз');
 
   const kick = () => {
     if (!kickTarget) return;
@@ -200,7 +200,7 @@ export function RoomInfo({ roomId }: { roomId: string }) {
     void run('kick', async () => {
       await client.kick(roomId, target.id);
       setKickTarget(null);
-    }, 'Не удалось исключить');
+    }, 'Не удалось исключить. Попробуйте ещё раз');
   };
 
   const leave = () => {
@@ -208,7 +208,7 @@ export function RoomInfo({ roomId }: { roomId: string }) {
     location.hash = '#/';
     leaveRoom(client, roomId).catch((e) => {
       console.error(e);
-      toast('Не удалось выйти из группы', { variant: 'error' });
+      toast('Не удалось выйти из группы. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     });
   };
 
@@ -265,7 +265,7 @@ export function RoomInfo({ roomId }: { roomId: string }) {
             onClick={() => {
               setRoomMuted(client, roomId, !muted).catch((e) => {
                 console.error(e);
-                toast('Не получилось изменить уведомления', { variant: 'error' });
+                toast('Не получилось изменить уведомления. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
               });
             }}
           >

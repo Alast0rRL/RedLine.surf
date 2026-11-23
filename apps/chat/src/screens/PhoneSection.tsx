@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { friendlyError } from '../lib/account';
 import { useClient } from '../state/MatrixContext';
 import { bindPhone, getBoundPhone, normalizePhone, unbindPhone, verifyPin } from '../lib/phone';
 import { loadLink, PIN_LENGTH } from '../lib/pin';
@@ -45,7 +46,7 @@ export function PhoneSection() {
       toast('Номер привязан');
       close();
     } catch (err) {
-      setError((err as Error).message || 'Не удалось привязать номер');
+      setError(friendlyError(err, 'Не удалось привязать номер'));
     } finally {
       setBusy(false);
     }
@@ -58,7 +59,7 @@ export function PhoneSection() {
       setMask(null);
       toast('Номер отвязан');
     } catch {
-      toast('Не удалось отвязать номер', { variant: 'error' });
+      toast('Не удалось отвязать номер. Проверьте интернет и попробуйте ещё раз', { variant: 'error' });
     } finally {
       setBusy(false);
     }
