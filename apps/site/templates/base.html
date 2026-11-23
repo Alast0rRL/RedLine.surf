@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Redline — Minecraft-сервер без вайпов{% endblock %}</title>
+    <meta name="description" content="{{ site.description }}">
+    <link rel="canonical" href="{{ site.url }}/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Redline">
+    <meta property="og:title" content="Redline — Minecraft-сервер без вайпов">
+    <meta property="og:description" content="{{ site.description }}">
+    <meta property="og:url" content="{{ site.url }}/">
+    <meta property="og:image" content="{{ site.url }}/static/map.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#C4001D">
+    <link rel="icon" href="/static/favicon.png" type="image/png">
+
+    <!-- Тема и флаг .js до первой отрисовки: без вспышки не той темы, без невидимых блоков при выключенном JS -->
+    <script>
+        (function () {
+            var d = document.documentElement, t = null;
+            try { t = localStorage.theme; } catch (e) {}
+            var dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+            d.classList.toggle('dark', dark);
+            d.classList.add('js');
+        })();
+    </script>
+
+    <link rel="stylesheet" href="/static/vendor/fonts.css">
+    <!-- Дизайн-система Redline (packages/redline-ui) -->
+    <link rel="stylesheet" href="/ui/tokens.css">
+    <link rel="stylesheet" href="/ui/red-lines.css">
+    <link rel="stylesheet" href="/static/build/site.css?v={{ asset_version }}">
+
+    <script type="module" src="/ui/red-lines.js"></script>
+    <script defer src="/static/vendor/lenis.min.js"></script>
+    <script defer src="/static/vendor/confetti.browser.js"></script>
+    <script defer src="/static/js/site.js?v={{ asset_version }}"></script>
+</head>
+<body class="bg-white dark:bg-dark-bg text-gray-900 dark:text-gray-100 transition-colors duration-500 selection:bg-redline-red selection:text-white">
+    <div id="glow-overlay" aria-hidden="true"></div>
+    {% block body %}{% endblock %}
+</body>
+</html>

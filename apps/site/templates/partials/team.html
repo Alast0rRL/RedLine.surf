@@ -1,0 +1,23 @@
+{% set team = [
+    ('Alast0r_RL', 'Руководитель', 'bg-redline-red', 'text-redline-red', 'Руководитель проекта. Решает все глобальные вопросы сервера.', 'sr.alast0r'),
+    ('Necr0manthre', 'Тех. Админ', 'bg-blue-600', '', 'Мастер консоли. Следит, чтобы сервер работал без лагов и багов. Если сервер упал или лагает — это всё он виноват.', 'tm_rix'),
+    ('German', 'Персонал', 'bg-green-600', '', 'Он тут просто по блату и ничего не делает.', 'Он сам тебе напишет'),
+] %}
+<section id="admin" class="py-32 bg-white dark:bg-dark-bg relative z-10">
+    <div class="container mx-auto px-6 text-center">
+        <h2 class="text-4xl font-black uppercase italic tracking-tighter mb-20 reveal">Команда Проекта</h2>
+        <div class="grid md:grid-cols-3 gap-8">
+            {% for nick, role, badge, name_color, text, discord in team %}
+            <div class="reveal p-10 bg-gray-50 dark:bg-dark-gray/40 backdrop-blur-md rounded-[40px] border border-gray-100 dark:border-white/5 hover:border-redline-red transition-all duration-500 group text-center flex flex-col" style="--reveal-delay: {{ loop.index0 * 100 }}ms">
+                <div class="relative w-32 h-32 mx-auto mb-6">
+                    <img src="https://mc-heads.net/avatar/{{ nick }}/128" width="128" height="128" loading="lazy" alt="Скин {{ nick }}" class="w-full h-full rounded-3xl shadow-xl group-hover:scale-110 transition duration-500 relative z-10 bg-gray-200 dark:bg-white/5" style="image-rendering: pixelated">
+                    <div class="absolute -bottom-2 -right-2 {{ badge }} text-white text-xs font-black px-3 py-1 rounded-full uppercase z-20">{{ role }}</div>
+                </div>
+                <h3 class="text-2xl font-black {{ name_color }} uppercase mb-2">{{ nick }}</h3>
+                <p class="text-gray-500 dark:text-gray-400 text-sm mb-8 italic flex-1">{{ text }}</p>
+                <button type="button" data-copy="{{ discord }}" data-toast="Discord скопирован" class="w-full py-4 bg-white dark:bg-white/5 rounded-2xl hover:bg-redline-red hover:text-white transition font-bold text-xs uppercase tracking-widest">Discord</button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>

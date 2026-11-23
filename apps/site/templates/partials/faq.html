@@ -1,0 +1,18 @@
+{% set faq = [
+    ('Версия сервера?', 'Актуальная Java Edition (1.20.1+). Вход с любых клиентов.'),
+    ('Нужна ли лицензия?', 'Нет, сервер доступен как для лицензии, так и для пиратских клиентов.'),
+    ('Как зайти?', 'Добавь сервер в Minecraft по адресу ' ~ mc_address ~ ' — или нажми «Играть сейчас», адрес скопируется сам.'),
+] %}
+<section id="faq" class="py-32 bg-gray-50 dark:bg-dark-gray relative z-10">
+    <div class="container mx-auto px-6 max-w-4xl">
+        <h2 class="text-4xl font-black uppercase italic tracking-tighter text-center mb-16 reveal">Частые Вопросы</h2>
+        <div class="space-y-4">
+            {% for q, a in faq %}
+            <details class="reveal bg-white dark:bg-dark-bg p-8 rounded-[30px] border border-gray-100 dark:border-white/5 shadow-sm group">
+                <summary class="flex justify-between items-center font-black uppercase tracking-tight list-none cursor-pointer [&::-webkit-details-marker]:hidden">{{ q }}<svg class="w-6 h-6 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></summary>
+                <p class="mt-6 text-gray-500 dark:text-gray-400 italic">{{ a }}</p>
+            </details>
+            {% endfor %}
+        </div>
+    </div>
+</section>

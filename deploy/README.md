@@ -1,7 +1,9 @@
-# Деплой Redline Chat
+# Деплой Redline: сайт и чат
 
 ```
 браузер / PWA ──https──▶ обратный прокси (Caddy, TLS)
+                           ├─ minecraft.<домен> → 127.0.0.1:8000  site       сайт Minecraft-сервера
+                           │  (корень <домен> и www — 301 на minecraft.)
                            ├─ chat.<домен>   → 127.0.0.1:8090  chat          nginx + статика клиента
                            └─ matrix.<домен> → 127.0.0.1:8008  continuwuity  homeserver
 continuwuity ──http (внутренняя сеть 10.89.0.0/24)──▶ push:8080 ──Web Push──▶ FCM / Mozilla / Apple
@@ -12,6 +14,7 @@ continuwuity ──http (внутренняя сеть 10.89.0.0/24)──▶ pu
 | `continuwuity` | Matrix homeserver (Rust, RocksDB). Регистрация только по приглашению, федерации нет. |
 | `push` | свой push gateway (`apps/push-gateway`): Matrix Push API → Web Push (VAPID). |
 | `chat` | клиент (`apps/chat`): nginx, строгий CSP, `config.json` собирается из `.env` при старте. |
+| `site` | сайт Minecraft-сервера (`apps/site`, FastAPI). Адреса — `SITE_URL`, `MC_SERVER_ADDRESS`, `MAP_URL` в `.env`. |
 
 ## Первый запуск
 
@@ -74,9 +77,11 @@ docker compose up -d
 
 ## Обратный прокси
 
-- [`proxy/Caddyfile.snippet`](proxy/Caddyfile.snippet) — сайты `matrix.` и `chat.`.
+- [`proxy/Caddyfile.snippet`](proxy/Caddyfile.snippet) — `matrix.`, `chat.`, `minecraft.` и редирект с корня домена.
+  Порт 3D-карты в блоке `minecraft.` (`/map/`) — подставить свой.
 - [`proxy/haproxy.snippet`](proxy/haproxy.snippet) — если 443 приходит через SNI-роутер.
-- DNS: `A`-записи `matrix.<домен>` и `chat.<домен>` на публичный адрес входа.
+- DNS: `A`-записи `matrix.`, `chat.`, `minecraft.`, `www.` и самого `<домен>` на публичный адрес входа.
+  Без записи корня старые ссылки и поиск не дойдут до редиректа.
 - Ни один контейнер не слушает внешний интерфейс: только `127.0.0.1`.
 
 ## Push

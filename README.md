@@ -3,11 +3,11 @@
 Монорепо домашнего сервера [redline.surf](https://redline.surf).
 
 ```
-apps/site/            сайт Minecraft-сервера (FastAPI + Jinja + Tailwind CDN)
+apps/site/            сайт Minecraft-сервера minecraft.redline.surf (FastAPI + Jinja + Tailwind)
 apps/chat/            семейный мессенджер — PWA-клиент Matrix (React + matrix-js-sdk)
 apps/push-gateway/    push-шлюз Matrix → Web Push
 packages/redline-ui/  дизайн-система: токены, красные линии, компоненты
-deploy/               docker-compose: Continuwuity + push-шлюз + клиент
+deploy/               docker-compose: сайт + Continuwuity + push-шлюз + клиент
 ```
 
 ## Сайт
@@ -17,6 +17,16 @@ python -m venv .venv
 .venv/bin/pip install -r apps/site/requirements.txt   # Windows: .venv\Scripts\pip
 .venv/bin/uvicorn app.main:app --app-dir apps/site --port 8000
 ```
+
+CSS, шрифты и библиотеки (Lenis, конфетти) лежат в `apps/site/static/build` и `static/vendor` и коммитятся —
+для запуска Node не нужен. После правок шаблонов или `assets/site.css`:
+
+```bash
+pnpm --filter @redline/site build   # или dev — пересборка на лету
+```
+
+Адреса задаются переменными: `SITE_URL`, `MC_SERVER_ADDRESS`, `MAP_URL` (см. `apps/site/app/config.py`).
+Эффекты страницы и как их не сломать — [apps/site/EFFECTS.md](apps/site/EFFECTS.md).
 
 Сайт отдаёт `packages/redline-ui/src` по пути `/ui`. Если пакет лежит в другом месте
 (например, в Docker-образе) — задай `REDLINE_UI_DIR`. Базу можно переопределить через `DATABASE_URL`.

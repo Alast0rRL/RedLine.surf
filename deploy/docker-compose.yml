@@ -1,4 +1,4 @@
-# Redline Chat: homeserver Continuwuity + push gateway + веб-клиент.
+# Redline: сайт Minecraft-сервера + чат (homeserver Continuwuity + push gateway + веб-клиент).
 # Запуск из каталога deploy/:  cp .env.example .env  →  заполнить  →  docker compose up -d --build
 # Наружу ничего не торчит: порты только на 127.0.0.1, TLS и домены — на обратном прокси (Caddy).
 name: redline-chat
@@ -57,6 +57,22 @@ services:
       - "127.0.0.1:${CHAT_PORT:-8090}:8080"
     networks: [redline]
 
+  site:
+    build:
+      context: ..
+      dockerfile: apps/site/Dockerfile
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      SITE_URL: ${SITE_URL:-https://minecraft.redline.surf}
+      MC_SERVER_ADDRESS: ${MC_SERVER_ADDRESS:-redline.necr0manth.dev}
+      MAP_URL: ${MAP_URL:-}
+    volumes:
+      - site-data:/data
+    ports:
+      - "127.0.0.1:${SITE_PORT:-8000}:8000"
+    # своя сеть по умолчанию: сайту не нужен доступ к чату
+
 networks:
   redline:
     # Подсеть зафиксирована: continuwuity.toml разрешает исходящие запросы (к push-шлюзу)
@@ -68,3 +84,4 @@ networks:
 volumes:
   continuwuity-data:
   push-data:
+  site-data:

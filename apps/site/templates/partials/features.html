@@ -1,0 +1,22 @@
+{% set features = [
+    ('🛡️', 'Защита вещей', 'Инвентарь не исчезает по таймеру и не горит в лаве. Игра без лишнего стресса.'),
+    ('💎', 'Отсутствие вайпов', 'Мир существует вечно. Твои постройки станут частью истории сервера.'),
+    ('🎙️', 'Голосовой чат', 'Живое общение с игроками прямо в Minecraft. Слышно, с какой стороны идёт голос.'),
+    ('🗺️', 'Живая 3D карта', 'Весь мир в браузере: смотри, где поселения игроков, и планируй вылазки.'),
+    ('⚔️', 'Головы игроков', 'Уникальные трофеи после каждой PvP победы. Собери свою коллекцию.'),
+    ('⏳', 'Безопасность баз', 'Забудь о гриферстве. Мы откатим любые разрушения в один клик.'),
+] %}
+<section id="features" class="py-32 bg-white dark:bg-dark-bg relative z-10 text-center">
+    <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-black uppercase italic tracking-tighter mb-16 reveal">Технологии Redline</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {% for icon, title, text in features %}
+            <div class="reveal p-10 rounded-[40px] bg-gray-50 dark:bg-white/[0.03] backdrop-blur-md border border-gray-100 dark:border-white/5 hover:border-redline-red/50 hover:-translate-y-1 transition-all duration-500 text-left" style="--reveal-delay: {{ (loop.index0 % 3) * 100 }}ms">
+                <div class="text-4xl mb-6" aria-hidden="true">{{ icon }}</div>
+                <h3 class="text-xl font-black mb-4 uppercase text-redline-red">{{ title }}</h3>
+                <p class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">{{ text }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>

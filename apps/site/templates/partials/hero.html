@@ -1,0 +1,45 @@
+<section id="top" class="relative min-h-screen min-h-[100svh] flex items-center justify-center text-center overflow-hidden hero-background">
+    <div class="absolute inset-0 z-0 bg-white/10 dark:bg-black/40 pointer-events-none"></div>
+    <div class="blob top-20 left-10 opacity-40" aria-hidden="true"></div>
+    <div class="blob bottom-20 right-10 opacity-40" aria-hidden="true"></div>
+
+    <rl-red-lines aria-hidden="true"></rl-red-lines>
+
+    <div class="relative z-20 px-4 pt-28 pb-32">
+        <div class="reveal inline-block mb-4 px-4 py-1 border border-redline-red text-redline-red text-xs font-black uppercase tracking-[0.3em] rounded-full">Season 1: No Wipe</div>
+        <h1 class="reveal text-5xl md:text-8xl font-black mb-4 tracking-tighter uppercase leading-tight" style="--reveal-delay: 100ms">Minecraft <br> <span class="text-redline-red">RedLine</span></h1>
+
+        <div class="reveal flex items-center justify-center gap-3 mb-6" style="--reveal-delay: 200ms" aria-live="polite">
+            <span id="status-dot" class="w-2.5 h-2.5 bg-gray-500 rounded-full" aria-hidden="true"></span>
+            <span class="font-mono text-sm tracking-widest uppercase">
+                <span id="online-count" class="inline-block min-w-[3ch] px-2 py-1 rounded-md text-transparent skeleton">—</span>
+                <span class="opacity-60">/ <span id="online-max">—</span> онлайн</span>
+            </span>
+        </div>
+
+        <button type="button" data-copy="{{ mc_address }}" class="reveal mb-12 inline-flex items-center gap-3 px-5 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-gray-300 dark:border-white/10 font-mono text-sm tracking-wider hover:border-redline-red transition" style="--reveal-delay: 250ms" aria-label="Скопировать адрес сервера {{ mc_address }}">
+            <span class="opacity-60 uppercase text-xs font-sans font-black tracking-widest">IP</span>
+            <span class="text-redline-red font-bold">{{ mc_address }}</span>
+            <svg class="w-4 h-4 opacity-60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg>
+        </button>
+
+        <div class="reveal flex flex-col md:flex-row items-center justify-center gap-6 relative z-50" style="--reveal-delay: 300ms">
+            <button type="button" data-open="rules-modal" class="relative flex items-center justify-center w-full md:w-80 h-24 bg-redline-red text-white rounded-3xl shadow-[0_20px_50px_rgb(var(--rl-red-500-rgb)/0.3)] transition-all duration-500 hover:-translate-y-2 active:scale-95">
+                <span class="text-lg font-black uppercase tracking-[0.2em]">Играть сейчас</span>
+            </button>
+            <a href="{{ site.discord }}" target="_blank" rel="noopener" class="relative flex items-center justify-center w-full md:w-80 h-24 bg-[color:var(--rl-discord)] text-white rounded-3xl hover:-translate-y-2 transition-all duration-500 shadow-xl">
+                <span class="text-lg font-black uppercase tracking-[0.2em]">Наш Discord</span>
+            </a>
+        </div>
+    </div>
+
+    <svg class="waves" xmlns="http://www.w3.org/2000/svg" viewBox="0 24 150 28" preserveAspectRatio="none" aria-hidden="true">
+        <defs><path id="gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" /></defs>
+        <g class="parallax">
+            <use href="#gentle-wave" x="48" y="0" class="fill-white/30 dark:fill-dark-bg/30" />
+            <use href="#gentle-wave" x="48" y="3" class="fill-white/50 dark:fill-dark-bg/50" />
+            <use href="#gentle-wave" x="48" y="5" class="fill-white/70 dark:fill-dark-bg/70" />
+            <use href="#gentle-wave" x="48" y="7" class="fill-white dark:fill-dark-bg" />
+        </g>
+    </svg>
+</section>

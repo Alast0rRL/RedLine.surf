@@ -1,0 +1,36 @@
+<dialog id="rules-modal" aria-labelledby="rules-title" class="rl-dialog w-[calc(100%-3rem)] max-w-2xl rounded-[40px] p-0 bg-white dark:bg-dark-gray text-gray-900 dark:text-gray-100">
+    <div class="p-10 relative">
+        <button type="button" data-close aria-label="Закрыть" class="absolute top-8 right-8 text-2xl hover:text-redline-red transition">✕</button>
+        <h2 id="rules-title" class="text-3xl font-black mb-8 uppercase text-redline-red italic">Кодекс Redline</h2>
+        <div class="space-y-6 text-gray-500 dark:text-gray-400 text-left text-sm">
+            <p><strong class="text-gray-900 dark:text-gray-100">1. Честность.</strong> Любые читы — бан навсегда без права амнистии.</p>
+            <p><strong class="text-gray-900 dark:text-gray-100">2. Созидание.</strong> Гриферство запрещено в любом виде. Мы за творчество.</p>
+            <p><strong class="text-gray-900 dark:text-gray-100">3. Порядок.</strong> Запрещено создание лаг-машин и намеренная нагрузка сервера.</p>
+        </div>
+        <p class="mt-8 text-center font-mono text-redline-red font-bold tracking-wider">{{ mc_address }}</p>
+        <button type="button" data-copy="{{ mc_address }}" data-close data-confetti class="w-full mt-4 bg-redline-red text-white font-black py-5 rounded-2xl hover:scale-105 transition uppercase tracking-widest">Принять и скопировать IP</button>
+    </div>
+</dialog>
+
+<dialog id="lightbox" aria-label="Просмотр фото" class="rl-dialog m-0 p-0 w-full h-full max-w-none max-h-none bg-black/95 text-white">
+    <button type="button" data-close aria-label="Закрыть" class="absolute top-6 right-6 text-gray-400 hover:text-white transition z-[310] p-2 bg-black/20 rounded-full hover:bg-redline-red/20">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+    </button>
+    <button type="button" data-lb="prev" aria-label="Предыдущее фото" class="absolute left-2 md:left-8 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:scale-110 p-4 transition z-[310]">
+        <svg class="w-10 h-10 md:w-12 md:h-12 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"></path></svg>
+    </button>
+    <div data-lb-backdrop class="w-full h-full flex items-center justify-center p-4 md:p-12">
+        <img id="lightbox-img" src="" alt="" class="max-w-full max-h-full w-auto h-auto rounded-lg shadow-2xl object-contain transition duration-150">
+    </div>
+    <button type="button" data-lb="next" aria-label="Следующее фото" class="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:scale-110 p-4 transition z-[310]">
+        <svg class="w-10 h-10 md:w-12 md:h-12 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path></svg>
+    </button>
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 text-gray-400 font-mono text-sm tracking-widest bg-black/50 px-4 py-1 rounded-full border border-white/10">
+        <span id="lb-current" class="text-white font-bold">1</span> / <span id="lb-total">{{ gallery|length }}</span>
+    </div>
+</dialog>
+
+<button type="button" id="back-to-top" aria-label="Наверх" class="fixed bottom-8 right-8 z-[60] bg-redline-red text-white p-4 rounded-2xl shadow-2xl transition-all duration-500 opacity-0 translate-y-10 pointer-events-none hover:-translate-y-2">
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
+</button>
+<div id="toast" role="status" aria-live="polite" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[250] bg-dark-bg dark:bg-white text-white dark:text-black px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] opacity-0 transition-all duration-500 pointer-events-none border border-redline-red/50 shadow-2xl">Скопировано!</div>

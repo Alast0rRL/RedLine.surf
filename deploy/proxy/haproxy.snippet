@@ -3,8 +3,8 @@
 
 frontend tls443
     # ... было: use_backend home if { req_ssl_sni -i <существующие имена> }
-    use_backend home if { req_ssl_sni -i <существующие имена> matrix.redline.surf chat.redline.surf }
+    use_backend home if { req_ssl_sni -i <существующие имена> matrix.redline.surf chat.redline.surf minecraft.redline.surf redline.surf www.redline.surf }
 
 frontend http80
     # ACME HTTP-01 для новых имён
-    acl homehost hdr(host),field(1,:) -i <существующие имена> matrix.redline.surf chat.redline.surf
+    acl homehost hdr(host),field(1,:) -i <существующие имена> matrix.redline.surf chat.redline.surf minecraft.redline.surf redline.surf www.redline.surf

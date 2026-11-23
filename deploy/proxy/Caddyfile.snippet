@@ -1,7 +1,7 @@
 # Добавить в Caddyfile рядом с остальными сайтами (тот же стиль: PROXY-протокол
 # и TLS на 127.0.0.1:8443, ACME HTTP-01 на :18081). Домены — свои.
 
-http://matrix.redline.surf:18081, http://chat.redline.surf:18081 {
+http://matrix.redline.surf:18081, http://chat.redline.surf:18081, http://minecraft.redline.surf:18081, http://redline.surf:18081, http://www.redline.surf:18081 {
     bind 127.0.0.1
     respond 404
 }
@@ -40,4 +40,34 @@ chat.redline.surf:8443 {
     }
     header Strict-Transport-Security "max-age=31536000"
     reverse_proxy 127.0.0.1:8090
+}
+
+# Сайт Minecraft-сервера
+minecraft.redline.surf:8443 {
+    bind 127.0.0.1
+    tls {
+        issuer acme {
+            disable_tlsalpn_challenge
+        }
+    }
+    header Strict-Transport-Security "max-age=31536000"
+    encode zstd gzip
+    # 3D-карта: подставить адрес своего BlueMap/Dynmap (раньше жила на redline.surf/map/)
+    handle_path /map/* {
+        reverse_proxy 127.0.0.1:8100
+    }
+    @assets path /static/* /ui/*
+    header @assets Cache-Control "public, max-age=86400"
+    reverse_proxy 127.0.0.1:8000
+}
+
+# Старый адрес: постоянный редирект, старые ссылки и поиск переедут на minecraft.
+redline.surf:8443, www.redline.surf:8443 {
+    bind 127.0.0.1
+    tls {
+        issuer acme {
+            disable_tlsalpn_challenge
+        }
+    }
+    redir https://minecraft.redline.surf{uri} permanent
 }

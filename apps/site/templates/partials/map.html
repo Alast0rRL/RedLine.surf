@@ -1,0 +1,31 @@
+<section id="map" class="py-32 bg-gray-50 dark:bg-dark-gray relative z-10">
+    <div class="container mx-auto px-6">
+        <div class="reveal flex flex-col md:flex-row items-center gap-12 md:gap-20">
+            <a href="{{ site.map_url }}" target="_blank" rel="noopener" class="md:w-1/2 relative group overflow-hidden rounded-[40px] shadow-2xl border border-gray-100 dark:border-white/5 block">
+                <img src="/static/map.jpg" width="1200" height="675" loading="lazy" class="w-full grayscale group-hover:grayscale-0 group-hover:scale-110 group-focus-visible:grayscale-0 transition duration-700" alt="Карта мира сервера Redline">
+                <span class="absolute inset-0 bg-redline-red/10 group-hover:bg-transparent transition"></span>
+                <span class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition duration-500 bg-black/40">
+                    <span class="bg-white text-black font-black py-4 px-8 rounded-2xl shadow-2xl group-hover:scale-110 transition uppercase tracking-widest">Открыть карту</span>
+                </span>
+            </a>
+
+            <div class="md:w-1/2 text-left">
+                <h2 class="text-4xl font-black mb-8 uppercase italic tracking-tighter">Живая 3D карта</h2>
+                <p class="text-xl text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">Следи за миром в реальном времени. Найди поселения игроков или разведай новые территории прямо в браузере.</p>
+
+                <div class="p-6 bg-white dark:bg-white/5 rounded-3xl border border-dashed border-gray-300 dark:border-white/10 mb-10 inline-block">
+                    <p class="text-xs uppercase tracking-[0.2em] font-black text-gray-500 mb-2">Прямой доступ:</p>
+                    <a href="{{ site.map_url }}" target="_blank" rel="noopener" class="text-redline-red font-bold break-all tracking-widest text-lg font-mono hover:underline">{{ site.map_label }}</a>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <span class="flex h-3 w-3 relative" aria-hidden="true">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-redline-red opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-redline-red"></span>
+                    </span>
+                    <span class="text-xs font-black uppercase tracking-widest text-gray-500">Обновляется в реальном времени</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
