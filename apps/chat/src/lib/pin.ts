@@ -25,7 +25,10 @@ export interface PersonalLink {
 export type LinkState = 'create' | 'enter' | 'invalid';
 
 const SAVED_LINK = 'rl.link';
-const USER_RE = /^[a-z0-9][a-z0-9._=-]{0,18}\.[0-9a-f]{12}$/;
+/** Логин в личной ссылке: раньше всегда с хвостом `.<12 hex>`, теперь просто `ded`, `ded2`. */
+const USER_RE = /^[a-z0-9][a-z0-9._=-]{0,31}$/;
+/** Старые логины со случайным хвостом: по нему одному видно, что человек входит по PIN. */
+const LEGACY_PIN_RE = /^[a-z0-9][a-z0-9._=-]{0,18}\.[0-9a-f]{12}$/;
 const KEY_RE = /^[0-9a-f]{32}$/;
 const TOKEN_RE = /^[A-Za-z0-9]{16}$/;
 
@@ -33,14 +36,36 @@ function randomHex(bytes: number): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Случайный хвост логина: имена не пересекаются и не угадываются. */
-export function newPerson(name: string): Omit<PersonalLink, 'token'> {
-  const slug = slugUsername(name).slice(0, 19).replace(/[^a-z0-9]+$/, '') || 'user';
-  return { user: `${slug}.${randomHex(6)}`, key: randomHex(16), name };
+/** Основа логина из имени: «Дед» → `ded`. Цифры по порядку добавляет выбор свободного логина. */
+export function baseUsername(name: string): string {
+  return slugUsername(name).slice(0, 24).replace(/[^a-z0-9]+$/, '') || 'user';
 }
 
+/** Пароль защищён ключом ссылки, поэтому логин может быть простым и угадываемым. */
+export function newPerson(name: string, user: string): Omit<PersonalLink, 'token'> {
+  return { user, key: randomHex(16), name };
+}
+
+/** Логины людей с PIN, известные админу по его списку ссылок. */
+const knownPinUsers = new Set<string>();
+export function rememberPinUsers(users: string[]): void {
+  for (const u of users) knownPinUsers.add(u);
+}
+
+let savedLinkUser: string | null | undefined;
+function savedUser(): string | null {
+  if (savedLinkUser === undefined) savedLinkUser = loadLink()?.user ?? null;
+  return savedLinkUser;
+}
+
+/**
+ * Входит ли человек по ссылке и PIN. Старые логины узнаём по хвосту; новые (без цифр) —
+ * по ссылке, сохранённой на этом устройстве (это мы сами), или по списку ссылок у админа.
+ */
 export function isPinUser(userId: string | null | undefined): boolean {
-  return !!userId && USER_RE.test(userId.replace(/^@/, '').split(':')[0]);
+  if (!userId) return false;
+  const local = userId.replace(/^@/, '').split(':')[0];
+  return LEGACY_PIN_RE.test(local) || savedUser() === local || knownPinUsers.has(local);
 }
 
 export function isPersonalLink(value: unknown): value is PersonalLink {
@@ -84,6 +109,7 @@ export function loadLink(): PersonalLink | null {
 export function saveLink({ user, key, token, name }: PersonalLink): void {
   try {
     localStorage.setItem(SAVED_LINK, JSON.stringify({ user, key, token, name }));
+    savedLinkUser = user;
   } catch {
     console.warn('Не удалось запомнить ссылку');
   }
@@ -92,6 +118,7 @@ export function saveLink({ user, key, token, name }: PersonalLink): void {
 export function forgetLink(): void {
   try {
     localStorage.removeItem(SAVED_LINK);
+    savedLinkUser = null;
   } catch {
     console.warn('Не удалось забыть ссылку');
   }

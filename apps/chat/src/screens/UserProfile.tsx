@@ -3,6 +3,7 @@ import { useClient } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
 import { findExistingDm } from './NewChat';
 import { isPinUser } from '../lib/pin';
+import { formatLogin } from '../lib/login';
 import { isRoomMuted, openDm, setRoomMuted } from '../lib/rooms';
 import { Button, Card, toast } from '../components/ui';
 import { ExtraIcon } from '../components/extraIcons';
@@ -66,7 +67,7 @@ export function UserProfile({ userId }: { userId: string }) {
         <div className="info__head" style={{ width: '100%' }}>
           <BigAvatar client={client} name={info.name} seed={userId} mxc={info.mxc} label={`Фото: ${info.name}`} />
           <h1 className="info__name">{info.name}</h1>
-          {!hideId && <p className="info__id">{userId}</p>}
+          <p className="info__id">{formatLogin(userId)}</p>
           {own && <p className="info__muted">Это вы</p>}
         </div>
         <div className="info__actions">

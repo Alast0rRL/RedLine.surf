@@ -1,6 +1,6 @@
 import { type MatrixClient } from 'matrix-js-sdk';
 import { findAdminRoom, runAdminCommand } from './admin';
-import { isPersonalLink, newPerson, type PersonalLink } from './pin';
+import { baseUsername, isPersonalLink, newPerson, rememberPinUsers, type PersonalLink } from './pin';
 
 export interface Invite {
   token: string;
@@ -75,7 +75,9 @@ export async function loadLinks(client: MatrixClient): Promise<PersonalLink[]> {
   }
   const items = (raw as { items?: unknown } | null)?.items;
   if (!Array.isArray(items)) return [];
-  return items.filter(isPersonalLink);
+  const links = items.filter(isPersonalLink);
+  rememberPinUsers(links.map((l) => l.user));
+  return links;
 }
 
 async function saveLinks(client: MatrixClient, items: PersonalLink[]): Promise<void> {
@@ -93,11 +95,14 @@ async function doCreateInvite(client: MatrixClient, adminRoom: string, name: str
   const match = /New registration token issued:\s*`([A-Za-z0-9]{16})`/.exec(body);
   if (!match) throw new Error('Не удалось создать приглашение. Попробуйте ещё раз');
   const invite: Invite = { token: match[1], createdAt: Date.now(), label: name };
-  const link: PersonalLink = { ...newPerson(name), token: invite.token };
   try {
     const [currentInvites, currentLinks] = await Promise.all([readMetadata(client), loadLinks(client)]);
+    const user = await freeUsername(client, name, currentLinks);
+    const link: PersonalLink = { ...newPerson(name, user), token: invite.token };
     await saveMetadata(client, [...currentInvites.filter((i) => i.token !== invite.token), invite]);
     await saveLinks(client, [...currentLinks.filter((l) => l.token !== link.token && l.user !== link.user), link]);
+    rememberPinUsers([link.user]);
+    return { invite, link };
   } catch (e) {
     try {
       await doRevokeInvite(client, adminRoom, invite.token);
@@ -106,7 +111,29 @@ async function doCreateInvite(client: MatrixClient, adminRoom: string, name: str
     }
     throw e;
   }
-  return { invite, link };
+}
+
+/**
+ * Логин без случайных цифр: `ded`, а если занят — `ded2`, `ded3`…
+ * Занятым считаем и логин из ещё не использованной ссылки, чтобы два «Деда» не получили один.
+ */
+async function freeUsername(client: MatrixClient, name: string, links: PersonalLink[]): Promise<string> {
+  const base = baseUsername(name);
+  const pending = new Set(links.map((l) => l.user));
+  for (let n = 1; n <= 99; n++) {
+    const candidate = n === 1 ? base : `${base}${n}`;
+    if (pending.has(candidate)) continue;
+    let free: boolean;
+    try {
+      free = await client.isUsernameAvailable(candidate);
+    } catch (e) {
+      const code = (e as { errcode?: string }).errcode;
+      if (code === 'M_USER_IN_USE' || code === 'M_EXCLUSIVE' || code === 'M_INVALID_USERNAME') continue;
+      throw new Error('Не удалось проверить, свободен ли логин. Попробуйте ещё раз');
+    }
+    if (free) return candidate;
+  }
+  throw new Error('Не нашлось свободного логина для этого имени. Укажите имя иначе');
 }
 
 async function doLoadInvites(client: MatrixClient, adminRoom: string): Promise<Invite[]> {

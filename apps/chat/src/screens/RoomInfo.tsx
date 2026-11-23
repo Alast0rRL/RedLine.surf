@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { KnownMembership, type MatrixClient, type Room, type RoomMember } from 'matrix-js-sdk';
 import { useClient } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
@@ -7,46 +7,46 @@ import { squareAvatar } from '../lib/profile';
 import { isRoomMuted, leaveRoom, pluralMembers, roomPower, setRoomMuted } from '../lib/rooms';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { ExtraIcon } from '../components/extraIcons';
+import { parseLogins } from '../lib/login';
+import { checkUsersExist } from './NewChat';
 import { BigAvatar, ConfirmDialog, InfoFrame, memberName, useRoomRefresh } from './infoParts';
 
 const NAME_MAX = 60;
 
 function AddMembers({ client, room, open, onClose }: { client: MatrixClient; room: Room; open: boolean; onClose: () => void }) {
-  const [picked, setPicked] = useState<string[]>([]);
+  const server = getConfig().serverName;
+  const [who, setWho] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const candidates = useMemo(() => {
-    if (!open) return [];
-    const me = client.getUserId();
-    const conduit = `@conduit:${getConfig().serverName}`;
-    const here = new Set(
-      [...room.getMembersWithMembership(KnownMembership.Join), ...room.getMembersWithMembership(KnownMembership.Invite)].map((m) => m.userId),
-    );
-    const seen = new Set<string>();
-    const list: { id: string; name: string }[] = [];
-    for (const r of client.getRooms()) {
-      if (r.getMyMembership() !== KnownMembership.Join) continue;
-      for (const m of r.getJoinedMembers()) {
-        if (m.userId === me || m.userId === conduit || here.has(m.userId) || seen.has(m.userId)) continue;
-        seen.add(m.userId);
-        list.push({ id: m.userId, name: memberName(client, m) });
-      }
-    }
-    return list;
-  }, [open, client, room]);
-
   const close = () => {
-    setPicked([]);
+    setWho('');
+    setError(null);
     setBusy(false);
     onClose();
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!picked.length) return;
+    setError(null);
+    const parsed = parseLogins(who);
+    if ('error' in parsed) return setError(parsed.error);
+    const here = new Set(
+      [...room.getMembersWithMembership(KnownMembership.Join), ...room.getMembersWithMembership(KnownMembership.Invite)].map((m) => m.userId),
+    );
+    const users = parsed.userIds.filter((u) => !here.has(u));
+    if (!users.length) {
+      return setError(parsed.userIds.length === 1 ? 'Этот человек уже в чате' : 'Все эти люди уже в чате');
+    }
     setBusy(true);
+    try {
+      await checkUsersExist(client, users);
+    } catch (err) {
+      setBusy(false);
+      return setError((err as Error).message);
+    }
     let failed = 0;
-    for (const id of picked) {
+    for (const id of users) {
       try {
         await client.invite(room.roomId, id);
       } catch (err) {
@@ -54,32 +54,33 @@ function AddMembers({ client, room, open, onClose }: { client: MatrixClient; roo
         console.error(err);
       }
     }
-    if (failed) toast(failed === picked.length ? 'Не удалось пригласить. Попробуйте ещё раз' : 'Приглашены не все. Попробуйте ещё раз', { variant: 'error' });
+    if (failed) {
+      setBusy(false);
+      return setError(failed === users.length ? 'Не удалось пригласить. Попробуйте ещё раз' : 'Приглашены не все. Попробуйте ещё раз');
+    }
+    toast(users.length === 1 ? 'Приглашение отправлено' : 'Приглашения отправлены');
     close();
   };
 
   return (
     <Modal open={open} onClose={close} title="Добавить участника">
       <form className="stack" onSubmit={(e) => void submit(e)}>
-        <div className="person-picker" role="group" aria-label="Люди">
-          {candidates.length ? (
-            candidates.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className="person-pick"
-                aria-pressed={picked.includes(p.id)}
-                onClick={() => setPicked((cur) => (cur.includes(p.id) ? cur.filter((v) => v !== p.id) : [...cur, p.id]))}
-              >
-                <Avatar name={p.name} seed={p.id} size="sm" />
-                <span>{p.name}</span>
-              </button>
-            ))
-          ) : (
-            <p className="settings-card__text">Некого добавить</p>
-          )}
-        </div>
-        <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !picked.length}>Пригласить</Button>
+        <Field
+          label="Логин"
+          value={who}
+          onChange={(e) => {
+            setWho(e.target.value);
+            setError(null);
+          }}
+          placeholder={`ded@${server}`}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="email"
+          hint="Можно несколько через запятую"
+          error={error}
+        />
+        <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !who.trim()}>Пригласить</Button>
       </form>
     </Modal>
   );

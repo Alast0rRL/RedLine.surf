@@ -451,11 +451,11 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
         />
         <Button type="submit" variant="primary" busy={savingName} disabled={!changed || savingName}>Сохранить</Button>
       </form>
-      {userId && !isPinUser(userId) && <div className="profile__id">{userId}</div>}
+      {userId && <div className="profile__id">{formatLogin(userId)}</div>}
     </div>
     </Card>
   );
-      {userId && <div className="profile__id">{formatLogin(userId)}</div>}
+}
 
 export function Settings() {
   const client = useClient();
