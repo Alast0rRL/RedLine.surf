@@ -4,8 +4,13 @@ import { hasServerId, isTextMessage, plainBody } from './messageActions';
 
 /** Регистр не важен, «ё» = «е». Длина строки не меняется, поэтому индексы совпадают с исходным текстом. */
 export function fold(s: string): string {
-  const f = s.toLowerCase().replace(/ё/g, 'е');
-  return f.length === s.length ? f : s.replace(/ё/gi, 'е');
+  let out = '';
+  for (const ch of s) {
+    let l = ch.toLowerCase();
+    if (l.length !== ch.length) l = l.slice(0, ch.length);
+    out += l === 'ё' ? 'е' : l;
+  }
+  return out;
 }
 
 /** id событий с текстом, подходящих под запрос, от старых к новым. */

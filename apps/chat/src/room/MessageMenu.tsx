@@ -196,8 +196,8 @@ function MenuSheet({ client, room, ev, onClose, items }: MenuProps & { items: It
             role="menuitem"
             className={`msg-menu__item${it.danger ? ' is-danger' : ''}`}
             onClick={() => {
-              close();
-              it.run();
+              // действие — после того как запись истории снята, иначе back отменит навигацию
+              dismiss(() => it.run());
             }}
           >
             {it.icon}

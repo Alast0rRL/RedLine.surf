@@ -75,15 +75,24 @@ self.addEventListener('push', (event) => {
       const title = (isGroup ? p.room_name : p.sender_display_name || p.room_name) || 'Redline';
       const preview = isGroup ? `${p.sender_display_name}: ${describe(p)}` : describe(p);
       // несколько сообщений в одну комнату, пока её не открыли: «N новых сообщений» + последнее
-      const previous = p.room_id ? await self.registration.getNotifications({ tag: p.room_id }) : [];
-      const count = previous.length ? ((previous[0].data as { count?: number } | null)?.count ?? 1) + 1 : 1;
+      let count = 1;
+      try {
+        const previous = p.room_id ? await self.registration.getNotifications({ tag: p.room_id }) : [];
+        const prev = previous[0];
+        const pd = prev?.data as { count?: number; ts?: number } | null | undefined;
+        if (pd && Date.now() - (pd.ts ?? 0) < 6 * 3600_000) {
+          count = (pd.count ?? 1) + 1;
+        }
+      } catch {
+        /* не вышло посчитать — покажем как одно */
+      }
       const body = count > 1 ? `${plural(count)} · ${preview}` : preview;
       await self.registration.showNotification(title, {
         body,
         tag: p.room_id,
         icon: '/icons/icon-192.png',
         badge: '/icons/badge-96.png',
-        data: { room_id: p.room_id, count },
+        data: { room_id: p.room_id, count, ts: Date.now() },
         // renotify есть в браузерах, но не в типах TS
         ...({ renotify: true } as object),
       });

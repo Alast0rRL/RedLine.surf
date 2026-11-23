@@ -18,7 +18,19 @@ import { getPushState } from './push';
 let currentRoomId: string | null = null;
 export function setCurrentRoom(roomId: string | null): void {
   currentRoomId = roomId;
+  closeRoomNotifications(roomId);
 }
+
+/** Комнату читают в приложении — убираем её системные уведомления (счётчик «N новых» не копится). */
+function closeRoomNotifications(roomId: string | null): void {
+  if (!roomId || document.hidden || !('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready
+    .then((r) => r.getNotifications({ tag: roomId }))
+    .then((list) => list.forEach((n) => n.close()))
+    .catch(() => {});
+}
+
+document.addEventListener('visibilitychange', () => closeRoomNotifications(currentRoomId));
 
 async function show(client: MatrixClient, ev: MatrixEvent, room: Room) {
   if (ev.getSender() === client.getUserId() || !isMessageLike(ev)) return;
