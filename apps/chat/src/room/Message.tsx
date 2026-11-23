@@ -243,6 +243,7 @@ export const Message = memo(function Message({ client, room, ev, own, first, las
     <div
       className={`msg${own ? ' msg--own' : ''}${first ? ' msg--first' : ''}${last ? ' msg--last' : ''}${bot ? ' msg--bot' : ''}`}
       data-evid={ev.getId() ?? undefined}
+      data-ts={ev.getTs()}
     >
       {!own && (
         <div className="msg__avatar">

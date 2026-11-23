@@ -213,9 +213,37 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
     return () => window.removeEventListener('rl:sent', onSent);
   }, []);
 
+  // плавающая плашка дня: только во время прокрутки
+  const [floatDay, setFloatDay] = useState<string | null>(null);
+  const [floatOn, setFloatOn] = useState(false);
+  const floatTimer = useRef(0);
+  const floatRaf = useRef(0);
+  useEffect(() => () => {
+    clearTimeout(floatTimer.current);
+    cancelAnimationFrame(floatRaf.current);
+  }, []);
+  const updateFloat = (el: HTMLElement) => {
+    if (floatRaf.current) return;
+    floatRaf.current = requestAnimationFrame(() => {
+      floatRaf.current = 0;
+      const top = el.getBoundingClientRect().top;
+      const items = el.querySelectorAll<HTMLElement>('.msg[data-ts]');
+      for (const it of items) {
+        if (it.getBoundingClientRect().bottom > top + 4) {
+          setFloatDay(formatDay(Number(it.dataset.ts)));
+          break;
+        }
+      }
+    });
+    setFloatOn(true);
+    clearTimeout(floatTimer.current);
+    floatTimer.current = window.setTimeout(() => setFloatOn(false), 1500);
+  };
+
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;
+    updateFloat(el);
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     stick.current = dist < NEAR_BOTTOM_PX;
     setFar(dist > el.clientHeight);
@@ -290,6 +318,7 @@ export function Timeline({ client, room, onReply, onEdit }: TimelineProps) {
         <Uploads roomId={room.roomId} />
       </div>
     </div>
+    {floatDay && <div className={} aria-hidden="true"><span>{floatDay}</span></div>}
     {far && (
       <button type="button" className="jump-bottom" onClick={jumpToBottom} aria-label={unseen > 0 ? `Вниз, новых сообщений: ${unseen}` : 'Вниз'}>
         <Icon name="chevronUp" size={22} />
