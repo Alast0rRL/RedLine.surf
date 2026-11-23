@@ -11,7 +11,6 @@ import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { leaveRoom, setRoomMuted, setRoomPinned } from '../lib/rooms';
 import { Avatar, Button, Icon, toast } from '../components/ui';
-import { ThemeToggle } from '../components/ThemeToggle';
 import { ExtraIcon } from '../components/extraIcons';
 import { NewChatModal } from './NewChat';
 import { ConfirmDialog } from './infoParts';
@@ -25,6 +24,16 @@ export function roomAvatarMxc(room: Room, isDm: boolean): string | null {
 }
 
 const LONG_PRESS_MS = 450;
+const RECOVERY_HIDE_KEY = 'rl.recoveryBannerHiddenUntil';
+const RECOVERY_HIDE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function readRecoveryHidden(): number {
+  try {
+    return Number(localStorage.getItem(RECOVERY_HIDE_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
 
 interface MenuState {
   s: RoomSummary;
@@ -33,7 +42,7 @@ interface MenuState {
 }
 
 function RoomRow({ client, s, active, onMenu }: { client: MatrixClient; s: RoomSummary; active: boolean; onMenu: (m: MenuState) => void }) {
-  const { room, lastEvent, unread, highlight, isDm, pinned, muted } = s;
+  const { room, lastEvent, unread, isDm, pinned, muted } = s;
   const timer = useRef<number | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const fired = useRef(false);
@@ -53,7 +62,7 @@ function RoomRow({ client, s, active, onMenu }: { client: MatrixClient; s: RoomS
   return (
     <li>
       <a
-        className="chat-row"
+        className={`chat-row${unread > 0 ? ' chat-row--unread' : ''}`}
         href={`#/room/${encodeURIComponent(room.roomId)}`}
         aria-current={active ? 'page' : undefined}
         onClick={(e) => {
@@ -105,7 +114,7 @@ function RoomRow({ client, s, active, onMenu }: { client: MatrixClient; s: RoomS
             {muted && <span role="img" aria-label="Без звука"><ExtraIcon name="bellOff" size={14} /></span>}
             {pinned && <span role="img" aria-label="Закреплён"><ExtraIcon name="pin" size={14} /></span>}
             {unread > 0 && (
-              <span className={`rl-badge${muted ? ' rl-badge--muted' : highlight ? '' : ' rl-badge--soft'}`}>{unread > 99 ? '99+' : unread}</span>
+              <span className={`rl-badge${muted ? ' rl-badge--muted' : ''}`}>{unread > 99 ? '99+' : unread}</span>
             )}
           </span>
         </span>
@@ -192,6 +201,31 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [leaving, setLeaving] = useState<Room | null>(null);
 
+  const [hiddenUntil, setHiddenUntil] = useState(readRecoveryHidden);
+  // показ баннера (условия не менялись): тихая разблокировка PIN — только при сбое, иначе по состоянию безопасности
+  const showRecovery = unlock.silent
+    ? unlock.failed && security === 'needs-unlock'
+    : security === 'needs-setup' || security === 'needs-unlock';
+  const canDismissRecovery = !unlock.silent && !pin && security === 'needs-setup';
+  const recoveryHidden = canDismissRecovery && hiddenUntil > Date.now();
+  const dismissRecovery = () => {
+    const until = Date.now() + RECOVERY_HIDE_MS;
+    setHiddenUntil(until);
+    try {
+      localStorage.setItem(RECOVERY_HIDE_KEY, String(until));
+    } catch {
+      /* хранилище недоступно — спрячем только до перезагрузки */
+    }
+  };
+  const recoveryText = unlock.silent
+    ? 'Не удалось открыть старые сообщения'
+    : pin
+      ? 'Нужно заново ввести PIN'
+      : security === 'needs-setup'
+        ? 'Задайте секретную фразу'
+        : 'Введите секретную фразу';
+  const recoveryCta = unlock.silent ? 'Повторить' : pin ? 'Ввести' : security === 'needs-setup' ? 'Настроить' : 'Ввести';
+
   const q = query.trim().toLocaleLowerCase('ru');
   const shown = useMemo(() => (q ? rooms.filter((s) => s.room.name.toLocaleLowerCase('ru').includes(q)) : rooms), [rooms, q]);
 
@@ -233,7 +267,6 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
       <header className="topbar">
         <span className="topbar__logo">Redline</span>
         <span className="topbar__actions">
-          <ThemeToggle />
           <Button variant="ghost" icon aria-label="Новый чат" onClick={() => setNewChat(true)}>
             <Icon name="plus" />
           </Button>
@@ -248,24 +281,23 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
           <span className="rl-spinner" /> {syncProblem === 'error' ? 'Нет связи с сервером' : 'Переподключение…'}
         </div>
       )}
-      {(unlock.silent
-        ? unlock.failed && security === 'needs-unlock'
-        : security === 'needs-setup' || security === 'needs-unlock') && (
-        <button
-          className="banner banner--action"
-          onClick={() => (unlock.silent ? unlock.retry() : pin ? void logout() : navigate.settings())}
-        >
-          <Icon name="key" size={18} />
-          <span>
-            {unlock.silent
-              ? 'Не удалось открыть старые сообщения — повторить'
-              : pin
-                ? 'Нажми, чтобы заново ввести PIN'
-                : security === 'needs-setup'
-                ? 'Задайте фразу восстановления, чтобы не потерять переписку'
-                : 'Введите фразу восстановления, чтобы читать старые сообщения'}
-          </span>
-        </button>
+      {showRecovery && !recoveryHidden && (
+        <div className="banner banner--action banner--compact">
+          <button
+            type="button"
+            className="banner__main"
+            onClick={() => (unlock.silent ? unlock.retry() : pin ? void logout() : navigate.settings())}
+          >
+            <Icon name="key" size={18} />
+            <span className="banner__text">{recoveryText}</span>
+            <span className="banner__cta">{recoveryCta}</span>
+          </button>
+          {canDismissRecovery && (
+            <button type="button" className="banner__close" aria-label="Скрыть на 7 дней" onClick={dismissRecovery}>
+              <Icon name="close" size={16} />
+            </button>
+          )}
+        </div>
       )}
 
       {rooms.length > 0 && (

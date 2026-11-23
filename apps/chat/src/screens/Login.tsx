@@ -149,7 +149,7 @@ export function Login() {
         ) : (
           <form className="stack" onSubmit={submitLink} noValidate>
             <Button variant="primary" size="lg" block onClick={() => { setByPhone(true); setError(null); }}>
-              Войти по номеру телефона
+              Войти по номеру
             </Button>
             <Field
               label="Вставь свою ссылку"

@@ -29,6 +29,11 @@
   --chat-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+:root {
+  /* подписи и «бейджи» в чате не мельче 12px (в @redline/ui — 10px) */
+  --rl-text-2xs: 0.75rem;
+}
+
 :root:not([data-theme="dark"]) {
   --rl-color-border: var(--rl-gray-200);
   /* серые сайта на мелком тексте чата читаются плохо */
@@ -37,6 +42,10 @@
   --rl-danger-500: #b91c1c;
 }
 :root[data-theme="dark"] {
+  /* контраст WCAG AA (4.5:1) для мелкого текста на тёмном фоне */
+  --rl-color-text-muted: #a8afba;
+  --rl-color-text-subtle: #959dab;
+  --rl-color-border-strong: rgb(255 255 255 / 0.18);
   --chat-bubble-other: #171717;
   --chat-bubble-other-border: rgb(255 255 255 / 0.05);
   --chat-bubble-bot: #131313;
@@ -49,8 +58,8 @@
   --chat-card: rgb(18 18 18 / 0.72);
   --chat-inset: rgb(0 0 0 / 0.4);
   --chat-link-box: rgb(0 0 0 / 0.3);
-  --chat-accent-text: var(--rl-red-400);
-  --chat-meta: rgb(255 255 255 / 0.45);
+  --chat-accent-text: #ff6b7d;
+  --chat-meta: rgb(255 255 255 / 0.62);
   --chat-own-meta: rgb(255 255 255 / 0.75);
   --chat-lines-opacity: 0.22;
 }
@@ -65,8 +74,13 @@ body {
 button { cursor: pointer; }
 a { color: inherit; }
 
-/* непрочитанные без упоминания — спокойнее, чем красный */
-.rl-badge--soft { background: rgb(var(--chat-tint-rgb) / 0.14); color: var(--rl-color-text); }
+/* кнопки с красным текстом на тёмном: красный сайта там не дотягивает до 4.5:1 */
+:root[data-theme="dark"] .rl-btn--outline { color: var(--chat-accent-text); border-color: var(--chat-accent-text); }
+:root[data-theme="dark"] .rl-btn--outline:hover { color: var(--rl-color-on-accent); }
+:root[data-theme="dark"] .rl-btn--secondary { background: rgb(255 255 255 / 0.08); }
+/* иконочные кнопки — не меньше 44x44 */
+.rl-btn--icon, .rl-btn--icon.rl-btn--sm { min-width: 2.75rem; --_h: 2.75rem; }
+.rl-btn--icon:not(.rl-btn--sm) { --_h: 3rem; }
 
 /* ============ Экраны входа / загрузки ============ */
 .screen {
@@ -262,7 +276,19 @@ a { color: inherit; }
 }
 .banner .rl-spinner { width: 1rem; height: 1rem; }
 .banner--action { border-color: rgb(var(--rl-red-500-rgb) / 0.5); }
-.banner--action svg { color: var(--rl-color-accent); flex: none; }
+.banner--action svg { color: var(--chat-accent-text); flex: none; }
+.banner--compact { padding: 0; gap: 0; }
+.banner__main {
+  display: flex; align-items: center; gap: var(--rl-space-3); flex: 1; min-width: 0; min-height: 2.75rem;
+  padding: var(--rl-space-2) var(--rl-space-3) var(--rl-space-2) var(--rl-space-4);
+  border: 0; background: none; color: inherit; font: inherit; text-align: left;
+}
+.banner__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.banner__cta { flex: none; color: var(--chat-accent-text); font-weight: var(--rl-weight-bold); }
+.banner__close {
+  display: grid; place-items: center; flex: none; width: 2.75rem; min-height: 2.75rem;
+  border: 0; background: none; color: var(--rl-color-text-muted);
+}
 
 /* ============ Список чатов ============ */
 .list-heading {
@@ -292,7 +318,10 @@ a { color: inherit; }
 .chat-row__preview { display: flex; align-items: center; gap: 4px; color: var(--rl-color-text-muted); font-size: var(--rl-text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-row__preview svg { flex: none; }
 .chat-row__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
-.chat-row__time { font-size: var(--rl-text-xs); color: var(--rl-color-text-subtle); }
+.chat-row__time { font-size: var(--rl-text-xs); color: var(--rl-color-text-muted); }
+.chat-row--unread .chat-row__title { font-weight: var(--rl-weight-black); }
+.chat-row--unread .chat-row__preview { color: var(--rl-color-text); font-weight: var(--rl-weight-semibold); }
+.chat-row--unread .chat-row__time { color: var(--chat-accent-text); font-weight: var(--rl-weight-semibold); }
 .invite-row { background: rgb(var(--rl-red-500-rgb) / 0.07); }
 .invite-row__actions { display: flex; gap: var(--rl-space-1); flex: none; }
 
@@ -304,7 +333,7 @@ a { color: inherit; }
   border-radius: var(--rl-radius-full);
   background: rgb(var(--rl-red-500-rgb) / 0.18);
   color: var(--chat-accent-text);
-  font-size: 10px;
+  font-size: 0.75rem;
   font-weight: var(--rl-weight-black);
   letter-spacing: var(--rl-tracking-widest);
   text-transform: uppercase;
@@ -413,7 +442,7 @@ a { color: inherit; }
   position: relative;
   top: 2px;
   color: var(--chat-meta);
-  font-size: 11px;
+  font-size: 0.75rem;
   line-height: 1;
   white-space: nowrap;
 }
@@ -477,7 +506,7 @@ a { color: inherit; }
 
 .msg-status { display: inline-flex; align-items: center; gap: 4px; }
 .msg-status--read { color: #fff; }
-.msg-status--failed { color: #ffd2d8; font-size: 11px; }
+.msg-status--failed { color: #ffd2d8; font-size: 0.75rem; }
 .msg-status--failed button { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; }
 
 /* Фото */
@@ -543,8 +572,8 @@ a { color: inherit; }
 .msg--own .voice__wave span { background: rgb(255 255 255 / 0.4); }
 .msg--own .voice__wave span.is-played { background: #fff; }
 .voice__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; min-width: 2.6rem; }
-.voice__time { font-family: var(--rl-font-mono); font-size: 11px; opacity: 0.85; }
-.voice__speed { padding: 1px 6px; border: 0; border-radius: var(--rl-radius-full); background: rgb(var(--chat-tint-rgb) / 0.15); color: inherit; font-size: 10px; font-weight: var(--rl-weight-black); }
+.voice__time { font-family: var(--rl-font-mono); font-size: 0.75rem; opacity: 0.85; }
+.voice__speed { padding: 1px 6px; border: 0; border-radius: var(--rl-radius-full); background: rgb(var(--chat-tint-rgb) / 0.15); color: inherit; font-size: 0.75rem; font-weight: var(--rl-weight-black); }
 
 /* Загрузки */
 .bubble--upload { min-width: 10rem; }
@@ -789,7 +818,7 @@ a { color: inherit; }
   border-radius: var(--rl-radius-full);
   background: var(--rl-color-fill);
   color: var(--rl-color-text-muted);
-  font-size: 10px;
+  font-size: 0.75rem;
   font-weight: var(--rl-weight-black);
   text-transform: uppercase;
 }
@@ -809,5 +838,5 @@ a { color: inherit; }
 
 .settings-card .rl-btn { max-width: 100%; white-space: normal; }
 
-.rl-btn--danger { color: var(--rl-red-400); border-color: rgb(var(--rl-red-500-rgb) / 0.6); }
+.rl-btn--danger { color: var(--chat-accent-text); border-color: rgb(var(--rl-red-500-rgb) / 0.6); }
 .rl-btn--danger:hover:not(:disabled) { background: rgb(var(--rl-red-500-rgb) / 0.15); }
