@@ -8,7 +8,7 @@ import https from 'node:https';
 import crypto from 'node:crypto';
 
 const MAX_BODY = 8 * 1024;
-const PAIR_FAILS = 5;
+export const PAIR_FAILS = 10;
 const PAIR_BASE_LOCK_MS = 15 * 60 * 1000;
 const PAIR_MAX_LOCK_MS = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;

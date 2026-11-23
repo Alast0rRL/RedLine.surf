@@ -2,7 +2,7 @@
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { createLoginGuard, normalizeUser } from './login-guard.mjs';
+import { createLoginGuard, normalizeUser, PAIR_FAILS } from './login-guard.mjs';
 
 const SECRET = 'S3cretPassw0rd-xyz';
 const MIN = 60 * 1000;
@@ -97,12 +97,12 @@ test('верный пароль — 200', async () => {
   assert.equal((await r.json()).access_token, 't');
 });
 
-test('5 неверных, шестой — 429 без обращения к homeserver; ответ с CORS и Retry-After', async () => {
-  for (let i = 0; i < 5; i++) assert.equal((await login(user, 'bad', '10.0.0.2')).status, 403);
-  assert.equal(calls, 5);
+test('PAIR_FAILS неверных, следующий — 429 без обращения к homeserver; ответ с CORS и Retry-After', async () => {
+  for (let i = 0; i < PAIR_FAILS; i++) assert.equal((await login(user, 'bad', '10.0.0.2')).status, 403);
+  assert.equal(calls, PAIR_FAILS);
   const r = await login(user, 'good', '10.0.0.2');
   assert.equal(r.status, 429);
-  assert.equal(calls, 5);
+  assert.equal(calls, PAIR_FAILS);
   assert.equal(r.headers.get('access-control-allow-origin'), '*');
   assert.ok(Number(r.headers.get('retry-after')) > 0);
   const j = await r.json();
@@ -112,10 +112,10 @@ test('5 неверных, шестой — 429 без обращения к home
 });
 
 test('другой IP того же логина не заблокирован по паре, но блокируется по логину после 20 неудач', async () => {
-  for (let i = 0; i < 4; i++) await login(user, 'bad', '10.0.1.1');
+  for (let i = 0; i < PAIR_FAILS - 1; i++) await login(user, 'bad', '10.0.1.1');
   assert.equal((await login(user, 'good', '10.0.1.2')).status, 200);
   // ещё неудачи с разных IP: всего 20 по логину
-  for (let i = 4; i < 20; i++) assert.equal((await login(user, 'bad', `10.0.2.${i}`)).status, 403);
+  for (let i = PAIR_FAILS - 1; i < 20; i++) assert.equal((await login(user, 'bad', `10.0.2.${i}`)).status, 403);
   const before = calls;
   const r = await login(user, 'good', '10.0.3.1');
   assert.equal(r.status, 429);
@@ -125,14 +125,14 @@ test('другой IP того же логина не заблокирован �
 });
 
 test('успех сбрасывает счётчик пары', async () => {
-  for (let i = 0; i < 4; i++) await login(user, 'bad', '10.0.4.1');
+  for (let i = 0; i < PAIR_FAILS - 1; i++) await login(user, 'bad', '10.0.4.1');
   assert.equal((await login(user, 'good', '10.0.4.1')).status, 200);
-  for (let i = 0; i < 4; i++) assert.equal((await login(user, 'bad', '10.0.4.1')).status, 403);
+  for (let i = 0; i < PAIR_FAILS - 1; i++) assert.equal((await login(user, 'bad', '10.0.4.1')).status, 403);
   assert.equal((await login(user, 'good', '10.0.4.1')).status, 200);
 });
 
 test('блокировка удваивается, максимум 24 ч', async () => {
-  for (let i = 0; i < 5; i++) await login(user, 'bad', '10.0.5.1');
+  for (let i = 0; i < PAIR_FAILS; i++) await login(user, 'bad', '10.0.5.1');
   let j = await (await login(user, 'good', '10.0.5.1')).json();
   assert.equal(j.retry_after_ms, 15 * MIN);
   clock += 15 * MIN + 1;
@@ -178,7 +178,7 @@ test('тело больше 8 КБ — 413', async () => {
 });
 
 test('пароль и логин не попадают в логи', async () => {
-  for (let i = 0; i < 6; i++) await login(user, SECRET, '10.0.8.1');
+  for (let i = 0; i < PAIR_FAILS + 1; i++) await login(user, SECRET, '10.0.8.1');
   assert.ok(logs.length > 0);
   const all = logs.join('\n');
   assert.ok(!all.includes(SECRET));
