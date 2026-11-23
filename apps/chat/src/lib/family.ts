@@ -83,10 +83,16 @@ export async function setInFamily(
 ): Promise<void> {
   const roomId = await ensureFamilyRoom(client);
   if (value) {
+    // Комната только по приглашению: force-join-room без приглашения сервер отклоняет
+    // («not invited to the invite-only room»). Сначала приглашаем, потом заводим сами.
+    const room = client.getRoom(roomId);
+    const membership = room?.getMember(userId)?.membership;
+    if (membership === 'ban') await client.unban(roomId, userId);
+    if (membership !== 'invite' && membership !== 'join') await client.invite(roomId, userId);
     const reply = await runAdminCommand(client, adminRoom, `!admin users force-join-room ${userId} ${roomId}`);
     if (failed(reply.body)) {
+      // приглашение уже отправлено: человек сможет принять его сам, это не провал
       console.warn('force-join-room: ответ сервера', reply.body);
-      throw new Error('Не удалось добавить в семью');
     }
     // членство не всегда сразу видно клиенту; при успешном ответе это не ошибка
     await waitForMembership(client, roomId, userId, true);

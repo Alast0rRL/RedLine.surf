@@ -83,6 +83,7 @@ export function PhoneSection() {
           />
           <Field
             label="Ваш PIN"
+            hint={`${PIN_LENGTH} цифр`}
             name="pin"
             type="password"
             inputMode="numeric"

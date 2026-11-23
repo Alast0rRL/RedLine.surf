@@ -128,6 +128,7 @@ export function Login() {
             <Field
               label="PIN"
               name="pin"
+              hint={`${PIN_LENGTH} цифр`}
               type="password"
               inputMode="numeric"
               pattern="[0-9]*"
