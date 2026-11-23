@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef, type KeyboardEvent as RKeyEvent, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { EventStatus, EventType, MsgType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { formatTime, isPendingDecryption, isUndecryptable, isVoice, previewText } from '../lib/events';
-import { sanitizeMatrixHtml, stripReplyFallback } from '../lib/html';
+import { sanitizeMatrixHtml, splitPhones, stripReplyFallback } from '../lib/html';
 import type { MediaSource } from '../lib/media';
 import { isPinUser } from '../lib/pin';
 import { navigate } from '../hooks/useHashRoute';
@@ -24,7 +24,7 @@ function Linkified({ text }: { text: string }) {
         i % 2 === 1 ? (
           <a key={i} href={p} target="_blank" rel="noopener noreferrer nofollow">{p}</a>
         ) : (
-          p
+          splitPhones(p).map((s, j) => (s.tel ? <a key={`${i}-${j}`} href={`tel:${s.tel}`}>{s.text}</a> : s.text))
         ),
       )}
     </>
