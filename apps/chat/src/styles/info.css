@@ -68,3 +68,36 @@
 .topbar__open:hover { background: rgb(var(--chat-tint-rgb) / 0.05); }
 .topbar__open:focus-visible { outline: 2px solid var(--rl-color-accent); outline-offset: 1px; }
 .chat-row__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* меню слева (телефон): три палочки в шапке списка */
+.topbar__menu { display: none; }
+@media (max-width: 899px) {
+  .pane--list .topbar { padding-left: var(--rl-space-1); }
+  .topbar__menu { display: inline-flex; }
+  .topbar__wide { display: none !important; }
+}
+.side-menu-backdrop {
+  position: fixed; inset: 0; z-index: var(--rl-z-overlay); background: rgb(0 0 0 / 0.4);
+  animation: side-menu-fade 0.18s ease-out;
+}
+.side-menu {
+  position: fixed; z-index: calc(var(--rl-z-overlay) + 1); top: 0; bottom: 0; left: 0;
+  width: min(18rem, 82vw); display: flex; flex-direction: column; gap: 2px;
+  padding: calc(var(--chat-safe-top, 0px) + var(--rl-space-2)) var(--rl-space-2) var(--rl-space-4);
+  background: var(--rl-color-surface, var(--chat-bg)); border-right: 1px solid var(--rl-color-border-strong);
+  box-shadow: 8px 0 28px rgb(0 0 0 / 0.35);
+  animation: side-menu-in 0.2s ease-out;
+}
+.side-menu__head {
+  display: flex; align-items: center; min-height: var(--chat-topbar-h);
+  padding-left: var(--rl-space-2); margin-bottom: var(--rl-space-2);
+}
+.side-menu__item {
+  display: flex; align-items: center; gap: var(--rl-space-3); padding: var(--rl-space-3);
+  border: 0; background: none; color: inherit; font: inherit; text-align: left; border-radius: var(--rl-radius-md);
+  cursor: pointer;
+}
+.side-menu__item:hover, .side-menu__item:focus-visible { background: rgb(var(--chat-tint-rgb) / 0.08); outline: none; }
+@keyframes side-menu-in { from { transform: translateX(-100%); } }
+@keyframes side-menu-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .side-menu, .side-menu-backdrop { animation: none; } }

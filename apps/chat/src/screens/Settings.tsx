@@ -5,14 +5,12 @@ import { useSecurityState } from '../hooks/useSecurityState';
 import { changePassword, passwordProblem, friendlyError } from '../lib/account';
 import { findAdminRoom } from '../lib/admin';
 import { isPinUser, PIN_MAX, PIN_MIN, PIN_HINT, pinOk } from '../lib/pin';
-import { createMemberInvite, formatJoinLink, loadInviteOverview, revokeMemberInvite, type GuestInvite } from '../lib/guestInvites';
 import { formatLogin } from '../lib/login';
 import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
 import { switchToPin } from '../lib/switchToPin';
 import { getBoundPhone, normalizePhone } from '../lib/phone';
 import { Avatar, Button, Card, Field, Icon, Modal, toast, type IconName } from '../components/ui';
-import { QrCode } from '../components/QrCode';
 import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
 import { PhoneSection } from './PhoneSection';
 import { MinecraftSection } from './MinecraftSection';
@@ -176,186 +174,6 @@ function AdminGroup() {
         onClick={() => (mc ? navigate.mcPlayers() : navigate.people())}
       />
     </SettingsGroup>
-  );
-}
-
-function InviteRow() {
-  const client = useClient();
-  const { realm } = useMatrix();
-  const accessToken = client.getAccessToken();
-  const [allowed, setAllowed] = useState<boolean | null>(null);
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [link, setLink] = useState<string | null>(null);
-  const [invites, setInvites] = useState<GuestInvite[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (realm !== 'family' || !accessToken) {
-      setAllowed(false);
-      return;
-    }
-    let alive = true;
-    loadInviteOverview(accessToken)
-      .then((r) => {
-        if (alive) setAllowed(!r.guest);
-      })
-      .catch(() => {
-        if (alive) setAllowed(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [realm, accessToken]);
-
-  const refresh = async () => {
-    if (!accessToken) return;
-    const overview = await loadInviteOverview(accessToken);
-    setInvites(overview.invites);
-  };
-
-  const openModal = async () => {
-    setOpen(true);
-    setError(null);
-    try {
-      await refresh();
-    } catch {
-      toast('Не удалось загрузить приглашения. Попробуйте ещё раз', { variant: 'error' });
-    }
-  };
-
-  const close = () => {
-    if (busy) return;
-    setOpen(false);
-    setName('');
-    setLink(null);
-    setError(null);
-  };
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || busy) return;
-    setBusy('create');
-    setError(null);
-    try {
-      const created = await createMemberInvite(client, name);
-      setLink(formatJoinLink(created.token));
-      setName('');
-      await refresh();
-      toast('Ссылка создана', { variant: 'success' });
-    } catch (e) {
-      setError(friendlyError(e, 'Не удалось создать ссылку. Попробуйте ещё раз'));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const copyLink = async () => {
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link);
-      toast('Ссылка скопирована', { variant: 'success' });
-    } catch {
-      toast('Не получилось скопировать. Выделите текст и скопируйте вручную', { variant: 'error' });
-    }
-  };
-
-  const share = async () => {
-    if (!link || !navigator.share) return;
-    try {
-      await navigator.share({ title: 'Личная ссылка', text: 'Личная ссылка для входа в Redline Chat', url: link });
-    } catch (e) {
-      if ((e as Error).name !== 'AbortError') console.warn('Не удалось отправить ссылку');
-    }
-  };
-
-  const revoke = async (invite: GuestInvite) => {
-    setBusy(`revoke:${invite.token}`);
-    try {
-      await revokeMemberInvite(client, invite.token);
-      if (link === formatJoinLink(invite.token)) setLink(null);
-      await refresh();
-      toast('Ссылка отозвана', { variant: 'success' });
-    } catch (e) {
-      toast(friendlyError(e, 'Не удалось отозвать ссылку. Попробуйте ещё раз'), { variant: 'error' });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const show = (invite: GuestInvite) => setLink(formatJoinLink(invite.token));
-
-  if (!allowed) return null;
-  const canShare = typeof navigator.share === 'function';
-  return (
-    <>
-      <SettingsRow
-        icon="plus"
-        label="Пригласить"
-        note="Друга, коллегу или родственника"
-        onClick={() => void openModal()}
-      />
-      <Modal open={open} onClose={close} title="Пригласить">
-        <div className="stack">
-          <form className="stack" onSubmit={(e) => void submit(e)}>
-            <Field
-              label="Как зовут"
-              name="guestName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Друг"
-              maxLength={40}
-              disabled={!!busy}
-            />
-            <Button type="submit" variant="primary" busy={busy === 'create'} disabled={!name.trim() || !!busy}>
-              Создать ссылку
-            </Button>
-          </form>
-          {error && <p className="rl-hint rl-hint--error" role="alert">{error}</p>}
-          {link && (
-            <div className="stack">
-              <QrCode value={link} />
-              <code className="invite-link">{link}</code>
-              <p>Это личная ссылка: она нужна и для нового телефона. Не пересылайте её другим.</p>
-              <Button variant="secondary" onClick={() => void copyLink()}>Скопировать</Button>
-              {canShare && <Button variant="primary" onClick={() => void share()}>Отправить</Button>}
-            </div>
-          )}
-          <div className="stack">
-            <p className="settings-group__title">Мои приглашения</p>
-            {invites.length ? (
-              <ul className="people-list">
-                {invites.map((invite) => (
-                  <li className="people-row" key={invite.token}>
-                    <span className="people-row__main">
-                      <span className="people-row__name">{invite.label || 'Без подписи'}</span>
-                      <span className="people-row__meta">
-                        {new Date(invite.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
-                      </span>
-                    </span>
-                    <span className="people-row__actions">
-                      <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => show(invite)}>Показать</Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        busy={busy === `revoke:${invite.token}`}
-                        disabled={!!busy}
-                        onClick={() => void revoke(invite)}
-                      >
-                        Отозвать
-                      </Button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="rl-hint">Активных приглашений нет</p>
-            )}
-          </div>
-        </div>
-      </Modal>
-    </>
   );
 }
 
@@ -671,7 +489,7 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
 
 export function Settings() {
   const client = useClient();
-  const { logout, realm } = useMatrix();
+  const { logout } = useMatrix();
   const me = client.getUser(client.getUserId()!);
   const [confirm, setConfirm] = useState(false);
   const [expanded, setExpanded] = useState<SectionKey | null>(null);
@@ -693,7 +511,6 @@ export function Settings() {
         <ProfileSection fallbackName={name} />
 
         <SettingsGroup title="Общие">
-          {realm === 'family' && <InviteRow />}
           <PushRow />
           <ThemeRow />
         </SettingsGroup>

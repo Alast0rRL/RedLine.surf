@@ -17,6 +17,8 @@ import { Avatar, Button, Icon, toast } from '../components/ui';
 import { ExtraIcon } from '../components/extraIcons';
 import { NewChatModal } from './NewChat';
 import { ConfirmDialog } from './infoParts';
+import { InviteModal, useCanInvite } from '../components/InviteModal';
+import { toggleTheme, useTheme } from '../lib/theme';
 import '../styles/info.css';
 
 export function roomAvatarMxc(room: Room, isDm: boolean): string | null {
@@ -183,6 +185,46 @@ function RowMenu({ menu, onClose, onToggle, onLeave }: { menu: MenuState; onClos
   );
 }
 
+/** Меню слева на телефоне: всё, что на компьютере стоит в шапке. */
+function SideMenu({ onClose, onInvite, onNewChat }: { onClose: () => void; onInvite: (() => void) | null; onNewChat: () => void }) {
+  const theme = useTheme();
+  const item = (fn: () => void) => () => {
+    onClose();
+    fn();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div className="side-menu-backdrop" onClick={onClose} />
+      <nav className="side-menu" aria-label="Меню">
+        <div className="side-menu__head">
+          <span className="topbar__logo">Redline</span>
+          <Button variant="ghost" icon aria-label="Закрыть меню" onClick={onClose}><Icon name="close" /></Button>
+        </div>
+        {onInvite && (
+          <button type="button" className="side-menu__item" autoFocus onClick={item(onInvite)}>
+            <Icon name="userPlus" size={20} /> Пригласить
+          </button>
+        )}
+        <button type="button" className="side-menu__item" autoFocus={!onInvite} onClick={item(onNewChat)}>
+          <Icon name="plus" size={20} /> Новый чат
+        </button>
+        <button type="button" className="side-menu__item" onClick={item(() => navigate.settings())}>
+          <Icon name="settings" size={20} /> Настройки
+        </button>
+        <button type="button" className="side-menu__item" onClick={toggleTheme}>
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={20} />
+          {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+        </button>
+      </nav>
+    </>
+  );
+}
+
 export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const client = useClient();
   const { realm } = useMatrix();
@@ -193,6 +235,9 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const [query, setQuery] = useState('');
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [leaving, setLeaving] = useState<Room | null>(null);
+  const canInvite = useCanInvite();
+  const [inviting, setInviting] = useState(false);
+  const [sideMenu, setSideMenu] = useState(false);
 
   const q = query.trim().toLocaleLowerCase('ru');
   const shown = useMemo(() => (q ? rooms.filter((s) => s.room.name.toLocaleLowerCase('ru').includes(q)) : rooms), [rooms, q]);
@@ -233,17 +278,25 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   return (
     <section className="pane pane--list" aria-label="Чаты">
       <header className="topbar">
+        <Button variant="ghost" icon aria-label="Меню" className="topbar__menu" onClick={() => setSideMenu(true)}>
+          <Icon name="menu" />
+        </Button>
         {realm === 'mc' ? (
           <a className="topbar__logo" href="https://minecraft.redline.surf" aria-label="Сайт сервера">Redline</a>
         ) : (
           <span className="topbar__logo">Redline</span>
         )}
         <span className="topbar__actions">
-          <ThemeToggle />
+          <ThemeToggle className="topbar__wide" />
+          {canInvite && (
+            <Button variant="ghost" icon aria-label="Пригласить" title="Пригласить" onClick={() => setInviting(true)}>
+              <Icon name="userPlus" />
+            </Button>
+          )}
           <Button variant="ghost" icon aria-label="Новый чат" onClick={() => setNewChat(true)}>
             <Icon name="plus" />
           </Button>
-          <Button variant="ghost" icon aria-label="Настройки" onClick={() => navigate.settings()}>
+          <Button variant="ghost" icon aria-label="Настройки" className="topbar__wide" onClick={() => navigate.settings()}>
             <Icon name="settings" />
           </Button>
         </span>
@@ -312,6 +365,14 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
         onClose={() => setLeaving(null)}
       />
       <NewChatModal open={newChat} onClose={() => setNewChat(false)} />
+      {canInvite && <InviteModal open={inviting} onClose={() => setInviting(false)} />}
+      {sideMenu && (
+        <SideMenu
+          onClose={() => setSideMenu(false)}
+          onInvite={canInvite ? () => setInviting(true) : null}
+          onNewChat={() => setNewChat(true)}
+        />
+      )}
     </section>
   );
 }
