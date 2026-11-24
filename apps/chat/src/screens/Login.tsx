@@ -61,7 +61,7 @@ export function Login({ mode }: { mode: 'family' | 'mc' | 'any' }) {
       <ThemeToggle className="screen__theme" />
       <div className="login__glow" aria-hidden="true" />
       <div className="login__card rl-card rl-card--lg">
-        <span className="rl-eyebrow">{any ? 'Redline Chat' : mc ? 'Minecraft' : 'Семейный чат'}</span>
+        {!any && <span className="rl-eyebrow">{mc ? 'Minecraft' : 'Семейный чат'}</span>}
         <h1 className="login__title">
           Redline <span>Chat</span>
         </h1>
