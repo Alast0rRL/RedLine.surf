@@ -82,14 +82,17 @@ export function People() {
             listUsers(client, room),
             loadLinks(client),
           ]);
-          const users = await Promise.all(
+          // Удалённых сервер оставляет в списке, но стирает им профиль: пустой профиль — человека нет
+          const me = client.getUserId();
+          const found = await Promise.all(
             ids.map(async (id) => {
-              const name = await client.getProfileInfo(id)
-                .then((info) => info.displayname || (isPinUser(id) ? 'Участник' : id))
-                .catch(() => (isPinUser(id) ? 'Участник' : id));
+              const info = await client.getProfileInfo(id).catch(() => null);
+              if (info && !info.displayname && !info.avatar_url && id !== me) return null;
+              const name = info?.displayname || (isPinUser(id) ? 'Участник' : id);
               return { id, name };
             }),
           );
+          const users = found.filter((u): u is { id: string; name: string } => u !== null);
           if (!alive.current) return;
           setAdminRoom(room);
           setInvites(liveInvites);
