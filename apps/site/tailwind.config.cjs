@@ -1,6 +1,6 @@
 /** Сборка: pnpm --filter @redline/site build → static/build/site.css */
 module.exports = {
-  content: ['./templates/**/*.{html,svg}', './static/js/**/*.js'],
+  content: ['./templates/**/*.html', './static/js/**/*.js'],
   darkMode: 'class',
   theme: {
     extend: {
