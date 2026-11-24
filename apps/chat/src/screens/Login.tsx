@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { PIN_MAX, PIN_HINT, pinOk } from '../lib/pin';
-import { fetchLinkByPhone, normalizeLogin, normalizePhone } from '../lib/phone';
+import { fetchLinkByPhone, normalizeFamilyLogin, normalizeLogin, normalizePhone } from '../lib/phone';
 import { hasMcRealm, setRealm } from '../config';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
@@ -21,9 +21,10 @@ export function Login({ mode }: { mode: 'family' | 'mc' }) {
     // номер — сервер семьи, ник — сервер Minecraft
     const isPhone = /^[\d\s+()-]+$/.test(phone.trim()) && !!normalizePhone(phone);
     if (isPhone) setRealm('family');
+    else if (mode === 'family' && normalizeFamilyLogin(phone)) setRealm('family');
     else if (hasMcRealm() && normalizeLogin(phone)) setRealm('mc');
     else {
-      setError(hasMcRealm() ? 'Введите номер телефона или ник' : 'Проверьте номер');
+      setError(mode === 'family' ? 'Введите номер телефона или логин' : 'Введите номер телефона или ник');
       return;
     }
     setBusy(true);

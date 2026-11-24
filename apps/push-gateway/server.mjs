@@ -14,7 +14,6 @@
 import http from 'node:http';
 import * as webpush from 'web-push';
 import { createPhoneApi } from './phone.mjs';
-import { createAdminTokenIssuer } from './admin-token.mjs';
 import { createLoginGuard } from './login-guard.mjs';
 
 const env = (name, fallback) => {
@@ -56,19 +55,12 @@ const log = (level, msg, extra = {}) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), level, msg, ...extra }));
 
 const familyHs = (process.env.HOMESERVER_INTERNAL_URL || 'http://continuwuity:8008').replace(/\/+$/, '');
-const inviteIssuer = createAdminTokenIssuer({
-  homeserverUrl: familyHs,
-  accessToken: process.env.INVITE_ADMIN_TOKEN || '',
-  room: process.env.INVITE_ADMIN_ROOM || '',
-  log,
-});
-if (!inviteIssuer) log('warn', 'member invites disabled: INVITE_ADMIN_TOKEN not set');
 
 const phoneApi = createPhoneApi({
   dbPath: process.env.PHONE_DB || '/data/phones.json',
   homeserverUrl: familyHs,
   log,
-  inviteIssuer,
+  registrationToken: process.env.FAMILY_REGISTRATION_TOKEN || '',
 });
 
 const loginGuard = createLoginGuard({

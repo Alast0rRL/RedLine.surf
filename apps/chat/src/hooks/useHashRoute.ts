@@ -14,9 +14,12 @@ export type Route =
   | { name: 'old-invite' }
   | { name: 'mc' }
   | { name: 'mc-login' }
-  | { name: 'family-login' };
+  | { name: 'family-login' }
+  | { name: 'join'; code: string };
 
 function parse(hash: string): Route {
+  const join = hash.match(/^#\/join\/([A-Za-z0-9_-]{16,64})$/);
+  if (join) return { name: 'join', code: join[1] };
   const link = parseLink(hash);
   if (link) return { name: 'personal', link };
   if (/^#?\/?invite\//.test(hash.trim())) return { name: 'old-invite' };

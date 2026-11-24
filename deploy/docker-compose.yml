@@ -17,6 +17,7 @@ services:
     environment:
       CONTINUWUITY_CONFIG: /etc/continuwuity.toml
       CONTINUWUITY_SERVER_NAME: ${SERVER_NAME:?}
+      CONTINUWUITY_REGISTRATION_TOKEN: ${FAMILY_REGISTRATION_TOKEN:-}
     volumes:
       - ./continuwuity.toml:/etc/continuwuity.toml:ro
       - continuwuity-data:/var/lib/continuwuity
@@ -55,8 +56,7 @@ services:
       HOMESERVER_INTERNAL_URL: http://continuwuity:8008
       MC_HOMESERVER_INTERNAL_URL: http://continuwuity-mc:8008
       MC_REGISTRATION_TOKEN: ${MC_REGISTRATION_TOKEN:?}
-      INVITE_ADMIN_TOKEN: ${INVITE_ADMIN_TOKEN:-}
-      INVITE_ADMIN_ROOM: ${INVITE_ADMIN_ROOM:-}
+      FAMILY_REGISTRATION_TOKEN: ${FAMILY_REGISTRATION_TOKEN:?укажите FAMILY_REGISTRATION_TOKEN в .env}
     volumes:
       - push-data:/data
     # портов нет: шлюз зовёт только homeserver по внутренней сети

@@ -29,6 +29,11 @@ export function normalizeLogin(input: string): string | null {
   return /^[A-Za-z0-9_]{3,16}$/.test(v) ? v.toLowerCase() : null;
 }
 
+export function normalizeFamilyLogin(input: string): string | null {
+  const v = input.trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9._=-]{0,31}$/.test(v) ? v : null;
+}
+
 /** Номер (семья) или ник (Minecraft) — в зависимости от текущего мира. */
 function normalizeId(input: string, r: Realm = getRealm()): string | null {
   return r === 'mc' ? normalizeLogin(input) : normalizePhone(input);
@@ -105,10 +110,12 @@ export async function fetchLinkByPhone(
 ): Promise<PersonalLink & { linked?: LinkedAccount }> {
   const phone = normalizeId(phoneInput, realm);
   if (!phone) throw new Error(realm === 'mc' ? 'Проверьте ник' : 'Проверьте номер');
+  const familyLogin = realm === 'family' && !normalizePhone(phoneInput) ? normalizeFamilyLogin(phoneInput) : null;
+  const id = familyLogin ?? phone;
   const r = await api<{ user: string; key: string; name?: string; linked?: LinkedAccount }>(
     'POST',
     'login',
-    { ...idBody(phone, realm), proof: await phoneProof(phone, pin, realm) },
+    { ...(familyLogin ? { login: familyLogin } : idBody(id, realm)), proof: await phoneProof(id, pin, realm) },
     undefined,
     realm,
   );
@@ -142,6 +149,16 @@ export async function getLinkedUser(token: string, realm: Realm): Promise<string
   const r = await api<{ mc?: string | null; family?: string | null }>('GET', 'bind', undefined, token, realm);
   const u = realm === 'mc' ? r.family : r.mc;
   return typeof u === 'string' && u ? u : null;
+}
+
+export async function bindInvitedLogin(token: string, login: string, link: PersonalLink, pin: string): Promise<void> {
+  await api(
+    'PUT',
+    'bind',
+    { login, proof: await phoneProof(login, pin, 'family'), key: link.key, name: link.name },
+    token,
+    'family',
+  );
 }
 
 export async function bindPhone(token: string, link: PersonalLink, phoneInput: string, pin: string): Promise<string> {

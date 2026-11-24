@@ -8,6 +8,13 @@ export interface Invite {
   label: string;
 }
 
+export interface MemberLink {
+  token: string;
+  user: string;
+  name: string;
+  key?: string;
+}
+
 /** Результат создания: приглашение для списка и личная ссылка для человека. */
 export interface CreatedInvite {
   invite: Invite;
@@ -20,6 +27,7 @@ const INVITE_DATA_TYPE = 'surf.redline.invites';
 const LINKS_DATA_TYPE = 'surf.redline.links';
 const MEMBER_LINKS_DATA_TYPE = 'surf.redline.guest-links';
 const TOKEN_RE = /^[A-Za-z0-9]{16}$/;
+const CODE_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 /** Очередь операций: account data не должна перезаписываться гонкой. */
 let inviteQueue: Promise<unknown> = Promise.resolve();
@@ -85,7 +93,7 @@ async function saveLinks(client: MatrixClient, items: PersonalLink[]): Promise<v
   await client.setAccountData(LINKS_DATA_TYPE as never, { items } as never);
 }
 
-export async function loadMemberLinks(client: MatrixClient): Promise<PersonalLink[]> {
+export async function loadMemberLinks(client: MatrixClient): Promise<MemberLink[]> {
   let raw: unknown;
   try {
     raw = await client.getAccountDataFromServer(MEMBER_LINKS_DATA_TYPE as never);
@@ -94,10 +102,16 @@ export async function loadMemberLinks(client: MatrixClient): Promise<PersonalLin
     throw e;
   }
   const items = (raw as { items?: unknown } | null)?.items;
-  return Array.isArray(items) ? items.filter(isPersonalLink) : [];
+  if (!Array.isArray(items)) return [];
+  return items.filter((item): item is MemberLink => {
+    const v = item as Partial<MemberLink> | null;
+    return !!v && typeof v.token === 'string' && CODE_RE.test(v.token)
+      && typeof v.user === 'string' && /^[a-z0-9][a-z0-9._=-]{0,31}$/.test(v.user)
+      && typeof v.name === 'string' && v.name.length > 0 && v.name.length <= 80;
+  });
 }
 
-export async function saveMemberLinks(client: MatrixClient, items: PersonalLink[]): Promise<void> {
+export async function saveMemberLinks(client: MatrixClient, items: MemberLink[]): Promise<void> {
   await client.setAccountData(MEMBER_LINKS_DATA_TYPE as never, { items } as never);
 }
 
@@ -134,7 +148,7 @@ async function doCreateInvite(client: MatrixClient, adminRoom: string, name: str
  * Логин без случайных цифр: `ded`, а если занят — `ded2`, `ded3`…
  * Занятым считаем и логин из ещё не использованной ссылки, чтобы два «Деда» не получили один.
  */
-export async function freeUsername(client: MatrixClient, name: string, links: PersonalLink[]): Promise<string> {
+export async function freeUsername(client: MatrixClient, name: string, links: { user: string }[]): Promise<string> {
   const base = baseUsername(name);
   const pending = new Set(links.map((l) => l.user));
   for (let n = 1; n <= 99; n++) {

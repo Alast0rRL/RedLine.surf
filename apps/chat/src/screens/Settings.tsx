@@ -4,9 +4,8 @@ import { navigate } from '../hooks/useHashRoute';
 import { useSecurityState } from '../hooks/useSecurityState';
 import { changePassword, passwordProblem, friendlyError } from '../lib/account';
 import { findAdminRoom } from '../lib/admin';
-import { loadMemberLinks } from '../lib/invites';
-import { formatLink, isPinUser, PIN_MAX, PIN_MIN, PIN_HINT, pinOk, type PersonalLink } from '../lib/pin';
-import { createMemberInvite, loadInviteOverview, revokeMemberInvite, type GuestInvite } from '../lib/guestInvites';
+import { isPinUser, PIN_MAX, PIN_MIN, PIN_HINT, pinOk } from '../lib/pin';
+import { createMemberInvite, formatJoinLink, loadInviteOverview, revokeMemberInvite, type GuestInvite } from '../lib/guestInvites';
 import { formatLogin } from '../lib/login';
 import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
@@ -189,7 +188,6 @@ function InviteRow() {
   const [name, setName] = useState('');
   const [link, setLink] = useState<string | null>(null);
   const [invites, setInvites] = useState<GuestInvite[]>([]);
-  const [links, setLinks] = useState<PersonalLink[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -213,9 +211,8 @@ function InviteRow() {
 
   const refresh = async () => {
     if (!accessToken) return;
-    const [overview, saved] = await Promise.all([loadInviteOverview(accessToken), loadMemberLinks(client).catch(() => [])]);
+    const overview = await loadInviteOverview(accessToken);
     setInvites(overview.invites);
-    setLinks(saved);
   };
 
   const openModal = async () => {
@@ -243,7 +240,7 @@ function InviteRow() {
     setError(null);
     try {
       const created = await createMemberInvite(client, name);
-      setLink(formatLink(created));
+      setLink(formatJoinLink(created.token));
       setName('');
       await refresh();
       toast('Ссылка создана', { variant: 'success' });
@@ -274,11 +271,10 @@ function InviteRow() {
   };
 
   const revoke = async (invite: GuestInvite) => {
-    const saved = links.find((l) => l.token === invite.token);
     setBusy(`revoke:${invite.token}`);
     try {
       await revokeMemberInvite(client, invite.token);
-      if (saved && link === formatLink(saved)) setLink(null);
+      if (link === formatJoinLink(invite.token)) setLink(null);
       await refresh();
       toast('Ссылка отозвана', { variant: 'success' });
     } catch (e) {
@@ -288,11 +284,7 @@ function InviteRow() {
     }
   };
 
-  const show = (invite: GuestInvite) => {
-    const saved = links.find((l) => l.token === invite.token);
-    if (saved) setLink(formatLink(saved));
-    else toast('Ссылка сохранена на другом устройстве', { variant: 'default' });
-  };
+  const show = (invite: GuestInvite) => setLink(formatJoinLink(invite.token));
 
   if (!allowed) return null;
   const canShare = typeof navigator.share === 'function';

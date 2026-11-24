@@ -1,6 +1,6 @@
 import type { MatrixClient } from 'matrix-js-sdk';
-import { freeUsername, loadLinks, loadMemberLinks, saveMemberLinks } from './invites';
-import { newPerson, rememberPinUsers, type PersonalLink } from './pin';
+import { freeUsername, loadLinks, loadMemberLinks, saveMemberLinks, type MemberLink } from './invites';
+import { rememberPinUsers, type PersonalLink } from './pin';
 
 export interface GuestInvite {
   token: string;
@@ -24,12 +24,30 @@ export interface InviteOverview {
   guest: boolean;
 }
 
-async function api<T>(method: string, path: string, body: unknown, token: string): Promise<T> {
+export interface InviteCheck {
+  valid: boolean;
+  name?: string;
+  login?: string;
+  inviter?: string;
+  invitedBy?: string;
+  expiresAt?: number;
+}
+
+export interface InviteRegistration {
+  ok: boolean;
+  access_token: string;
+  user_id: string;
+  device_id: string;
+  login: string;
+  invitedBy: string;
+}
+
+async function api<T>(method: string, path: string, body: unknown, token?: string): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`/api/invites/${path}`, {
       method,
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
@@ -38,6 +56,18 @@ async function api<T>(method: string, path: string, body: unknown, token: string
   const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
   if (!res.ok || !data) throw new Error(data?.error || 'Не удалось выполнить запрос');
   return data;
+}
+
+export function formatJoinLink(code: string): string {
+  return `${location.origin}/#/join/${code}`;
+}
+
+export function checkInviteCode(code: string): Promise<InviteCheck> {
+  return api<InviteCheck>('GET', `check?code=${encodeURIComponent(code)}`, undefined);
+}
+
+export function registerByInvite(body: { code: string; login: string; name: string; password: string }): Promise<InviteRegistration> {
+  return api<InviteRegistration>('POST', 'register', body);
 }
 
 export function loadInviteOverview(token: string): Promise<InviteOverview> {
@@ -56,7 +86,7 @@ function revokeToken(token: string, inviteToken: string): Promise<{ ok: boolean 
   return api('DELETE', `revoke/${encodeURIComponent(inviteToken)}`, undefined, token);
 }
 
-export async function createMemberInvite(client: MatrixClient, nameInput: string): Promise<PersonalLink> {
+export async function createMemberInvite(client: MatrixClient, nameInput: string): Promise<MemberLink> {
   const token = client.getAccessToken();
   if (!token) throw new Error('Нет связи с сервером');
   const name = nameInput.trim().slice(0, 40);
@@ -64,7 +94,7 @@ export async function createMemberInvite(client: MatrixClient, nameInput: string
   const [mine, adminLinks] = await Promise.all([loadMemberLinks(client), loadLinks(client).catch(() => [])]);
   const user = await freeUsername(client, name, [...mine, ...adminLinks]);
   const issued = await createToken(token, name, user);
-  const link: PersonalLink = { ...newPerson(name, user), token: issued.token };
+  const link: MemberLink = { token: issued.token, user, name };
   try {
     await saveMemberLinks(client, [...mine.filter((l) => l.token !== link.token && l.user !== user), link]);
   } catch (e) {

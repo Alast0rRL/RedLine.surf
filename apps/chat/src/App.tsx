@@ -11,6 +11,7 @@ import { loadLink } from './lib/pin';
 import { Splash } from './screens/Splash';
 import { Login } from './screens/Login';
 import { PinEntry } from './screens/PinEntry';
+import { JoinFamily } from './screens/JoinFamily';
 import { ChatList } from './screens/ChatList';
 import { RoomView } from './screens/RoomView';
 import { Settings } from './screens/Settings';
@@ -137,6 +138,7 @@ export function App() {
       route.name === 'mc' ||
       route.name === 'mc-login' ||
       route.name === 'family-login' ||
+      route.name === 'join' ||
       (route.name === 'personal' && ownLocalpart === route.link.user)
     ) {
       history.replaceState(null, '', '/#/');
@@ -147,6 +149,7 @@ export function App() {
   if (status === 'boot') return <Splash />;
   if (status === 'fatal') return <Splash error={error} />;
   if (status === 'logged-out') {
+    if (route.name === 'join') return <JoinFamily code={route.code} />;
     if (route.name === 'personal') {
       setRealm('family'); // личные ссылки — только для семьи
       return <PinEntry key={route.link.user + route.link.key} link={route.link} />;

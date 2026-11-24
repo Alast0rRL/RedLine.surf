@@ -22,8 +22,9 @@ const INVITE_MAX_PER_DAY = 10;
 
 const PROOF_RE = /^[0-9a-f]{64}$/;
 const KEY_RE = /^[0-9a-f]{32}$/;
-const TOKEN_RE = /^[A-Za-z0-9]{16}$/;
+const INVITE_CODE_RE = /^[A-Za-z0-9_-]{16,64}$/;
 const USER_RE = /^[a-z0-9][a-z0-9._=-]{0,63}$/;
+const LOGIN_ID = 'login:';
 
 export function normalizePhone(input) {
   if (typeof input !== 'string') return null;
@@ -75,10 +76,19 @@ function decryptBlob(proof, blob) {
  * mode 'phone' — записи по номеру (семья), 'login' — по нику (Minecraft, плюс регистрация игроков).
  * prefix — путь API, registrationToken — секрет регистрации на сервере Minecraft (только здесь, не в браузере).
  */
-export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', prefix = '/api/phone/', registrationToken = '', regLimit = 5, regWindowMs = 60 * 60 * 1000, inviteIssuer = null, invitesPrefix }) {
+export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', prefix = '/api/phone/', registrationToken = '', regLimit = 5, regWindowMs = 60 * 60 * 1000, invitesPrefix }) {
   const byLogin = mode === 'login';
-  const ident = (body) => (byLogin ? normalizeLogin(body.login) : normalizePhone(body.phone));
-  const maskOf = (id, body) => (byLogin ? (typeof body.name === 'string' && normalizeLogin(body.name) === id ? body.name : id) : maskPhone(id));
+  const ident = (body) => {
+    if (byLogin) return normalizeLogin(body.login);
+    if (body.phone !== undefined) return normalizePhone(body.phone);
+    const login = typeof body.login === 'string' ? body.login.trim().toLowerCase() : '';
+    return USER_RE.test(login) ? LOGIN_ID + login : null;
+  };
+  const maskOf = (id, body) => {
+    if (byLogin) return typeof body.name === 'string' && normalizeLogin(body.name) === id ? body.name : id;
+    if (id.startsWith(LOGIN_ID)) return typeof body.name === 'string' && body.name.length <= 80 ? body.name : id.slice(LOGIN_ID.length);
+    return maskPhone(id);
+  };
   const dir = path.dirname(dbPath);
   fs.mkdirSync(dir, { recursive: true });
 
@@ -112,12 +122,12 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
 
   const invitePath = invitesPrefix ?? (byLogin ? '/mc/api/invites/' : '/api/invites/');
   const inviteKey = (token) => `invite:${token}`;
-  const inviteRecords = () => Object.entries(db).filter(([k, r]) => k.startsWith('invite:') && r && TOKEN_RE.test(r.token));
+  const inviteRecords = () => Object.entries(db).filter(([k, r]) => k.startsWith('invite:') && r && INVITE_CODE_RE.test(r.token));
   const guestRecord = (user) => {
     const k = findByUser(user);
     if (k && db[k].guest === true) return db[k];
     // гостем делает ссылка, а не отметка браузера: не дошедший claim не превращает гостя в участника
-    const inv = inviteRecords().find(([, r]) => r.user === user && !r.revokedAt && !r.promotedAt);
+    const inv = inviteRecords().find(([, r]) => r.user === user && !r.revokedAt && !r.promotedAt && !r.usedAt);
     return inv ? inv[1] : null;
   };
 
@@ -127,7 +137,6 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
       if (typeof r.createdAt !== 'number' || now - r.createdAt >= INVITE_TTL_MS) {
         delete db[k];
         changed = true;
-        if (inviteIssuer && !r.claimedAt) void inviteIssuer.revoke(r.token).catch(() => undefined);
       }
     }
     return changed;
@@ -186,7 +195,7 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
   }
 
   /** Логин (localpart) владельца токена или null. */
-  async function whoami(req) {
+  async function whoamiInfo(req) {
     const m = /^Bearer\s+(\S{1,512})$/.exec(req.headers.authorization ?? '');
     if (!m) return null;
     let r;
@@ -199,11 +208,14 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
       throw Object.assign(new Error('homeserver unavailable'), { status: 502 });
     }
     if (!r.ok) return null;
-    const id = (await r.json().catch(() => null))?.user_id;
-    if (typeof id !== 'string') return null;
-    const user = id.replace(/^@/, '').split(':')[0];
-    return USER_RE.test(user) ? user : null;
+    const userId = (await r.json().catch(() => null))?.user_id;
+    if (typeof userId !== 'string') return null;
+    const user = userId.replace(/^@/, '').split(':')[0];
+    if (!USER_RE.test(user)) return null;
+    return { user, userId, token: m[1] };
   }
+
+  const whoami = async (req) => (await whoamiInfo(req))?.user ?? null;
 
   function clientIp(req) {
     const h = req.headers['x-real-ip'];
@@ -215,8 +227,10 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     if (!user) return send(res, 401, { error: 'Нужен вход' });
     const body = await readBody(req);
     const phone = ident(body);
-    if (!phone) return send(res, 400, { error: byLogin ? 'Проверьте ник' : 'Проверьте номер' });
-    if (byLogin && phone !== user) return send(res, 400, { error: 'Логин — это ваш ник' });
+    if (!phone) return send(res, 400, { error: byLogin ? 'Проверьте ник' : 'Проверьте номер или логин' });
+    if ((byLogin || phone.startsWith(LOGIN_ID)) && (phone.startsWith(LOGIN_ID) ? phone.slice(LOGIN_ID.length) : phone) !== user) {
+      return send(res, 400, { error: byLogin ? 'Логин — это ваш ник' : 'Логин — это ваш логин' });
+    }
     if (typeof body.proof !== 'string' || !PROOF_RE.test(body.proof)) return send(res, 400, { error: 'Неверный запрос' });
     if (typeof body.key !== 'string' || !KEY_RE.test(body.key)) return send(res, 400, { error: 'Неверный запрос' });
     let name;
@@ -384,26 +398,18 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     return { status: r.status, data: await r.json().catch(() => ({})) };
   }
 
-  async function register(req, res) {
-    if (!byLogin || !registrationToken) return send(res, 404, { error: 'not found' });
-    const ip = clientIp(req);
+  function regAllowed(ip) {
     const now = Date.now();
     const hits = (regHits.get(ip) ?? []).filter((t) => t > now - regWindowMs);
-    if (hits.length >= regLimit) return send(res, 429, { error: 'Слишком много регистраций, попробуйте позже' });
-    const body = await readBody(req);
-    const login = normalizeLogin(body.login);
-    if (!login || typeof body.name !== 'string' || normalizeLogin(body.name) !== login) {
-      return send(res, 400, { error: 'Ник: латиница, цифры и _, от 3 до 16 символов' });
-    }
-    if (typeof body.password !== 'string' || !PROOF_RE.test(body.password)) return send(res, 400, { error: 'Неверный запрос' });
-    if (typeof body.proof !== 'string' || !PROOF_RE.test(body.proof)) return send(res, 400, { error: 'Неверный запрос' });
-    if (typeof body.key !== 'string' || !KEY_RE.test(body.key)) return send(res, 400, { error: 'Неверный запрос' });
-    const rk = recordKey(login);
-    if (db[rk]) return send(res, 409, { error: 'Этот ник уже занят' });
+    if (hits.length >= regLimit) return false;
     hits.push(now);
     regHits.set(ip, hits);
+    return true;
+  }
 
-    const reqBody = { username: login, password: body.password, initial_device_display_name: 'Redline: регистрация' };
+  /** Создание аккаунта на homeserver с секретом регистрации, который знает только шлюз. */
+  async function createMatrixAccount(login, name, password) {
+    const reqBody = { username: login, password, initial_device_display_name: 'Redline: регистрация' };
     let r = await hs('/_matrix/client/v3/register', 'POST', reqBody);
     for (let i = 0; i < 3 && r.status === 401 && r.data.session; i++) {
       const done = new Set(r.data.completed ?? []);
@@ -415,15 +421,34 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
         : { type: stage, session: r.data.session };
       r = await hs('/_matrix/client/v3/register', 'POST', { ...reqBody, auth });
     }
-    if (r.data.errcode === 'M_USER_IN_USE') return send(res, 409, { error: 'Этот ник уже занят' });
-    if (r.status !== 200 || !r.data.access_token) {
-      log('warn', 'mc register failed', { status: r.status, errcode: r.data.errcode });
+    if (r.data.errcode === 'M_USER_IN_USE') return { error: 'taken' };
+    if (r.status !== 200 || !r.data.access_token) return { error: 'failed', status: r.status, errcode: r.data.errcode };
+    return { session: r.data };
+  }
+
+  async function register(req, res) {
+    if (!byLogin || !registrationToken) return send(res, 404, { error: 'not found' });
+    if (!regAllowed(clientIp(req))) return send(res, 429, { error: 'Слишком много регистраций, попробуйте позже' });
+    const body = await readBody(req);
+    const login = normalizeLogin(body.login);
+    if (!login || typeof body.name !== 'string' || normalizeLogin(body.name) !== login) {
+      return send(res, 400, { error: 'Ник: латиница, цифры и _, от 3 до 16 символов' });
+    }
+    if (typeof body.password !== 'string' || !PROOF_RE.test(body.password)) return send(res, 400, { error: 'Неверный запрос' });
+    if (typeof body.proof !== 'string' || !PROOF_RE.test(body.proof)) return send(res, 400, { error: 'Неверный запрос' });
+    if (typeof body.key !== 'string' || !KEY_RE.test(body.key)) return send(res, 400, { error: 'Неверный запрос' });
+    const rk = recordKey(login);
+    if (db[rk]) return send(res, 409, { error: 'Этот ник уже занят' });
+    const result = await createMatrixAccount(login, body.name, body.password);
+    if (result.error === 'taken') return send(res, 409, { error: 'Этот ник уже занят' });
+    if (result.error) {
+      log('warn', 'mc register failed', { status: result.status, errcode: result.errcode });
       return send(res, 502, { error: 'Не удалось зарегистрироваться, попробуйте позже' });
     }
-    const token = r.data.access_token;
-    const server = String(r.data.user_id).split(':')[1];
+    const token = result.session.access_token;
+    const server = String(result.session.user_id).split(':')[1];
     try {
-      await hs(`/_matrix/client/v3/profile/${encodeURIComponent(r.data.user_id)}/displayname`, 'PUT', { displayname: body.name }, token);
+      await hs(`/_matrix/client/v3/profile/${encodeURIComponent(result.session.user_id)}/displayname`, 'PUT', { displayname: body.name }, token);
       // общая группа игроков: есть — входим, нет — создаём (первый игрок становится её владельцем)
       const alias = encodeURIComponent(`#minecraft:${server}`);
       const found = await hs(`/_matrix/client/v3/directory/room/${alias}`, 'GET', undefined, token);
@@ -552,7 +577,7 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     if (pruneInvites()) save();
     const admin = admins.has(caller);
     const invites = inviteRecords()
-      .filter(([, r]) => (admin || r.invitedBy === caller) && !r.claimedAt && !r.revokedAt)
+      .filter(([, r]) => (admin || r.invitedBy === caller) && !r.claimedAt && !r.revokedAt && !r.usedAt)
       .map(([, r]) => ({
         token: r.token,
         label: r.label ?? '',
@@ -573,62 +598,122 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
   }
 
   async function invitesCreate(req, res) {
-    const caller = await whoami(req);
-    if (!caller) return send(res, 401, { error: 'Нужен вход' });
-    if (guestRecord(caller)) return send(res, 403, { error: 'Гость не может приглашать' });
+    const me = await whoamiInfo(req);
+    if (!me) return send(res, 401, { error: 'Нужен вход' });
+    if (guestRecord(me.user)) return send(res, 403, { error: 'Гость не может приглашать' });
     const body = await readBody(req);
     const label = typeof body.name === 'string' ? body.name.trim() : '';
     const user = typeof body.user === 'string' ? body.user : '';
     if (!label || label.length > 80 || !USER_RE.test(user)) return send(res, 400, { error: 'Неверный запрос' });
     if (pruneInvites()) save();
     const now = Date.now();
-    const mine = inviteRecords().filter(([, r]) => r.invitedBy === caller);
+    const mine = inviteRecords().filter(([, r]) => r.invitedBy === me.user);
     if (mine.filter(([, r]) => now - r.createdAt < 24 * 60 * 60 * 1000).length >= INVITE_MAX_PER_DAY) {
       return send(res, 429, { error: 'Дневной лимит приглашений исчерпан. Попробуйте завтра' });
     }
-    if (mine.filter(([, r]) => !r.claimedAt && !r.revokedAt).length >= INVITE_MAX_ACTIVE) {
+    if (mine.filter(([, r]) => !r.claimedAt && !r.revokedAt && !r.usedAt).length >= INVITE_MAX_ACTIVE) {
       return send(res, 429, { error: 'Можно пригласить не больше пяти человек. Отзовите старую ссылку' });
     }
-    let token;
-    try {
-      token = await inviteIssuer.issue();
-    } catch (e) {
-      log('warn', 'invite issue failed', { err: String(e?.message).slice(0, 80) });
-      return send(res, 502, { error: 'Не удалось создать приглашение. Попробуйте позже' });
+    let invitedByName = me.user;
+    const profile = await hs(`/_matrix/client/v3/profile/${encodeURIComponent(me.userId)}/displayname`, 'GET', undefined, me.token).catch(() => null);
+    if (profile?.status === 200 && typeof profile.data?.displayname === 'string' && profile.data.displayname) {
+      invitedByName = profile.data.displayname.slice(0, 80);
     }
-    if (typeof token !== 'string' || !TOKEN_RE.test(token)) {
-      return send(res, 502, { error: 'Не удалось создать приглашение. Попробуйте позже' });
-    }
-    try {
-      db[inviteKey(token)] = { token, label, user, invitedBy: caller, createdAt: now };
-      save();
-    } catch (e) {
-      delete db[inviteKey(token)];
-      await inviteIssuer.revoke(token).catch(() => undefined);
-      throw e;
-    }
+    const token = crypto.randomBytes(18).toString('base64url');
+    db[inviteKey(token)] = { token, label, user, invitedBy: me.user, invitedByName, createdAt: now };
+    save();
     log('info', 'invite created');
-    send(res, 200, { token, invitedBy: caller, createdAt: now, expiresAt: now + INVITE_TTL_MS });
+    send(res, 200, { token, invitedBy: me.user, createdAt: now, expiresAt: now + INVITE_TTL_MS });
   }
 
   async function invitesRevoke(req, res, token) {
-    if (!TOKEN_RE.test(token)) return send(res, 400, { error: 'Неверный запрос' });
+    if (!INVITE_CODE_RE.test(token)) return send(res, 400, { error: 'Неверный запрос' });
     const caller = await whoami(req);
     if (!caller) return send(res, 401, { error: 'Нужен вход' });
     if (guestRecord(caller)) return send(res, 403, { error: 'Гость не может управлять приглашениями' });
     const rec = db[inviteKey(token)];
     if (!rec || rec.revokedAt) return send(res, 404, { error: 'Приглашение не найдено' });
     if (!admins.has(caller) && rec.invitedBy !== caller) return send(res, 403, { error: 'Нет прав' });
-    try {
-      await inviteIssuer.revoke(token);
-    } catch (e) {
-      log('warn', 'invite revoke failed', { err: String(e?.message).slice(0, 80) });
-      return send(res, 502, { error: 'Не удалось отозвать приглашение. Попробуйте позже' });
-    }
     rec.revokedAt = Date.now();
     save();
     log('info', 'invite revoked');
     send(res, 200, { ok: true });
+  }
+
+  function liveInvite(code, now = Date.now()) {
+    if (!INVITE_CODE_RE.test(code)) return null;
+    const rec = db[inviteKey(code)];
+    if (!rec || rec.usedAt || rec.revokedAt) return null;
+    if (typeof rec.createdAt !== 'number' || now - rec.createdAt >= INVITE_TTL_MS) return null;
+    return rec;
+  }
+
+  async function invitesCheck(req, res, url) {
+    const code = url.searchParams.get('code') ?? '';
+    if (pruneInvites()) save();
+    const rec = liveInvite(code);
+    if (!rec) return send(res, 200, { valid: false });
+    send(res, 200, {
+      valid: true,
+      name: rec.label ?? '',
+      login: rec.user ?? '',
+      inviter: rec.invitedByName || rec.invitedBy || '',
+      invitedBy: rec.invitedBy,
+      expiresAt: rec.createdAt + INVITE_TTL_MS,
+    });
+  }
+
+  async function invitesRegister(req, res) {
+    if (!registrationToken) return send(res, 503, { error: 'Регистрация недоступна' });
+    if (!regAllowed(clientIp(req))) return send(res, 429, { error: 'Слишком много регистраций, попробуйте позже' });
+    if (pruneInvites()) save();
+    const body = await readBody(req);
+    const code = typeof body.code === 'string' ? body.code : '';
+    const rec = liveInvite(code);
+    if (!rec) return send(res, 404, { error: 'Ссылка недействительна, попросите новую' });
+    const login = typeof body.login === 'string' ? body.login.trim().toLowerCase() : '';
+    if (!USER_RE.test(login) || login.length > 32) return send(res, 400, { error: 'Логин: латиница, цифры и . _ = -, от 1 до 32 символов' });
+    if (findByUser(login)) return send(res, 409, { error: 'Этот логин уже занят' });
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length > 80) return send(res, 400, { error: 'Введите имя' });
+    if (typeof body.password !== 'string' || !PROOF_RE.test(body.password)) return send(res, 400, { error: 'Неверный запрос' });
+    // ссылка занята на время регистрации: второй параллельный запрос с тем же кодом её не пройдёт
+    if (rec.pendingAt && Date.now() - rec.pendingAt < 60_000) return send(res, 409, { error: 'Регистрация по этой ссылке уже идёт' });
+    rec.pendingAt = Date.now();
+    let result;
+    try {
+      result = await createMatrixAccount(login, name, body.password);
+    } finally {
+      delete rec.pendingAt;
+    }
+    if (result.error === 'taken') return send(res, 409, { error: 'Этот логин уже занят' });
+    if (result.error) {
+      log('warn', 'invite register failed', { status: result.status, errcode: result.errcode });
+      return send(res, 502, { error: 'Не удалось зарегистрироваться, попробуйте позже' });
+    }
+    const named = await hs(`/_matrix/client/v3/profile/${encodeURIComponent(result.session.user_id)}/displayname`, 'PUT', { displayname: name }, result.session.access_token).catch(() => null);
+    if (named?.status !== 200) log('warn', 'invite register: displayname failed', { status: named?.status });
+    const now = Date.now();
+    db[recordKey(LOGIN_ID + login)] = {
+      user: login,
+      guest: true,
+      invitedBy: rec.invitedBy,
+      inviteName: rec.label ?? '',
+      mask: name,
+      createdAt: now,
+    };
+    rec.usedBy = login;
+    rec.usedAt = now;
+    save();
+    log('info', 'guest registered');
+    send(res, 200, {
+      ok: true,
+      access_token: result.session.access_token,
+      user_id: result.session.user_id,
+      device_id: result.session.device_id,
+      login,
+      invitedBy: rec.invitedBy,
+    });
   }
 
   async function invitesClaim(req, res) {
@@ -636,7 +721,7 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     if (!caller) return send(res, 401, { error: 'Нужен вход' });
     const body = await readBody(req);
     const token = typeof body.token === 'string' ? body.token : '';
-    if (!TOKEN_RE.test(token)) return send(res, 400, { error: 'Неверный запрос' });
+    if (!INVITE_CODE_RE.test(token)) return send(res, 400, { error: 'Неверный запрос' });
     const rec = db[inviteKey(token)];
     if (!rec) return send(res, 404, { error: 'Приглашение не найдено' });
     if (rec.user !== caller || body.user !== caller) return send(res, 403, { error: 'Нет прав' });
@@ -690,7 +775,8 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     try {
       if (inv) {
         if (byLogin) send(res, 404, { error: 'not found' });
-        else if (!inviteIssuer) send(res, 503, { error: 'Приглашения недоступны' });
+        else if (p === 'check' && req.method === 'GET') await invitesCheck(req, res, url);
+        else if (p === 'register' && req.method === 'POST') await invitesRegister(req, res);
         else if (p === '' && req.method === 'GET') await invitesList(req, res);
         else if (p === '' && req.method === 'POST') await invitesCreate(req, res);
         else if (p === 'claim' && req.method === 'POST') await invitesClaim(req, res);
