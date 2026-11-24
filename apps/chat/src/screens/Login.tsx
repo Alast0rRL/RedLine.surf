@@ -83,6 +83,11 @@ export function Login({ mode }: { mode: 'family' | 'mc' }) {
           <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !phone.trim() || !pinOk(pin)}>
             Войти
           </Button>
+          {mc && (
+            <Button variant="ghost" size="sm" className="login__link" disabled={busy} onClick={() => { location.hash = '#/mc'; }}>
+              Нет аккаунта? Регистрация
+            </Button>
+          )}
         </form>
       </div>
     </main>

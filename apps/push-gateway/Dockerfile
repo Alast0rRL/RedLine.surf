@@ -4,7 +4,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY apps/push-gateway/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
-COPY apps/push-gateway/server.mjs apps/push-gateway/phone.mjs apps/push-gateway/login-guard.mjs ./
+COPY apps/push-gateway/server.mjs apps/push-gateway/phone.mjs apps/push-gateway/login-guard.mjs apps/push-gateway/admin-token.mjs ./
 # база привязанных номеров; том push-data подхватит права этого каталога
 RUN mkdir -p /data && chown node:node /data
 VOLUME /data
