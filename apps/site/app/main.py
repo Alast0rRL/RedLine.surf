@@ -26,7 +26,7 @@ templates = Jinja2Templates(directory=SITE_DIR / "templates")
 
 # Версия для сброса кэша CSS/JS: время изменения собранных файлов
 def _asset_version() -> str:
-    files = [STATIC_DIR / "build" / "site.css", STATIC_DIR / "js" / "site.js", STATIC_DIR / "js" / "world.js"]
+    files = [STATIC_DIR / "build" / "site.css", STATIC_DIR / "js" / "site.js", STATIC_DIR / "js" / "world.js", STATIC_DIR / "world" / "world.json"]
     return str(int(max((f.stat().st_mtime for f in files if f.exists()), default=0)))
 
 

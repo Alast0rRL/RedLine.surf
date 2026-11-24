@@ -109,17 +109,13 @@ html:not(.dark) .glow-dot__bright { background: radial-gradient(circle, rgb(var(
   opacity: 0; transition: opacity 1.2s var(--rl-ease-out-expo);
 }
 .world-canvas.is-ready { opacity: 1; }
-/* мягкая подложка под текстом: слева плотнее, к острову справа прозрачная */
+/* мягкая подложка под текстом, чтобы мир не спорил с заголовком */
 .world-vignette {
   position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(ellipse 80% 60% at 50% 50%, rgb(246 246 246 / 0.6), rgb(246 246 246 / 0.25) 60%, transparent 90%);
+  background: radial-gradient(ellipse 46% 50% at 50% 50%, rgb(246 246 246 / 0.86), rgb(246 246 246 / 0.45) 55%, rgb(246 246 246 / 0.1) 85%);
 }
 .dark .world-vignette {
-  background: radial-gradient(ellipse 80% 60% at 50% 50%, rgb(5 5 5 / 0.6), rgb(5 5 5 / 0.25) 60%, transparent 90%);
-}
-@media (min-width: 1024px) {
-  .world-vignette { background: linear-gradient(90deg, rgb(246 246 246 / 0.7), rgb(246 246 246 / 0.7) 20%, transparent 55%); }
-  .dark .world-vignette { background: linear-gradient(90deg, rgb(5 5 5 / 0.7), rgb(5 5 5 / 0.7) 20%, transparent 55%); }
+  background: radial-gradient(ellipse 46% 50% at 50% 50%, rgb(5 5 5 / 0.78), rgb(5 5 5 / 0.35) 55%, transparent 85%);
 }
 
 .blob {
