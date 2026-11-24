@@ -35,17 +35,22 @@ export async function setupRecovery(client: MatrixClient, password: string, phra
   const crypto = client.getCrypto();
   if (!crypto) throw new Error('Защита переписки не работает в этом браузере. Откройте Redline в Chrome или Safari');
   const userId = client.getUserId()!;
-
-  await crypto.bootstrapCrossSigning({
-    setupNewCrossSigning: true,
-    authUploadDeviceSigningKeys: async (makeRequest) => {
-      await makeRequest({ type: 'm.login.password', identifier: { type: 'm.id.user', user: userId }, password });
-    },
-  });
+  const authUploadDeviceSigningKeys = async (makeRequest: (auth: Record<string, unknown> | null) => Promise<unknown>) => {
+    await makeRequest({ type: 'm.login.password', identifier: { type: 'm.id.user', user: userId }, password });
+  };
 
   const recovery = await crypto.createRecoveryKeyFromPassphrase(normalizePhrase(phrase));
   setPendingNewSecretStorageKey(recovery.privateKey);
   try {
+    if (await client.secretStorage.hasKey()) {
+      // Сброс: на аккаунте уже есть хранилище со старым ключом, которого у нас нет. Новые ключи подписи
+      // SDK сразу кладёт в текущее хранилище — поэтому сначала заводим новое хранилище, потом подпись, потом копию.
+      await crypto.bootstrapSecretStorage({ createSecretStorageKey: async () => recovery, setupNewSecretStorage: true });
+      await crypto.bootstrapCrossSigning({ setupNewCrossSigning: true, authUploadDeviceSigningKeys });
+      await crypto.bootstrapSecretStorage({ setupNewKeyBackup: true });
+      return;
+    }
+    await crypto.bootstrapCrossSigning({ setupNewCrossSigning: true, authUploadDeviceSigningKeys });
     await crypto.bootstrapSecretStorage({
       createSecretStorageKey: async () => recovery,
       setupNewSecretStorage: true,

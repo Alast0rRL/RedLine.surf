@@ -254,7 +254,10 @@ function OldMessagesSection() {
       setValue('');
       refresh();
     } catch (err) {
-      const msg = friendlyError(err, 'Не получилось. Попробуйте ещё раз');
+      console.error('old messages', err);
+      // настоящую причину показываем, чтобы было с чем разбираться
+      const raw = (err as { message?: string } | null)?.message;
+      const msg = friendlyError(err, raw ? `Не получилось: ${raw}` : 'Не получилось. Попробуйте ещё раз');
       setError(msg === 'Не подошло'
         ? info.byPhrase ? 'Не подошло. Введите номер или фразу, которые указывали раньше' : 'Не подошло. Нужен длинный ключ восстановления'
         : msg);
