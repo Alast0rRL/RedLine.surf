@@ -6,7 +6,8 @@
   'use strict';
   const canvas = document.getElementById('world');
   if (!canvas || !canvas.getContext) return;
-  const ctx = canvas.getContext('2d');
+  const main = canvas.getContext('2d');
+  const frameCv = document.createElement('canvas');
   const root = document.documentElement;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -373,6 +374,17 @@
     const day = render(false);
     const night = render(true);
 
+    // Что может закрыть моба: столбы земли и блоки (по клетке — список [низ, верх]).
+    // Мобы рисуются поверх готовой картинки, а потом эти фигуры «перекладываются» сверху.
+    const solids = new Map();
+    const addSolid = (x, y, z0, z1) => { const k = KEY(x, y); (solids.get(k) || solids.set(k, []).get(k)).push([z0, z1]); };
+    for (const c of cells.values()) addSolid(c.x, c.y, -2, c.h);
+    for (const v of vox.values()) addSolid(v.x, v.y, v.z, v.z + 1);
+    // куда мобам нельзя: блоки, предметы, вода и перепады высоты
+    const blocked = new Set([...vox.values()].map((v) => KEY(v.x, v.y)));
+    for (const it of items) blocked.add(KEY(it.x, it.y));
+    const walkable = (x, y, g) => { const c = cell(x, y); return !!c && c.h === g && c.top !== 'water' && !blocked.has(KEY(x, y)); };
+
     // ---------- живность ----------
     const mobs = [];
     for (let i = 0; i < 4; i++) {
@@ -399,7 +411,16 @@
 
     const stars = Array.from({ length: 60 }, () => [rand() * W, rand() * H * 0.22, rand() * 6, 0.6 + rand() * 1.2]);
 
-    world = { U, M, CW, CH, P, fromScreen, day, night, emissive, water, mobs, cart, clouds, stars,
+    // моб стартует только на клетке, где можно стоять
+    for (const m of mobs) {
+      for (let i = 0; i < 40 && !walkable(Math.floor(m.x), Math.floor(m.y), m.g); i++) {
+        const [x0, x1, y0, y1] = m.bounds;
+        m.x = Math.floor(lerp(x0, x1 + 1, rand())) + 0.5; m.y = Math.floor(lerp(y0, y1 + 1, rand())) + 0.5;
+      }
+    }
+
+    world = { U, M, CW, CH, P, fromScreen, KEY, solids, walkable, sun: pixelTex('sun'), moon: pixelTex('moon'),
+      day, night, emissive, water, mobs, cart, clouds, stars,
       torches: torches.map(([x, y, z]) => P(x + 0.5, y + 0.5, z + 0.78)),
       camp: P(camp[0] + 0.5, camp[1] + 0.5, G + 0.35), smoke: [], smokeT: 0 };
   }
@@ -415,11 +436,20 @@
     m.timer -= dt;
     if (m.state === 'idle') {
       if (m.timer <= 0) {
-        const [x0, x1, y0, y1] = m.bounds;
-        m.tx = Math.floor(lerp(x0, x1 + 1, Math.random())) + 0.5;
-        m.ty = Math.floor(lerp(y0, y1 + 1, Math.random())) + 0.5;
-        m.state = 'walk';
-        m.graze = false;
+        // цель берём только такую, до которой можно дойти «буквой Г» по проходимым клеткам:
+        // мобы не лезут на деревья, дома и в воду
+        const [x0, x1, y0, y1] = m.bounds, ok = world.walkable;
+        const fx = Math.floor(m.x), fy = Math.floor(m.y);
+        m.timer = 0.6;
+        for (let i = 0; i < 8; i++) {
+          const tx = Math.floor(lerp(x0, x1 + 1, Math.random())), ty = Math.floor(lerp(y0, y1 + 1, Math.random()));
+          let free = true;
+          for (let x = Math.min(fx, tx); x <= Math.max(fx, tx) && free; x++) free = ok(x, fy, m.g);
+          for (let y = Math.min(fy, ty); y <= Math.max(fy, ty) && free; y++) free = ok(tx, y, m.g);
+          if (!free) continue;
+          m.tx = tx + 0.5; m.ty = ty + 0.5; m.state = 'walk'; m.graze = false;
+          break;
+        }
       }
     } else {
       const dx = m.tx - m.x, dy = m.ty - m.y, s = m.speed * dt;
@@ -475,6 +505,10 @@
   function draw() {
     const w = world;
     if (!w) return;
+    // земля (день/ночь, закат, факел) собирается в отдельный кадр: из него же потом
+    // берутся блоки, стоящие перед мобами
+    if (frameCv.width !== canvas.width || frameCv.height !== canvas.height) { frameCv.width = canvas.width; frameCv.height = canvas.height; }
+    const ctx = frameCv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
@@ -517,6 +551,18 @@
       glow(ctx, ptr.x, ptr.y, R * 1.1, '255,150,60', 0.5 * t);
       ctx.globalCompositeOperation = 'source-over';
     }
+    ctx.globalAlpha = 1;
+    drawSky(ctx, w);
+    main.setTransform(1, 0, 0, 1, 0, 0);
+    main.globalCompositeOperation = 'source-over';
+    main.globalAlpha = 1;
+    main.clearRect(0, 0, canvas.width, canvas.height);
+    main.drawImage(frameCv, 0, 0);
+    drawScene(main, w, ox, oy, torchOn, R);
+  }
+
+  function drawScene(ctx, w, ox, oy, torchOn, R) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const nightAt = (sx, sy) => {
       if (!torchOn) return t;
       const d = Math.hypot(sx + ox - ptr.x, sy + oy - ptr.y);
@@ -556,9 +602,10 @@
     w.torches.forEach(([x, y], i) => fire(x, y, Math.max(2, w.U * 0.12), i + 10));
 
     // мобы и вагонетка — по глубине
-    const actors = w.mobs.map((m) => ({ k: m.x + m.y, f: () => drawMob(ctx, P, m, nightAt(...P(m.x, m.y, m.g))) }));
-    if (w.cart) { const y = lerp(w.cart.y0, w.cart.y1, smooth(w.cart.p)); actors.push({ k: w.cart.x + y, f: () => drawCart(ctx, P, w.cart, nightAt(...P(w.cart.x, y, w.cart.z))) }); }
-    actors.sort((a, b) => a.k - b.k).forEach((a) => a.f());
+    const actors = w.mobs.map((m) => ({ k: m.x + m.y, x: m.x, y: m.y, z: m.g, f: () => drawMob(ctx, P, m, nightAt(...P(m.x, m.y, m.g))) }));
+    if (w.cart) { const y = lerp(w.cart.y0, w.cart.y1, smooth(w.cart.p)); actors.push({ k: w.cart.x + y, x: w.cart.x, y, z: w.cart.z, f: () => drawCart(ctx, P, w.cart, nightAt(...P(w.cart.x, y, w.cart.z))) }); }
+    // по глубине; блоки перед каждым кладём обратно поверх: курица за деревом прячется за ним
+    actors.sort((a, b) => a.k - b.k).forEach((a) => { a.f(); coverActor(ctx, w, a.x, a.y, a.z); });
 
     // дым костра: серые квадраты поднимаются высоко и тают, как в Minecraft
     const sc = lerp(150, 70, t);
@@ -587,32 +634,120 @@
     }
     ctx.restore();
 
-    // небо: квадратные солнце и луна, звёзды
-    const sunA = 1 - smooth(clamp(t / 0.6, 0, 1));
-    if (sunA > 0.01) {
-      const p = clamp(t / 0.6, 0, 1);
-      const sx = W * (0.8 + 0.14 * p), sy = H * (0.11 + 0.16 * p), s = Math.max(22, W * 0.022);
-      glow(ctx, sx, sy, s * 3, '255,230,160', 0.45 * sunA);
-      ctx.fillStyle = `rgba(255,238,170,${sunA})`;
-      ctx.fillRect(sx - s / 2, sy - s / 2, s, s);
-      ctx.fillStyle = `rgba(255,250,215,${sunA})`;
-      ctx.fillRect(sx - s / 4, sy - s / 4, s / 2, s / 2);
-    }
-    const moonA = smooth(clamp((t - 0.4) / 0.6, 0, 1));
-    if (moonA > 0.01) {
-      const q = clamp((t - 0.4) / 0.6, 0, 1);
-      const mx = W * (0.07 + 0.08 * q), my = H * (0.26 - 0.14 * q), s = Math.max(18, W * 0.018);
-      for (const [x, y, ph, sz] of world.stars) {
-        ctx.fillStyle = `rgba(230,235,255,${moonA * (0.35 + 0.35 * Math.sin(time * 1.7 + ph))})`;
-        ctx.fillRect(x, y, sz, sz);
+  }
+
+  // Перекрыть моба тем, что стоит перед ним: обводим силуэты блоков/столбов спереди
+  // и копируем эти места из готового кадра земли (там уже день/ночь, закат и факел).
+  function coverActor(ctx, w, mx, my, mz) {
+    const P = w.P, fx = Math.floor(mx), fy = Math.floor(my);
+    let any = false;
+    ctx.beginPath();
+    for (let i = 0; i <= 6; i++) for (let j = 0; j <= 6; j++) {
+      if (!i && !j) continue;
+      const list = w.solids.get(w.KEY(fx + i, fy + j));
+      if (!list) continue;
+      const x = fx + i, y = fy + j;
+      for (const [z0, z1] of list) {
+        if (z1 <= mz + 0.01) continue;
+        // экранная высота: столб на расстоянии d ниже на d*U/2 — низкие дальние моба не заденут
+        if (z1 - mz < (i + j) / 2 - 1.2) continue;
+        const pts = [P(x, y, z1), P(x + 1, y, z1), P(x + 1, y, z0), P(x + 1, y + 1, z0), P(x, y + 1, z0), P(x, y + 1, z1)];
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let k = 1; k < 6; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+        ctx.closePath();
+        any = true;
       }
-      glow(ctx, mx, my, s * 3, '190,205,255', 0.25 * moonA);
-      ctx.fillStyle = `rgba(222,226,236,${moonA})`;
-      ctx.fillRect(mx - s / 2, my - s / 2, s, s);
-      ctx.fillStyle = `rgba(170,176,192,${moonA})`;
-      ctx.fillRect(mx - s * 0.3, my - s * 0.25, s * 0.22, s * 0.22);
-      ctx.fillRect(mx + s * 0.08, my + s * 0.05, s * 0.28, s * 0.22);
     }
+    if (!any) return;
+    ctx.save();
+    ctx.clip();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(frameCv, 0, 0);
+    ctx.restore();
+  }
+
+  // Пиксельные текстуры 8x8, как у солнца и луны в игре
+  function pixelTex(kind) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 8;
+    const c = cv.getContext('2d');
+    const craters = new Set(['1,1', '2,1', '1,2', '5,2', '5,3', '6,3', '2,5', '3,5', '6,6']);
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+      const n = (hash(i * 7 + 3, j * 5 + 1) - 0.5) * 14;
+      let col;
+      if (kind === 'sun') {
+        const d = Math.max(Math.abs(i - 3.5), Math.abs(j - 3.5));
+        col = d <= 1.5 ? [255, 255, 236] : d <= 2.5 ? [255, 243, 168] : [255, 216, 92];
+      } else {
+        col = craters.has(`${i},${j}`) ? [160, 166, 184] : [214, 219, 232];
+        if (i === 0 || j === 7) col = col.map((v) => v - 18);
+      }
+      c.fillStyle = `rgb(${col[0] + n | 0},${col[1] + n | 0},${col[2] + n | 0})`;
+      c.fillRect(i, j, 1, 1);
+    }
+    return cv;
+  }
+
+  // Небо: солнце и луна ходят по дуге. Смена темы = солнце уходит вниз за правый край
+  // и краснеет, с другой стороны поднимается луна. Небо — самый дальний план:
+  // за мышью сдвигается слабее мира, при прокрутке отстаёт от страницы.
+  function drawSky(ctx, w) {
+    const lagY = Math.min(scrollY, H) * 0.35;
+    const kx = 0.45, ky = 0.45;
+    const sx0 = par.x * kx, sy0 = par.y * ky + lagY;
+    const s = Math.round(clamp(w.U * 4.6, 40, 72) / 8) * 8;   // кратно 8 — пиксели ровные
+    ctx.imageSmoothingEnabled = false;
+    // дуга по трём точкам (доли ширины/высоты hero)
+    const arc = (k, a, b, c) => [0, 1].map((i) => ((1 - k) * (1 - k) * a[i] + 2 * k * (1 - k) * b[i] + k * k * c[i]) * (i ? H : W));
+
+    // звёзды
+    const starA = smooth(clamp((t - 0.45) / 0.55, 0, 1));
+    if (starA > 0.01) {
+      for (const [x, y, ph, sz] of w.stars) {
+        ctx.fillStyle = `rgba(230,235,255,${starA * (0.35 + 0.35 * Math.sin(time * 1.7 + ph))})`;
+        ctx.fillRect(x + par.x * 0.25, y + par.y * 0.25 + lagY * 1.3, sz, sz);
+      }
+    }
+
+    // солнце: днём справа над миром, к ночи — вниз по дуге и за край
+    const p = t;
+    const sunA = 1 - smooth(clamp((p - 0.45) / 0.45, 0, 1));
+    if (sunA > 0.01) {
+      const [bx, by] = arc(smooth(p), [0.87, 0.2], [1.02, 0.16], [1.12, 0.85]);
+      const x = bx + sx0, y = by + sy0;
+      const warm = smooth(clamp(p / 0.7, 0, 1));
+      const sz = s * (1 + warm * 0.15);
+      // мягкое сияние и «квадратный» ореол, как у шейдеров в Minecraft
+      glow(ctx, x, y, sz * (3.2 + warm * 1.8), warm > 0.2 ? '255,150,80' : '255,236,170', (0.42 + warm * 0.2) * sunA);
+      for (const [k, a] of [[2.1, 0.1], [1.55, 0.16]]) {
+        ctx.fillStyle = `rgba(255,${(232 - warm * 90) | 0},${(150 - warm * 90) | 0},${a * sunA})`;
+        ctx.fillRect(x - sz * k / 2, y - sz * k / 2, sz * k, sz * k);
+      }
+      ctx.globalAlpha = sunA;
+      ctx.drawImage(w.sun, x - sz / 2, y - sz / 2, sz, sz);
+      if (warm > 0.01) {
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.fillStyle = `rgba(255,${(150 - warm * 40) | 0},70,${warm * 0.7})`;
+        ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // луна: поднимается слева по своей дуге
+    const moonA = smooth(clamp((t - 0.3) / 0.55, 0, 1));
+    if (moonA > 0.01) {
+      const [bx, by] = arc(smooth(t), [-0.12, 0.85], [-0.02, 0.16], [0.12, 0.2]);
+      const x = bx + sx0, y = by + sy0;
+      const mz = s * 0.85;
+      glow(ctx, x, y, mz * 3.4, '170,190,255', 0.28 * moonA);
+      ctx.fillStyle = `rgba(200,212,255,${0.08 * moonA})`;
+      ctx.fillRect(x - mz, y - mz, mz * 2, mz * 2);
+      ctx.globalAlpha = moonA;
+      ctx.drawImage(w.moon, x - mz / 2, y - mz / 2, mz, mz);
+      ctx.globalAlpha = 1;
+    }
+    ctx.imageSmoothingEnabled = true;
   }
 
   function update(dt) {
