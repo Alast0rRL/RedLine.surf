@@ -8,6 +8,7 @@ import { navigate } from '../hooks/useHashRoute';
 import { getClearedTs } from '../lib/clear';
 import { formatListTime, previewText } from '../lib/events';
 import { sweepExpiredInvites } from '../lib/invites';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { leaveRoom, setRoomMuted, setRoomPinned } from '../lib/rooms';
@@ -267,6 +268,7 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
       <header className="topbar">
         <span className="topbar__logo">Redline</span>
         <span className="topbar__actions">
+          <ThemeToggle />
           <Button variant="ghost" icon aria-label="Новый чат" onClick={() => setNewChat(true)}>
             <Icon name="plus" />
           </Button>
