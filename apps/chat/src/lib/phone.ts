@@ -71,8 +71,18 @@ async function api<T>(method: string, path: string, body?: unknown, token?: stri
     throw new Error('Нет связи с сервером');
   }
   const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!res.ok || !data) throw new Error(data?.error || 'Не удалось выполнить запрос');
+  if (!res.ok || !data) {
+    const message = data?.error || 'Не удалось выполнить запрос';
+    if (res.status === 401) throw Object.assign(new Error(message), { httpStatus: 401 });
+    throw new Error(message);
+  }
   return data;
+}
+
+/** Неверный логин или PIN: по этой ошибке ищем пользователя во втором мире. */
+export function isWrongCredentials(e: unknown): boolean {
+  const err = e as { httpStatus?: number; status?: number; errcode?: string } | null;
+  return err?.httpStatus === 401 || err?.status === 401 || err?.errcode === 'M_FORBIDDEN';
 }
 
 /** Свой у каждого мира: в семье номер, в Minecraft ник. */

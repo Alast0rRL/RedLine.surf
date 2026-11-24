@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MatrixClient, Room } from 'matrix-js-sdk';
-import { useClient } from '../state/MatrixContext';
+import { useClient, useMatrix } from '../state/MatrixContext';
 import { useRoomList, type RoomSummary } from '../hooks/useRoomList';
 import { useSecurityState } from '../hooks/useSecurityState';
 import { usePinUnlock } from '../hooks/usePinUnlock';
@@ -185,6 +185,7 @@ function RowMenu({ menu, onClose, onToggle, onLeave }: { menu: MenuState; onClos
 
 export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const client = useClient();
+  const { realm } = useMatrix();
   const { rooms, invites, totalUnread } = useRoomList(client);
   const [security, refreshSecurity] = useSecurityState(client);
   usePinUnlock(client, security, refreshSecurity);
@@ -232,7 +233,11 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   return (
     <section className="pane pane--list" aria-label="Чаты">
       <header className="topbar">
-        <span className="topbar__logo">Redline</span>
+        {realm === 'mc' ? (
+          <a className="topbar__logo" href="https://minecraft.redline.surf" aria-label="Сайт сервера">Redline</a>
+        ) : (
+          <span className="topbar__logo">Redline</span>
+        )}
         <span className="topbar__actions">
           <ThemeToggle />
           <Button variant="ghost" icon aria-label="Новый чат" onClick={() => setNewChat(true)}>

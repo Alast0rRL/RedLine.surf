@@ -671,7 +671,7 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
 
 export function Settings() {
   const client = useClient();
-  const { logout } = useMatrix();
+  const { logout, realm } = useMatrix();
   const me = client.getUser(client.getUserId()!);
   const [confirm, setConfirm] = useState(false);
   const [expanded, setExpanded] = useState<SectionKey | null>(null);
@@ -693,7 +693,7 @@ export function Settings() {
         <ProfileSection fallbackName={name} />
 
         <SettingsGroup title="Общие">
-          <InviteRow />
+          {realm === 'family' && <InviteRow />}
           <PushRow />
           <ThemeRow />
         </SettingsGroup>

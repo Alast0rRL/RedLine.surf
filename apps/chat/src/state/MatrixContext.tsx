@@ -306,6 +306,8 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     outGen.current += 1;
     pending.current.clear();
     setHasOther(false);
+    forgetLink('family');
+    forgetLink('mc');
     const o = otherRealm();
     // второй мир первым: его сеанс снимается сразу, и выход текущего уже отпишет push браузера
     const other = hasMcRealm() ? logoutStored(o).then(() => forgetLink(o)) : Promise.resolve();

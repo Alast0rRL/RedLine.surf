@@ -7,7 +7,6 @@ import { isPinUser } from './lib/pin';
 import { ThemeToggle } from './components/ThemeToggle';
 import { McRegister } from './screens/McRegister';
 import { getRealm, setRealm } from './config';
-import { loadLink } from './lib/pin';
 import { Splash } from './screens/Splash';
 import { Login } from './screens/Login';
 import { PinEntry } from './screens/PinEntry';
@@ -169,9 +168,7 @@ export function App() {
         </main>
       );
     }
-    const saved = loadLink();
-    if (saved) return <PinEntry key={saved.user + saved.key} link={saved} />;
-    return <McRegister />;
+    return <Login mode="any" />;
   }
   if (status === 'starting') return <Splash text={progress ?? 'Синхронизация…'} />;
   if (route.name === 'old-invite') return null;
@@ -203,7 +200,8 @@ export function App() {
     );
   }
 
-  const view = route.name === 'list' ? 'list' : 'detail';
+  const isList = route.name === 'list' || route.name === 'start';
+  const view = isList ? 'list' : 'detail';
   return (
     <div className="app" data-view={view}>
       <AppLines />
@@ -217,7 +215,7 @@ export function App() {
       {route.name === 'settings' && <Settings />}
       {route.name === 'people' && <People />}
       {route.name === 'mc-players' && <McPlayers />}
-      {route.name === 'list' && (
+      {isList && (
         <section className="pane pane--room pane--placeholder" aria-hidden="true">
           <p>Выберите чат</p>
         </section>

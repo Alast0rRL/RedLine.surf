@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { PIN_MAX, PIN_HINT, pinOk } from '../lib/pin';
-import { fetchLinkByPhone, normalizeFamilyLogin, normalizeLogin, normalizePhone } from '../lib/phone';
+import { fetchLinkByPhone, isWrongCredentials, normalizeFamilyLogin, normalizeLogin, normalizePhone } from '../lib/phone';
 import { hasMcRealm, setRealm } from '../config';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
 
-export function Login({ mode }: { mode: 'family' | 'mc' }) {
+export function Login({ mode }: { mode: 'family' | 'mc' | 'any' }) {
   const mc = mode === 'mc';
+  const any = mode === 'any';
   const { enterPin, error: sessionError } = useMatrix();
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
@@ -18,9 +19,9 @@ export function Login({ mode }: { mode: 'family' | 'mc' }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy || !pinOk(pin)) return;
-    // номер — сервер семьи, ник — сервер Minecraft
+    // номер — сервер семьи; с нейтрального входа сначала пробуем семью, потом Minecraft
     const isPhone = /^[\d\s+()-]+$/.test(phone.trim()) && !!normalizePhone(phone);
-    if (isPhone) setRealm('family');
+    if (any || isPhone) setRealm('family');
     else if (mode === 'family' && normalizeFamilyLogin(phone)) setRealm('family');
     else if (hasMcRealm() && normalizeLogin(phone)) setRealm('mc');
     else {
@@ -29,12 +30,26 @@ export function Login({ mode }: { mode: 'family' | 'mc' }) {
     }
     setBusy(true);
     setError(null);
+    let familyError: string | null = null;
     try {
       // ссылку отдаёт сервер, дальше вход идёт ровно как по ссылке (enterPin запомнит её)
-      const link = await fetchLinkByPhone(phone, pin);
+      let link: Awaited<ReturnType<typeof fetchLinkByPhone>>;
+      if (any && !isPhone) {
+        try {
+          link = await fetchLinkByPhone(phone, pin, 'family');
+        } catch (err) {
+          familyError = isWrongCredentials(err) ? 'Неверный логин или PIN' : friendlyError(err, 'Неверный логин или PIN');
+          if (!isWrongCredentials(err) || !hasMcRealm()) throw err;
+          setRealm('mc');
+          link = await fetchLinkByPhone(phone, pin, 'mc');
+        }
+      } else {
+        link = await fetchLinkByPhone(phone, pin);
+      }
       await enterPin(link, pin);
     } catch (err) {
-      setError(friendlyError(err, 'Не удалось войти'));
+      setError(familyError ?? friendlyError(err, 'Не удалось войти'));
+      if (any) setRealm('family');
       setPin('');
       setBusy(false);
     }
@@ -46,14 +61,14 @@ export function Login({ mode }: { mode: 'family' | 'mc' }) {
       <ThemeToggle className="screen__theme" />
       <div className="login__glow" aria-hidden="true" />
       <div className="login__card rl-card rl-card--lg">
-        <span className="rl-eyebrow">{mc ? 'Minecraft' : 'Семейный чат'}</span>
+        <span className="rl-eyebrow">{any ? 'Redline Chat' : mc ? 'Minecraft' : 'Семейный чат'}</span>
         <h1 className="login__title">
           Redline <span>Chat</span>
         </h1>
 
         <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
           <Field
-            label={mc ? 'Ник' : 'Телефон или ник'}
+            label={any ? 'Телефон, логин или ник' : mc ? 'Ник' : 'Телефон или ник'}
             name="phone"
             type="text"
             autoComplete="username"

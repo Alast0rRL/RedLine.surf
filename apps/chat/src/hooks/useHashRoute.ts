@@ -15,6 +15,7 @@ export type Route =
   | { name: 'mc' }
   | { name: 'mc-login' }
   | { name: 'family-login' }
+  | { name: 'start' }
   | { name: 'join'; code: string };
 
 function parse(hash: string): Route {
@@ -23,6 +24,7 @@ function parse(hash: string): Route {
   const link = parseLink(hash);
   if (link) return { name: 'personal', link };
   if (/^#?\/?invite\//.test(hash.trim())) return { name: 'old-invite' };
+  if (!hash || hash === '#' || hash === '#/') return { name: 'start' };
   const info = hash.match(/^#\/room\/([^/]+)\/info$/);
   if (info) return { name: 'room-info', roomId: decodeURIComponent(info[1]) };
   const media = hash.match(/^#\/room\/([^/]+)\/media$/);
