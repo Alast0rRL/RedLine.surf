@@ -5,7 +5,7 @@
  * PBKDF2(PIN, соль из номера). Личный ключ сервер хранит зашифрованным ключом из proof.
  */
 import { createClient } from 'matrix-js-sdk';
-import { getRealm, loadConfig, realmConfig, type Realm } from '../config';
+import { getRealm, hasMcRealm, loadConfig, realmConfig, type Realm } from '../config';
 import { changePassword } from './account';
 import { ACCOUNT_DELETED, isPersonalLink, newPerson, pinPassword, type PersonalLink, type PinLogin } from './pin';
 import { loginWithPassword } from './matrix';
@@ -118,10 +118,11 @@ export async function fetchLinkByPhone(
   pin: string,
   realm: Realm = getRealm(),
 ): Promise<PersonalLink & { linked?: LinkedAccount }> {
-  const phone = normalizeId(phoneInput, realm);
-  if (!phone) throw new Error(realm === 'mc' ? 'Проверьте ник' : 'Проверьте номер');
+  // в семье вместо номера можно ввести логин: его проверяем до ошибки «Проверьте номер»
   const familyLogin = realm === 'family' && !normalizePhone(phoneInput) ? normalizeFamilyLogin(phoneInput) : null;
-  const id = familyLogin ?? phone;
+  const id = familyLogin ?? normalizeId(phoneInput, realm);
+  if (!id) throw new Error(realm === 'mc' ? 'Проверьте ник' : 'Проверьте номер или логин');
+  const phone = id;
   const r = await api<{ user: string; key: string; name?: string; linked?: LinkedAccount }>(
     'POST',
     'login',
@@ -136,6 +137,26 @@ export async function fetchLinkByPhone(
     ? { realm: r.linked.realm, user: r.linked.user }
     : undefined;
   return linked ? { ...link, linked } : link;
+}
+
+/**
+ * Есть ли аккаунт с таким логином (ником) хоть в одном мире. Занятость логина и так открыта
+ * через Matrix (/register/available); номера телефонов так не проверяем.
+ * null — проверить не удалось.
+ */
+export async function loginExists(input: string): Promise<boolean | null> {
+  const login = normalizeFamilyLogin(input);
+  if (!login || normalizePhone(input)) return null;
+  const nick = normalizeLogin(input);
+  const realms: Realm[] = nick && hasMcRealm() ? ['family', 'mc'] : ['family'];
+  try {
+    const free = await Promise.all(
+      realms.map((r) => createClient({ baseUrl: realmConfig(r).homeserverUrl }).isUsernameAvailable(r === 'mc' ? nick! : login)),
+    );
+    return free.some((f) => !f);
+  } catch {
+    return null;
+  }
 }
 
 export async function getBoundPhone(token: string): Promise<string | null> {

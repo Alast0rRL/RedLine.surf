@@ -1,11 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { PIN_MAX, PIN_HINT, pinOk } from '../lib/pin';
-import { fetchLinkByPhone, isWrongCredentials, normalizeFamilyLogin, normalizeLogin, normalizePhone } from '../lib/phone';
+import { fetchLinkByPhone, isWrongCredentials, loginExists, normalizeFamilyLogin, normalizeLogin, normalizePhone } from '../lib/phone';
 import { hasMcRealm, setRealm } from '../config';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
+
+/** Ник, с которым ушли со входа на регистрацию: экран регистрации подставит его. */
+export const REG_NICK_KEY = 'rl.regNick';
 
 export function Login({ mode }: { mode: 'family' | 'mc' | 'any' }) {
   const mc = mode === 'mc';
@@ -15,6 +18,13 @@ export function Login({ mode }: { mode: 'family' | 'mc' | 'any' }) {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Логина нет ни в одном мире: предлагаем регистрацию (ник Minecraft — он и есть логин). */
+  const [notFound, setNotFound] = useState<string | null>(null);
+
+  const toRegister = (nick: string) => {
+    try { sessionStorage.setItem(REG_NICK_KEY, nick); } catch { /* приватный режим */ }
+    location.hash = '#/mc';
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -30,6 +40,13 @@ export function Login({ mode }: { mode: 'family' | 'mc' | 'any' }) {
     }
     setBusy(true);
     setError(null);
+    setNotFound(null);
+    if (!isPhone && (await loginExists(phone)) === false) {
+      setNotFound(phone.trim());
+      setError('Аккаунт не найден');
+      setBusy(false);
+      return;
+    }
     let familyError: string | null = null;
     try {
       // ссылку отдаёт сервер, дальше вход идёт ровно как по ссылке (enterPin запомнит её)
@@ -76,7 +93,7 @@ export function Login({ mode }: { mode: 'family' | 'mc' | 'any' }) {
             autoCorrect="off"
             spellCheck={false}
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => { setPhone(e.target.value); setNotFound(null); }}
             disabled={busy}
             required
           />
@@ -99,7 +116,12 @@ export function Login({ mode }: { mode: 'family' | 'mc' | 'any' }) {
           <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !phone.trim() || !pinOk(pin)}>
             Войти
           </Button>
-          {mc && (
+          {notFound && mode !== 'family' && hasMcRealm() && normalizeLogin(notFound) && (
+            <Button variant="secondary" size="lg" block disabled={busy} onClick={() => toRegister(notFound)}>
+              Зарегистрироваться?
+            </Button>
+          )}
+          {mc && !notFound && (
             <Button variant="ghost" size="sm" className="login__link" disabled={busy} onClick={() => { location.hash = '#/mc'; }}>
               Нет аккаунта? Регистрация
             </Button>

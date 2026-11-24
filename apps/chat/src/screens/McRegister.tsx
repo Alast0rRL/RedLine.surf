@@ -6,11 +6,18 @@ import { PIN_HINT, PIN_MAX, pinOk } from '../lib/pin';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { REG_NICK_KEY } from './Login';
 
 /** Регистрация игрока Minecraft: ник — это логин, дальше вход по нику и PIN. Ссылка #/mc — кнопка на сайте сервера. */
 export function McRegister() {
   const { enterPin } = useMatrix();
-  const [nick, setNick] = useState('');
+  const [nick, setNick] = useState(() => {
+    try {
+      return sessionStorage.getItem(REG_NICK_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +33,7 @@ export function McRegister() {
     try {
       setRealm('mc');
       const link = await registerPlayer(nick, pin);
+      try { sessionStorage.removeItem(REG_NICK_KEY); } catch { /* приватный режим */ }
       await enterPin(link, pin);
     } catch (err) {
       setError(friendlyError(err, 'Не удалось зарегистрироваться'));
