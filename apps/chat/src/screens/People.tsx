@@ -11,6 +11,7 @@ import { useClient } from '../state/MatrixContext';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { QrCode } from '../components/QrCode';
 import { adminUnbindPhone, getRoles, setMcRole } from '../lib/phone';
+import { loadGuests, promoteGuest, type GuestInfo } from '../lib/guestInvites';
 import { getRealm, hasMcRealm } from '../config';
 import { getFamilyRoomId, isInFamily, setInFamily } from '../lib/family';
 import '../styles/people.css';
@@ -42,6 +43,7 @@ export function People() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [links, setLinks] = useState<PersonalLink[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [guests, setGuests] = useState<Map<string, GuestInfo>>(new Map());
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -78,10 +80,11 @@ export function People() {
             setAdminRoom(null);
             return;
           }
-          const [liveInvites, ids, storedLinks] = await Promise.all([
+          const [liveInvites, ids, storedLinks, guestList] = await Promise.all([
             loadInvites(client, room),
             listUsers(client, room),
             loadLinks(client),
+            client.getAccessToken() ? loadGuests(client.getAccessToken()!).catch(() => []) : Promise.resolve([]),
           ]);
           // Удалённых сервер оставляет в списке, но стирает им профиль: пустой профиль — человека нет
           const me = client.getUserId();
@@ -99,6 +102,7 @@ export function People() {
           setInvites(liveInvites);
           setLinks(storedLinks);
           setPeople(users);
+          setGuests(new Map(guestList.map((g) => [g.user, g])));
           setError(null);
         } catch (e) {
           console.warn('Не удалось загрузить раздел «Люди»', e);
@@ -199,6 +203,26 @@ export function People() {
         const { [user]: _drop, ...rest } = b;
         return rest;
       });
+    }
+  };
+
+  const promote = async (person: Person) => {
+    const token = client.getAccessToken();
+    const user = person.id.replace(/^@/, '').split(':')[0];
+    if (!token || action) return;
+    setAction(`promote:${person.id}`);
+    try {
+      await promoteGuest(token, user);
+      setGuests((m) => {
+        const next = new Map(m);
+        next.delete(user);
+        return next;
+      });
+      toast('Гость стал полным участником', { variant: 'success' });
+    } catch (e) {
+      toast(friendlyError(e, 'Не удалось сделать гостя полным участником'), { variant: 'error' });
+    } finally {
+      setAction(null);
     }
   };
 
@@ -443,6 +467,8 @@ export function People() {
                 const pinLink = pinUser
                   ? links.find((l) => l.user === person.id.replace(/^@/, '').split(':')[0])
                   : undefined;
+                const guest = guests.get(localOf(person.id));
+                const inviter = guest && people.find((p) => localOf(p.id) === guest.invitedBy)?.name;
                 return (
                   <li className="people-row" key={person.id}>
                     <Avatar name={person.name} seed={person.id} size="sm" />
@@ -453,6 +479,7 @@ export function People() {
                         {bot && <span className="bot-tag">бот</span>}
                       </span>
                       {!pinUser && <span className="people-row__meta">{person.id}</span>}
+                      {guest && <span className="people-row__meta">гость · пригласил {inviter || guest.invitedBy || guest.inviteName}</span>}
                       {roles?.get(localOf(person.id))?.mc && (
                         <span className="people-row__meta">Minecraft: {roles.get(localOf(person.id))?.mc}</span>
                       )}
@@ -491,6 +518,17 @@ export function People() {
                     )}
                     {!self && !bot && (
                       <span className="people-row__actions">
+                        {guest && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            busy={action === `promote:${person.id}`}
+                            disabled={!!action}
+                            onClick={() => void promote(person)}
+                          >
+                            Сделать полным
+                          </Button>
+                        )}
                         {pinUser ? (
                           pinLink && (
                             <>

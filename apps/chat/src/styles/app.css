@@ -154,6 +154,8 @@ a { color: inherit; }
   text-transform: none;
 }
 
+/* загрузка — на фоне самого чата, без серой подложки экранов входа */
+.splash { --chat-screen: linear-gradient(transparent, transparent); }
 .splash__content { position: relative; z-index: 2; display: grid; justify-items: center; gap: var(--rl-space-6); }
 .splash__logo {
   font-family: var(--rl-font-display);

@@ -12,7 +12,9 @@ export type Route =
   | { name: 'room-media'; roomId: string }
   | { name: 'personal'; link: PersonalLink }
   | { name: 'old-invite' }
-  | { name: 'mc' };
+  | { name: 'mc' }
+  | { name: 'mc-login' }
+  | { name: 'family-login' };
 
 function parse(hash: string): Route {
   const link = parseLink(hash);
@@ -30,6 +32,8 @@ function parse(hash: string): Route {
   if (hash === '#/people') return { name: 'people' };
   if (hash === '#/mc-players') return { name: 'mc-players' };
   if (hash === '#/mc') return { name: 'mc' };
+  if (hash === '#/mc/login') return { name: 'mc-login' };
+  if (hash === '#/family') return { name: 'family-login' };
   return { name: 'list' };
 }
 

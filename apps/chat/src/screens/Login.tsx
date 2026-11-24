@@ -7,7 +7,8 @@ import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
 
-export function Login() {
+export function Login({ mode }: { mode: 'family' | 'mc' }) {
+  const mc = mode === 'mc';
   const { enterPin, error: sessionError } = useMatrix();
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
@@ -44,14 +45,14 @@ export function Login() {
       <ThemeToggle className="screen__theme" />
       <div className="login__glow" aria-hidden="true" />
       <div className="login__card rl-card rl-card--lg">
-        <span className="rl-eyebrow">Семейный чат</span>
+        <span className="rl-eyebrow">{mc ? 'Minecraft' : 'Семейный чат'}</span>
         <h1 className="login__title">
           Redline <span>Chat</span>
         </h1>
 
         <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
           <Field
-            label={hasMcRealm() ? 'Телефон или ник' : 'Номер телефона'}
+            label={mc ? 'Ник' : 'Телефон или ник'}
             name="phone"
             type="text"
             autoComplete="username"

@@ -4,6 +4,7 @@ import { getRealm, hasMcRealm, loadConfig, otherRealm, realmConfig, setRealm, ty
 import { ACCOUNT_DELETED, forgetLink, isDeactivated, loadLink, loginWithPin, preparePinSession, saveLink, type PersonalLink, type PinLogin } from '../lib/pin';
 import { loadSession } from '../lib/session';
 import { bindPhone, getBoundPhone, getLinkedUser, NO_TOKEN, savedPhone, type LinkedAccount } from '../lib/phone';
+import { claimGuest } from '../lib/guestInvites';
 import { PhoneOffer, type PhoneOfferData } from '../screens/PhoneOffer';
 import { RealmPin } from '../screens/RealmPin';
 import { loginWithPassword, logout as doLogout, logoutStored, startMatrix, wipeLocalData } from '../lib/matrix';
@@ -270,6 +271,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
             });
         }
         const token = r.session.accessToken;
+        if (getRealm() === 'family') void claimGuest(token, link, r.created);
         getBoundPhone(token)
           .then(async (mask) => {
             if (mask === null) return setPhoneOffer({ link, pin, token });

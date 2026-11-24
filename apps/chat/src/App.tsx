@@ -132,7 +132,13 @@ export function App() {
   useEffect(() => {
     if (status !== 'ready') return;
     const ownLocalpart = client?.getUserId()?.replace(/^@/, '').split(':')[0];
-    if (route.name === 'old-invite' || route.name === 'mc' || (route.name === 'personal' && ownLocalpart === route.link.user)) {
+    if (
+      route.name === 'old-invite' ||
+      route.name === 'mc' ||
+      route.name === 'mc-login' ||
+      route.name === 'family-login' ||
+      (route.name === 'personal' && ownLocalpart === route.link.user)
+    ) {
       history.replaceState(null, '', '/#/');
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     }
@@ -146,6 +152,8 @@ export function App() {
       return <PinEntry key={route.link.user + route.link.key} link={route.link} />;
     }
     if (route.name === 'mc') return <McRegister />;
+    if (route.name === 'mc-login') return <Login mode="mc" />;
+    if (route.name === 'family-login') return <Login mode="family" />;
     if (route.name === 'old-invite') {
       return (
         <main className="screen login">
@@ -160,7 +168,7 @@ export function App() {
     }
     const saved = loadLink();
     if (saved) return <PinEntry key={saved.user + saved.key} link={saved} />;
-    return <Login />;
+    return <McRegister />;
   }
   if (status === 'starting') return <Splash text={progress ?? 'Синхронизация…'} />;
   if (route.name === 'old-invite') return null;

@@ -55,6 +55,8 @@ services:
       HOMESERVER_INTERNAL_URL: http://continuwuity:8008
       MC_HOMESERVER_INTERNAL_URL: http://continuwuity-mc:8008
       MC_REGISTRATION_TOKEN: ${MC_REGISTRATION_TOKEN:?}
+      INVITE_ADMIN_TOKEN: ${INVITE_ADMIN_TOKEN:-}
+      INVITE_ADMIN_ROOM: ${INVITE_ADMIN_ROOM:-}
     volumes:
       - push-data:/data
     # портов нет: шлюз зовёт только homeserver по внутренней сети

@@ -18,6 +18,7 @@ export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const INVITE_DATA_TYPE = 'surf.redline.invites';
 const LINKS_DATA_TYPE = 'surf.redline.links';
+const MEMBER_LINKS_DATA_TYPE = 'surf.redline.guest-links';
 const TOKEN_RE = /^[A-Za-z0-9]{16}$/;
 
 /** Очередь операций: account data не должна перезаписываться гонкой. */
@@ -84,6 +85,22 @@ async function saveLinks(client: MatrixClient, items: PersonalLink[]): Promise<v
   await client.setAccountData(LINKS_DATA_TYPE as never, { items } as never);
 }
 
+export async function loadMemberLinks(client: MatrixClient): Promise<PersonalLink[]> {
+  let raw: unknown;
+  try {
+    raw = await client.getAccountDataFromServer(MEMBER_LINKS_DATA_TYPE as never);
+  } catch (e) {
+    if (isNotFound(e)) return [];
+    throw e;
+  }
+  const items = (raw as { items?: unknown } | null)?.items;
+  return Array.isArray(items) ? items.filter(isPersonalLink) : [];
+}
+
+export async function saveMemberLinks(client: MatrixClient, items: PersonalLink[]): Promise<void> {
+  await client.setAccountData(MEMBER_LINKS_DATA_TYPE as never, { items } as never);
+}
+
 async function doRevokeInvite(client: MatrixClient, adminRoom: string, token: string): Promise<void> {
   if (!TOKEN_RE.test(token)) throw new Error('Приглашение не подходит. Создайте новое');
   const { body } = await runAdminCommand(client, adminRoom, `!admin token revoke ${token}`);
@@ -117,7 +134,7 @@ async function doCreateInvite(client: MatrixClient, adminRoom: string, name: str
  * Логин без случайных цифр: `ded`, а если занят — `ded2`, `ded3`…
  * Занятым считаем и логин из ещё не использованной ссылки, чтобы два «Деда» не получили один.
  */
-async function freeUsername(client: MatrixClient, name: string, links: PersonalLink[]): Promise<string> {
+export async function freeUsername(client: MatrixClient, name: string, links: PersonalLink[]): Promise<string> {
   const base = baseUsername(name);
   const pending = new Set(links.map((l) => l.user));
   for (let n = 1; n <= 99; n++) {

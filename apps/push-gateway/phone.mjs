@@ -16,9 +16,13 @@ const LOCK_MS = 15 * 60 * 1000;
 const IP_LIMIT = 20;
 const IP_WINDOW_MS = 10 * 60 * 1000;
 const WHOAMI_TIMEOUT_MS = 5000;
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const INVITE_MAX_ACTIVE = 5;
+const INVITE_MAX_PER_DAY = 10;
 
 const PROOF_RE = /^[0-9a-f]{64}$/;
 const KEY_RE = /^[0-9a-f]{32}$/;
+const TOKEN_RE = /^[A-Za-z0-9]{16}$/;
 const USER_RE = /^[a-z0-9][a-z0-9._=-]{0,63}$/;
 
 export function normalizePhone(input) {
@@ -71,7 +75,7 @@ function decryptBlob(proof, blob) {
  * mode 'phone' — записи по номеру (семья), 'login' — по нику (Minecraft, плюс регистрация игроков).
  * prefix — путь API, registrationToken — секрет регистрации на сервере Minecraft (только здесь, не в браузере).
  */
-export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', prefix = '/api/phone/', registrationToken = '', regLimit = 5, regWindowMs = 60 * 60 * 1000 }) {
+export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', prefix = '/api/phone/', registrationToken = '', regLimit = 5, regWindowMs = 60 * 60 * 1000, inviteIssuer = null, invitesPrefix }) {
   const byLogin = mode === 'login';
   const ident = (body) => (byLogin ? normalizeLogin(body.login) : normalizePhone(body.phone));
   const maskOf = (id, body) => (byLogin ? (typeof body.name === 'string' && normalizeLogin(body.name) === id ? body.name : id) : maskPhone(id));
@@ -104,7 +108,30 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
   };
 
   const recordKey = (phone) => crypto.createHmac('sha256', pepper).update(phone).digest('hex');
-  const findByUser = (user) => Object.keys(db).find((k) => db[k].user === user);
+  const findByUser = (user) => Object.keys(db).find((k) => !k.startsWith('invite:') && db[k].user === user);
+
+  const invitePath = invitesPrefix ?? (byLogin ? '/mc/api/invites/' : '/api/invites/');
+  const inviteKey = (token) => `invite:${token}`;
+  const inviteRecords = () => Object.entries(db).filter(([k, r]) => k.startsWith('invite:') && r && TOKEN_RE.test(r.token));
+  const guestRecord = (user) => {
+    const k = findByUser(user);
+    if (k && db[k].guest === true) return db[k];
+    // гостем делает ссылка, а не отметка браузера: не дошедший claim не превращает гостя в участника
+    const inv = inviteRecords().find(([, r]) => r.user === user && !r.revokedAt && !r.promotedAt);
+    return inv ? inv[1] : null;
+  };
+
+  function pruneInvites(now = Date.now()) {
+    let changed = false;
+    for (const [k, r] of inviteRecords()) {
+      if (typeof r.createdAt !== 'number' || now - r.createdAt >= INVITE_TTL_MS) {
+        delete db[k];
+        changed = true;
+        if (inviteIssuer && !r.claimedAt) void inviteIssuer.revoke(r.token).catch(() => undefined);
+      }
+    }
+    return changed;
+  }
 
   // для неизвестного номера делаем ту же работу, что и для известного
   const dummyCheck = sha256hex('check\n' + 'f'.repeat(64));
@@ -206,7 +233,7 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     const oldRec = old ? db[old] : undefined;
     if (old && old !== key) delete db[old];
     const mask = maskOf(phone, body);
-    const keep = pickLinks(db[key] ?? (old ? oldRec : undefined));
+    const keep = { ...pickLinks(db[key]), ...pickLinks(oldRec) };
     db[key] = {
       ...keep,
       user,
@@ -228,6 +255,9 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     if (rec?.mc) out.mc = rec.mc;
     if (rec?.mcAllowed) out.mcAllowed = true;
     if (rec?.family) out.family = rec.family;
+    if (rec?.guest) out.guest = true;
+    if (rec?.invitedBy) out.invitedBy = rec.invitedBy;
+    if (rec?.inviteName) out.inviteName = rec.inviteName;
     return out;
   };
   const linkedOf = (rec) =>
@@ -486,7 +516,9 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     if (!admins.has(caller)) return send(res, 403, { error: 'Нет прав' });
     if (req.method === 'GET') {
       return send(res, 200, {
-        users: Object.values(db).map((r) => ({ user: r.user, mc: r.mc ?? null, mcAllowed: !!r.mcAllowed || admins.has(r.user) })),
+        users: Object.entries(db)
+          .filter(([k, r]) => !k.startsWith('invite:') && typeof r.user === 'string')
+          .map(([, r]) => ({ user: r.user, mc: r.mc ?? null, mcAllowed: !!r.mcAllowed || admins.has(r.user) })),
       });
     }
     const body = await readBody(req);
@@ -503,12 +535,177 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     send(res, 200, { user: target, mc: db[k].mc ?? null, mcAllowed: !!db[k].mcAllowed });
   }
 
+  function guestRows() {
+    return Object.entries(db)
+      .filter(([k, r]) => !k.startsWith('invite:') && r && r.guest === true && typeof r.user === 'string')
+      .map(([, r]) => ({
+        user: r.user,
+        invitedBy: r.invitedBy ?? '',
+        inviteName: r.inviteName ?? '',
+        createdAt: typeof r.createdAt === 'number' ? r.createdAt : 0,
+      }));
+  }
+
+  async function invitesList(req, res) {
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    if (pruneInvites()) save();
+    const admin = admins.has(caller);
+    const invites = inviteRecords()
+      .filter(([, r]) => (admin || r.invitedBy === caller) && !r.claimedAt && !r.revokedAt)
+      .map(([, r]) => ({
+        token: r.token,
+        label: r.label ?? '',
+        user: r.user ?? '',
+        invitedBy: r.invitedBy,
+        createdAt: r.createdAt,
+        expiresAt: r.createdAt + INVITE_TTL_MS,
+      }))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    send(res, 200, { invites, guests: admin ? guestRows() : [], guest: !!guestRecord(caller) });
+  }
+
+  async function guestsList(req, res) {
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    if (!admins.has(caller)) return send(res, 403, { error: 'Нет прав' });
+    send(res, 200, { guests: guestRows() });
+  }
+
+  async function invitesCreate(req, res) {
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    if (guestRecord(caller)) return send(res, 403, { error: 'Гость не может приглашать' });
+    const body = await readBody(req);
+    const label = typeof body.name === 'string' ? body.name.trim() : '';
+    const user = typeof body.user === 'string' ? body.user : '';
+    if (!label || label.length > 80 || !USER_RE.test(user)) return send(res, 400, { error: 'Неверный запрос' });
+    if (pruneInvites()) save();
+    const now = Date.now();
+    const mine = inviteRecords().filter(([, r]) => r.invitedBy === caller);
+    if (mine.filter(([, r]) => now - r.createdAt < 24 * 60 * 60 * 1000).length >= INVITE_MAX_PER_DAY) {
+      return send(res, 429, { error: 'Дневной лимит приглашений исчерпан. Попробуйте завтра' });
+    }
+    if (mine.filter(([, r]) => !r.claimedAt && !r.revokedAt).length >= INVITE_MAX_ACTIVE) {
+      return send(res, 429, { error: 'Можно пригласить не больше пяти человек. Отзовите старую ссылку' });
+    }
+    let token;
+    try {
+      token = await inviteIssuer.issue();
+    } catch (e) {
+      log('warn', 'invite issue failed', { err: String(e?.message).slice(0, 80) });
+      return send(res, 502, { error: 'Не удалось создать приглашение. Попробуйте позже' });
+    }
+    if (typeof token !== 'string' || !TOKEN_RE.test(token)) {
+      return send(res, 502, { error: 'Не удалось создать приглашение. Попробуйте позже' });
+    }
+    try {
+      db[inviteKey(token)] = { token, label, user, invitedBy: caller, createdAt: now };
+      save();
+    } catch (e) {
+      delete db[inviteKey(token)];
+      await inviteIssuer.revoke(token).catch(() => undefined);
+      throw e;
+    }
+    log('info', 'invite created');
+    send(res, 200, { token, invitedBy: caller, createdAt: now, expiresAt: now + INVITE_TTL_MS });
+  }
+
+  async function invitesRevoke(req, res, token) {
+    if (!TOKEN_RE.test(token)) return send(res, 400, { error: 'Неверный запрос' });
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    if (guestRecord(caller)) return send(res, 403, { error: 'Гость не может управлять приглашениями' });
+    const rec = db[inviteKey(token)];
+    if (!rec || rec.revokedAt) return send(res, 404, { error: 'Приглашение не найдено' });
+    if (!admins.has(caller) && rec.invitedBy !== caller) return send(res, 403, { error: 'Нет прав' });
+    try {
+      await inviteIssuer.revoke(token);
+    } catch (e) {
+      log('warn', 'invite revoke failed', { err: String(e?.message).slice(0, 80) });
+      return send(res, 502, { error: 'Не удалось отозвать приглашение. Попробуйте позже' });
+    }
+    rec.revokedAt = Date.now();
+    save();
+    log('info', 'invite revoked');
+    send(res, 200, { ok: true });
+  }
+
+  async function invitesClaim(req, res) {
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    const body = await readBody(req);
+    const token = typeof body.token === 'string' ? body.token : '';
+    if (!TOKEN_RE.test(token)) return send(res, 400, { error: 'Неверный запрос' });
+    const rec = db[inviteKey(token)];
+    if (!rec) return send(res, 404, { error: 'Приглашение не найдено' });
+    if (rec.user !== caller || body.user !== caller) return send(res, 403, { error: 'Нет прав' });
+    const k = findByUser(caller);
+    if (k) {
+      db[k].guest = true;
+      db[k].invitedBy = rec.invitedBy;
+      db[k].inviteName = rec.label ?? '';
+    } else {
+      db[recordKey(caller)] = {
+        user: caller,
+        guest: true,
+        invitedBy: rec.invitedBy,
+        inviteName: rec.label ?? '',
+        createdAt: Date.now(),
+      };
+    }
+    rec.claimedBy = caller;
+    rec.claimedAt = Date.now();
+    save();
+    send(res, 200, { guest: true, invitedBy: rec.invitedBy });
+  }
+
+  async function invitesPromote(req, res) {
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    if (!admins.has(caller)) return send(res, 403, { error: 'Нет прав' });
+    const body = await readBody(req);
+    const user = typeof body.user === 'string' ? body.user.replace(/^@/, '').split(':')[0] : '';
+    if (!USER_RE.test(user)) return send(res, 400, { error: 'Неверный запрос' });
+    if (!guestRecord(user)) return send(res, 404, { error: 'Гость не найден' });
+    const k = findByUser(user);
+    if (k) {
+      delete db[k].guest;
+      delete db[k].invitedBy;
+      delete db[k].inviteName;
+    }
+    const now = Date.now();
+    for (const [, r] of inviteRecords()) if (r.user === user) r.promotedAt = now;
+    save();
+    log('info', 'guest promoted');
+    send(res, 200, { user, guest: false });
+  }
+
   /** true — маршрут обработан. */
   async function handle(req, res, url) {
-    if (!url.pathname.startsWith(prefix)) return false;
-    const p = url.pathname.slice(prefix.length);
+    const own = url.pathname.startsWith(prefix);
+    const inv = url.pathname.startsWith(invitePath);
+    if (!own && !inv) return false;
+    const p = url.pathname.slice((inv ? invitePath : prefix).length);
     try {
-      if (p === 'bind' && req.method === 'PUT') await bind(req, res);
+      if (inv) {
+        if (byLogin) send(res, 404, { error: 'not found' });
+        else if (!inviteIssuer) send(res, 503, { error: 'Приглашения недоступны' });
+        else if (p === '' && req.method === 'GET') await invitesList(req, res);
+        else if (p === '' && req.method === 'POST') await invitesCreate(req, res);
+        else if (p === 'claim' && req.method === 'POST') await invitesClaim(req, res);
+        else if (p === 'guests' && req.method === 'GET') await guestsList(req, res);
+        else if (p === 'promote' && req.method === 'POST') await invitesPromote(req, res);
+        else if (p.startsWith('revoke/') && req.method === 'DELETE') {
+          let token;
+          try {
+            token = decodeURIComponent(p.slice('revoke/'.length));
+          } catch {
+            return send(res, 400, { error: 'Неверный запрос' }), true;
+          }
+          await invitesRevoke(req, res, token);
+        } else send(res, 404, { error: 'not found' });
+      } else if (p === 'bind' && req.method === 'PUT') await bind(req, res);
       else if (p === 'bind' && (req.method === 'GET' || req.method === 'DELETE')) await status(req, res);
       else if (p === 'login' && req.method === 'POST') await login(req, res);
       else if (p === 'register' && req.method === 'POST') await register(req, res);

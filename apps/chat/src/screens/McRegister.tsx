@@ -34,7 +34,7 @@ export function McRegister() {
   };
 
   const toLogin = () => {
-    history.replaceState(null, '', '/#/');
+    history.pushState(null, '', '/#/mc/login');
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   };
 
