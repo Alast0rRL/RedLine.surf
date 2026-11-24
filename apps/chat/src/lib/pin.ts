@@ -10,7 +10,7 @@
 import { createClient, type MatrixClient } from 'matrix-js-sdk';
 import { changePassword, checkInvite, registerWithInvite, slugUsername } from './account';
 import { loginWithPassword } from './matrix';
-import { getSecurityState, setupRecovery, unlockWithRecovery } from './security';
+import { getSecurityState, KEY_MISMATCH, setupRecovery, unlockWithRecovery } from './security';
 import { clearSession, type StoredSession } from './session';
 
 export const PIN_MIN = 4;
@@ -249,7 +249,16 @@ export async function preparePinSession(client: MatrixClient, link: PersonalLink
   // история открывается в фоне: чат показывается сразу, старые сообщения расшифруются по мере прихода ключей.
   // Ошибка не критична: тихая разблокировка в usePinUnlock повторит попытку и покажет баннер
   if (state === 'needs-unlock') {
-    unlockShared(client, secret).catch((e) => console.warn('background unlock failed', e));
+    unlockShared(client, secret).catch(async (e) => {
+      // История на аккаунте закрыта не ключом этой ссылки (старая фраза, ключ восстановления):
+      // её не вернуть, поэтому молча заводим защиту заново. Старые сообщения останутся закрытыми.
+      if ((e as Error)?.message !== KEY_MISMATCH) return console.warn('background unlock failed', e);
+      try {
+        await setupRecovery(client, login.password, secret);
+      } catch (err) {
+        console.warn('reset protection failed', err);
+      }
+    });
   }
   await name;
 }

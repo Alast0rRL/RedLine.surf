@@ -9,7 +9,6 @@ import { formatLogin } from '../lib/login';
 import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/profile';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
 import { switchToPin } from '../lib/switchToPin';
-import { getOldHistoryInfo, resetHistoryProtection, restoreWithOldSecret, type OldHistoryInfo } from '../lib/restoreOld';
 import { getBoundPhone, normalizePhone } from '../lib/phone';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
@@ -202,106 +201,6 @@ function SwitchToPinSection() {
           {lost && <p className="rl-hint rl-hint--error">Старые сообщения на этом устройстве пропадут.</p>}
           {error && <p className="rl-hint rl-hint--error" role="alert">{error}</p>}
           <Button type="submit" variant="primary" size="lg" block busy={busy}>Перейти</Button>
-        </form>
-      </Modal>
-    </Card>
-  );
-}
-
-/** Старые сообщения, закрытые прежней фразой, номером или ключом восстановления (для тех, кто уже входит по PIN). */
-function OldMessagesSection() {
-  const client = useClient();
-  const [state, refresh] = useSecurityState(client);
-  const [info, setInfo] = useState<OldHistoryInfo | null>(null);
-  const [dialog, setDialog] = useState<'open' | 'reset' | null>(null);
-  const [value, setValue] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (state !== 'needs-unlock') return;
-    let alive = true;
-    getOldHistoryInfo(client).then((i) => alive && setInfo(i)).catch(() => alive && setInfo({ byPhrase: true, backupKeys: 1 }));
-    return () => {
-      alive = false;
-    };
-  }, [client, state]);
-
-  if (state !== 'needs-unlock' || !info) return null;
-  const nothing = info.backupKeys === 0;
-
-  const close = () => {
-    if (busy) return;
-    setDialog(null);
-    setValue('');
-    setError(null);
-  };
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      if (dialog === 'reset') {
-        await resetHistoryProtection(client, value);
-        toast('Готово: новые сообщения будут открываться по номеру и PIN', { variant: 'success' });
-      } else {
-        const n = await restoreWithOldSecret(client, value);
-        toast(n ? `Готово, открыто ключей: ${n}` : 'Готово, старые сообщения открыты', { variant: 'success' });
-      }
-      setBusy(false);
-      setDialog(null);
-      setValue('');
-      refresh();
-    } catch (err) {
-      console.error('old messages', err);
-      // настоящую причину показываем, чтобы было с чем разбираться
-      const raw = (err as { message?: string } | null)?.message;
-      const msg = friendlyError(err, raw ? `Не получилось: ${raw}` : 'Не получилось. Попробуйте ещё раз');
-      setError(msg === 'Не подошло'
-        ? info.byPhrase ? 'Не подошло. Введите номер или фразу, которые указывали раньше' : 'Не подошло. Нужен длинный ключ восстановления'
-        : msg);
-      setBusy(false);
-    }
-  };
-
-  const text = nothing
-    ? 'Старые сообщения на сервере не сохранились, вернуть их нельзя. Нажмите «Начать заново»: новые сообщения будут сохраняться и открываться по номеру и PIN.'
-    : info.byPhrase
-      ? 'Старые сообщения закрыты прежним номером или секретной фразой. Введите их один раз, и дальше они будут открываться по номеру и PIN.'
-      : 'Старые сообщения закрыты длинным ключом восстановления, который показывали при включении защиты. Номер или фраза тут не подойдут.';
-
-  return (
-    <Card solid className="settings-card">
-      <h2 className="settings-card__title"><Icon name="key" size={18} /> Старые сообщения</h2>
-      <p className="settings-card__text">{text}</p>
-      {!nothing && <Button variant="primary" onClick={() => setDialog('open')}>Открыть</Button>}
-      <Button variant={nothing ? 'primary' : 'ghost'} onClick={() => setDialog('reset')}>Начать заново</Button>
-      <Modal open={dialog !== null} onClose={close} title={dialog === 'reset' ? 'Начать заново?' : 'Открыть старые сообщения'}>
-        <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
-          {dialog === 'reset' ? (
-            <>
-              <p>Старые сообщения останутся закрытыми навсегда. Новые будут открываться на любом устройстве по номеру и PIN.</p>
-              <Field label="Ваш PIN" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" value={value} error={error} onChange={(e) => setValue(e.target.value.replace(/\D/g, '').slice(0, PIN_MAX))} disabled={busy} />
-            </>
-          ) : (
-            <Field
-              label={info.byPhrase ? 'Старый номер или секретная фраза' : 'Ключ восстановления'}
-              name="old-secret"
-              type="password"
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              hint={info.byPhrase ? 'Тот, что указывали для восстановления раньше' : 'Длинный код из букв и цифр'}
-              value={value}
-              error={error}
-              onChange={(e) => setValue(e.target.value)}
-              disabled={busy}
-            />
-          )}
-          <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={dialog === 'reset' ? !pinOk(value) : !value.trim()}>
-            {dialog === 'reset' ? 'Начать заново' : 'Открыть'}
-          </Button>
         </form>
       </Modal>
     </Card>
@@ -531,7 +430,6 @@ export function Settings() {
         <AdminSection />
         <PushSection />
         <ThemeSection />
-        {pin && <OldMessagesSection />}
         {pin && <PhoneSection />}
         {!pin && (
           <>

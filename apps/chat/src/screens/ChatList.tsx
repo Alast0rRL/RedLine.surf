@@ -220,12 +220,10 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
       /* хранилище недоступно — спрячем только до перезагрузки */
     }
   };
-  const recoveryText = unlock.silent
-    ? 'Старые сообщения не открылись'
-    : pin
+  const recoveryText = pin
       ? 'Нужно заново ввести PIN'
       : 'Включите вход по номеру';
-  const recoveryCta = unlock.silent ? 'Открыть' : pin ? 'Ввести' : 'Настроить';
+  const recoveryCta = pin ? 'Ввести' : 'Настроить';
 
   const q = query.trim().toLocaleLowerCase('ru');
   const shown = useMemo(() => (q ? rooms.filter((s) => s.room.name.toLocaleLowerCase('ru').includes(q)) : rooms), [rooms, q]);
@@ -283,7 +281,7 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
           <button
             type="button"
             className="banner__main"
-            onClick={() => (unlock.silent ? navigate.settings() : pin ? void logout() : navigate.settings())}
+            onClick={() => (pin ? void logout() : navigate.settings())}
           >
             <Icon name="key" size={18} />
             <span className="banner__text">{recoveryText}</span>

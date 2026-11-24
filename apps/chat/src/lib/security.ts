@@ -8,6 +8,9 @@ import { cacheSecretStorageKey, setPendingNewSecretStorageKey } from './matrix';
  *  - needs-unlock — ключ есть, но это устройство не подтверждено: история не расшифруется
  *  - ok           — устройство подтверждено, резервная копия ключей включена
  */
+/** Ключ хранилища на аккаунте не совпал с введённым (история закрыта чем-то другим). */
+export const KEY_MISMATCH = 'Ключ переписки не подошёл';
+
 export type SecurityState = 'checking' | 'needs-setup' | 'needs-unlock' | 'ok' | 'unavailable';
 
 export function normalizePhrase(s: string): string {
@@ -129,7 +132,7 @@ export async function unlockWithRecovery(client: MatrixClient, input: string): P
     }
   }
   if (!key || !(await client.secretStorage.checkKey(key, stored[1]))) {
-    throw new Error('Ключ переписки не подошёл');
+    throw new Error(KEY_MISMATCH);
   }
   cacheSecretStorageKey(keyId, key);
 
