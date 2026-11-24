@@ -19,6 +19,14 @@ import { initTheme } from './lib/theme';
 
 const updateSW = registerSW({
   onNeedRefresh() {
+    // на экранах входа терять нечего — обновляемся сразу, иначе старая версия живёт до закрытия всех вкладок
+    let signedIn = true;
+    try {
+      signedIn = !!(localStorage.getItem('rl.session') || localStorage.getItem('rl.session.mc'));
+    } catch {
+      /* хранилище недоступно — спросим */
+    }
+    if (!signedIn) return void updateSW(true);
     toast('Доступно обновление — нажмите, чтобы перезапустить', { duration: 0 });
     document.querySelector('.rl-toaster')?.addEventListener('click', () => void updateSW(true), { once: true });
   },
