@@ -23,7 +23,7 @@ SEED = 20260215
 OUT = Path(__file__).resolve().parent.parent / "static" / "world" / "world.json"
 PREVIEW = Path(r"C:\Users\Hunter\AppData\Local\Temp\claude\762192bbe5d77549\c290088f-6b6b-451f-b505-488580a83d63\scratchpad\canyon_preview.png")
 
-# палитра: вода, ступенчатый камень, трава, земля, мох, ель, берег
+# палитра: вода, ступенчатый камень, трава, земля, мох, ель, берег, ствол
 MATERIALS = [
     ([17, 49, 60], "water"), ([21, 57, 68], "water"), ([25, 64, 74], "water"),
     ([29, 71, 80], "water"), ([14, 43, 54], "water"),
@@ -37,12 +37,14 @@ MATERIALS = [
     ([42, 88, 42], "leaf"), ([48, 100, 46], "leaf"), ([58, 112, 52], "leaf"),
     ([68, 122, 58], "leaf"),
     ([186, 170, 130], "shore"), ([156, 130, 88], "shore"), ([142, 142, 134], "shore"),
+    ([90, 60, 35], "trunk"),
 ]
 OFFSETS = [(-7, -5, -4), (-2, -1, 0), (2, 2, 1), (6, 5, 4)]
 STRATA = np.array([6, 5, 7, 8, 12, 9, 10, 8], dtype=np.uint8)
 
 M_WATER0, M_STONE0, M_GRASS0, M_DIRT0 = 0, 5, 13, 16
 M_MOSS0, M_PALE0, M_LEAF0, M_SHORE0 = 19, 21, 23, 27
+M_TRUNK0 = 30
 
 
 def palette():
@@ -53,6 +55,8 @@ def palette():
         for d in OFFSETS:
             if kind == "water":
                 d = tuple(max(-2, min(2, v // 3)) for v in d)
+            elif kind == "trunk":
+                d = (0, 0, 0)
             i = len(pal)
             pal.append([max(0, min(255, int(v + dv))) for v, dv in zip(rgb, d)])
             row.append(i)
@@ -150,7 +154,9 @@ def terrain(rng):
         h = np.clip(np.round((h * (1 - blend) + 8 * blend) / 4) * 4, 4, 244).astype(np.uint8)
 
     ground = h.copy()
-    trees(rng, h, mat, ground, water, centers)
+    fg = np.full((N, N), 255, np.uint8)
+    fc = np.zeros((N, N), np.uint8)
+    trees(rng, h, mat, ground, water, centers, fg, fc)
 
     flat_all = np.zeros((N, N), bool)
     for cx, cy in centers:
@@ -221,11 +227,11 @@ def terrain(rng):
         for y, x in pick:
             light[y, x] = 14 if (x + y) % 3 else 12
     h[water] = 2
-    return h, mat, water, light, spots
+    return h, mat, water, light, spots, fg, fc
 
 
-def trees(rng, h, mat, ground, water, centers):
-    """Конические ёли: радиус 4..5, ярусы ~4 блока, верхушка-шпиль 2 блока."""
+def trees(rng, h, mat, ground, water, centers, fg, fc):
+    """Ёли: радиус 5, ярусы ~3 блока, шпиль в одну клетку, ствол под нижним ярусом."""
     placed = []
     for i in range(82):
         side = 1 if rng.random() < 0.5 else -1
@@ -251,39 +257,30 @@ def trees(rng, h, mat, ground, water, centers):
                 continue
             if any((x - px) ** 2 + (y - py) ** 2 < 42 for px, py in placed):
                 continue
-            ht = int(rng.integers(16, 25))
-            rbase = 5 if ht >= 22 and rng.random() < 0.45 else 4
-            hstart = int(rng.integers(2, 4))
-            tier = (ht - 2 - hstart) / (rbase - 1)
+            ht = int(rng.integers(18, 23))
+            rbase, hstart = 5, 2
+            tier = (ht - hstart) / rbase
             foot = slice(y - rbase, y + rbase + 1), slice(x - rbase, x + rbase + 1)
             if water[foot].any():
                 continue
             placed.append((x, y))
             for dy in range(-rbase, rbase + 1):
                 for dx in range(-rbase, rbase + 1):
-                    dist = 0.45 * (abs(dx) + abs(dy)) + 0.55 * (dx * dx + dy * dy) ** 0.5
-                    if dist > rbase + 0.15:
-                        continue
-                    if dist < 0.6:
-                        off, ring = ht, 0
-                    else:
-                        ring = max(1, int(np.ceil(dist)))
-                        off = int(round(ht - 2 - (ring - 1) * tier))
-                        off = max(hstart, off)
-                        # нижняя кромка яруса выходит на 1 блок ниже — пилообразный силуэт
-                        if ring >= 2 and (dx + 2 * dy) % 5 == 0:
-                            off = max(hstart, off - 1)
+                    d = max(abs(dx), abs(dy))
+                    off = int(round(ht - d * tier))
+                    # нижняя кромка яруса выходит на 1 блок ниже — пилообразный силуэт
+                    if d >= 2 and (dx * 3 + dy * 5 + ht) % 7 == 0:
+                        off -= 1
+                    off = max(hstart, off)
                     iy, ix = y + dy, x + dx
-                    z = g + off
+                    z = int(ground[iy, ix]) + off
                     if z > h[iy, ix]:
                         h[iy, ix] = z
-                        if ring == 0:
-                            code = 25
-                        elif (rbase - ring) % 2 == 0:
-                            code = 23
-                        else:
-                            code = 25 if ring <= 2 else 24
-                        mat[iy, ix] = M_LEAF0 + code - 23
+                        mat[iy, ix] = M_LEAF0 + int(rng.integers(0, 4))
+            tx, ty = x + rbase, y
+            if fg[ty, tx] == 255:
+                fg[ty, tx] = h[ty, tx]
+                fc[ty, tx] = M_TRUNK0 * 4 + int(rng.integers(0, 4))
 
 
 def encode(a):
@@ -335,20 +332,20 @@ def preview(data, path):
 
 def main():
     rng = np.random.default_rng(SEED)
-    h, mat, water, light, spots = terrain(rng)
+    h, mat, water, light, spots, fg, fc = terrain(rng)
     pal, water_idx, mapping = palette()
     variant = (noise((N, N), 6, np.random.default_rng(SEED + 1)) * 4).astype(int)
     idx = mapping[mat, variant]
     data = {
         "n": N, "base": BASE, "pal": pal, "water": water_idx,
         "h": encode(h), "c": encode(idx), "l": encode(light),
-        "fg": encode(np.full((N, N), 255, np.uint8)), "fc": encode(np.zeros((N, N), np.uint8)),
+        "fg": encode(fg), "fc": encode(fc),
         "spots": spots,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
     preview(data, PREVIEW)
-    trees_count = int(np.count_nonzero((mat >= M_LEAF0) & (mat < M_LEAF0 + 3)))
+    trees_count = int(np.count_nonzero((mat >= M_LEAF0) & (mat < M_LEAF0 + 4)))
     print(f"{OUT} {OUT.stat().st_size} bytes; n={N}, base={BASE}, max h={int(h.max())}, "
           f"water cells={int(water.sum())}, water colors={len(water_idx)}, "
           f"leaf cells={trees_count}, spots={spots}")

@@ -1,7 +1,7 @@
 // Живой мир на фоне hero: изометрический мир на <canvas id="world">.
 // Рельеф берётся из готового файла static/world/world.json (карта настоящего мира).
 // Земля рисуется один раз в два слоя (день и ночь). Каждый кадр — только живое: вода, огонь,
-// дым костра, овцы и курицы, облака, смена дня и ночи, факел у курсора, параллакс.
+// дым костра, облака, смена дня и ночи, факел у курсора, параллакс.
 (() => {
   'use strict';
   const canvas = document.getElementById('world');
@@ -14,12 +14,12 @@
 
   const CFG = {
     seed: 20260131,
-    clouds: true,         // облака: выключить — false
+    clouds: false,        // облака: выключить — false
     dayNightMs: 2400,     // за сколько «проходит день» при смене темы
     torchRadius: 170,     // радиус света факела у курсора, px
     parallax: [12, 7],    // сдвиг мира от мыши, px
     vScale: 0.6,          // высота блока рельефа относительно ширины клетки
-    dayFade: 0.3,         // насколько день бледнеет к белому
+    dayFade: 0,           // день не бледнеет
     mobScale: 2.2,        // размер мобов, костра, огня и дыма
     cloudCell: 4,         // облако: сторона одной клетки, блоков
     cloudZ: 95,           // высота облаков (выше гор)
@@ -55,21 +55,62 @@
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 
-  // ---------- палитра мобов и костра: день бледный (под светлую тему), ночь почти чёрная с синевой ----------
+  // ---------- палитра костра и облаков: день почти без осветления, ночь с синевой ----------
   const BASE = {
     log: [108, 82, 55], logtop: [160, 128, 88], ash: [70, 66, 62],
-    wool: [236, 236, 232], skin: [214, 196, 178], feather: [246, 246, 244], beak: [235, 170, 60], wattle: [200, 40, 40],
+    wool: [236, 236, 232],
   };
-  const MOB = new Set(['wool', 'skin', 'feather', 'beak', 'wattle']);
   const DAY = {}, NIGHT = {};
   for (const [k, c] of Object.entries(BASE)) {
-    DAY[k] = c.map((v) => Math.round(lerp(v, 246, MOB.has(k) ? 0.12 : CFG.dayFade)));
+    DAY[k] = c.map((v) => Math.round(lerp(v, 246, CFG.dayFade)));
     NIGHT[k] = c.map((v, i) => Math.round(v * 0.17 + [4, 6, 14][i]));
   }
-  const SHADE = { t: 1, l: 0.86, r: 0.72 };
-  const rgb = (c, k = 1, a = 1) => `rgba(${(c[0] * k) | 0},${(c[1] * k) | 0},${(c[2] * k) | 0},${a})`;
+  const HAZE = { day: [200, 215, 235], night: [10, 14, 28], max: 0.3 };
+  const GRADE = {
+    top: [1.08, 1.02, 0.88], left: 0.78, right: 0.5,
+    shadow: [30, 45, 80], shadowMix: 0.35, moon: [140, 170, 235], ao: 0.7,
+    stoneLit: [215, 195, 165], stoneShade: [28, 38, 66], contrast: 0.2,
+  };
+  const HZB = 8, TB = 5;
+  const clampByte = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  const rgb = (c, k = 1, a = 1) => `rgba(${clampByte(c[0] * k)},${clampByte(c[1] * k)},${clampByte(c[2] * k)},${a})`;
   const mix = (name, n) => DAY[name].map((v, i) => lerp(v, NIGHT[name][i], n));
-  const SKY = { day: [238, 242, 247], night: [5, 7, 13] };
+  const saturate = (v, k = 1.45) => {
+    const l = 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+    return v.map((x) => clampByte(l + (x - l) * k));
+  };
+  const contrast = (v) => v.map((x) => {
+    const d = x - 128;
+    return clampByte(x + GRADE.contrast * d * (1 - Math.abs(d) / 128));
+  });
+  const gradeFace = (v, face, night, row = -1) => {
+    if (night) {
+      if (face === 0) return v.map((x, j) => lerp(x, GRADE.moon[j], 0.16));
+      if (face === 2) return v.map((x, j) => lerp(x, GRADE.shadow[j], 0.22));
+      return v;
+    }
+    let o;
+    if (face === 0) o = v.map((x, j) => x * GRADE.top[j]);
+    else if (face === 1) o = v.map((x) => x * GRADE.left);
+    else o = v.map((x) => x * GRADE.right).map((x, j) => lerp(x, GRADE.shadow[j], GRADE.shadowMix));
+    if (row >= 5 && row <= 12) {
+      if (face === 0) o = o.map((x, j) => lerp(x, GRADE.stoneLit[j], 0.2));
+      else if (face === 1) o = o.map((x, j) => lerp(x, GRADE.stoneShade[j], 0.12));
+      else o = o.map((x, j) => lerp(x, GRADE.stoneShade[j], 0.22));
+    }
+    return o;
+  };
+  const gradeCell = (v, face, hz, ao, night, tex, row = -1) => {
+    let o = gradeFace(v, face, night, row);
+    if (ao) o = o.map((x) => x * GRADE.ao);
+    o = contrast(o);
+    if (tex !== undefined) o = o.map((x) => x * (0.93 + tex * (0.14 / (TB - 1))));
+    if (hz > 0) {
+      const sky = night ? HAZE.night : HAZE.day;
+      o = o.map((x, j) => lerp(x, sky[j], hz * HAZE.max));
+    }
+    return o.map(clampByte);
+  };
 
   function quad(c, pts, fill, edge) {
     c.beginPath();
@@ -81,10 +122,10 @@
     if (edge) { c.strokeStyle = edge; c.stroke(); }
   }
   // Брусок произвольного размера: видны левая (+y), правая (+x) и верхняя грани
-  function box(c, P, x, y, z, dx, dy, dz, top, side, edge, a = 1) {
-    quad(c, [P(x, y + dy, z + dz), P(x + dx, y + dy, z + dz), P(x + dx, y + dy, z), P(x, y + dy, z)], rgb(side, SHADE.l, a), edge);
-    quad(c, [P(x + dx, y, z + dz), P(x + dx, y + dy, z + dz), P(x + dx, y + dy, z), P(x + dx, y, z)], rgb(side, SHADE.r, a), edge);
-    quad(c, [P(x, y, z + dz), P(x + dx, y, z + dz), P(x + dx, y + dy, z + dz), P(x, y + dy, z + dz)], rgb(top, SHADE.t, a), edge);
+  function box(c, P, x, y, z, dx, dy, dz, top, side, edge, a = 1, night = false) {
+    quad(c, [P(x, y + dy, z + dz), P(x + dx, y + dy, z + dz), P(x + dx, y + dy, z), P(x, y + dy, z)], rgb(gradeFace(side, 1, night), 1, a), edge);
+    quad(c, [P(x + dx, y, z + dz), P(x + dx, y + dy, z + dz), P(x + dx, y + dy, z), P(x + dx, y, z)], rgb(gradeFace(side, 2, night), 1, a), edge);
+    quad(c, [P(x, y, z + dz), P(x + dx, y, z + dz), P(x + dx, y + dy, z + dz), P(x, y + dy, z + dz)], rgb(gradeFace(top, 0, night), 1, a), edge);
   }
 
   // ---------- сборка мира из данных ----------
@@ -116,7 +157,7 @@
     const waterSet = new Uint8Array(256);
     for (const i of D.water) waterSet[i] = 1;
 
-    const U = clamp(W / 400, 3, 6);
+    const U = W < 768 ? clamp(W / 90, 4, 6) : clamp(W / 210, 5, 12);
     const M = 30, CW = W + 2 * M, CH = H + 2 * M;
     const ox = CW / 2, oy = CH / 2;
     const P = (x, y, z) => [ox + (x - y) * U, oy + ((x + y) * U) / 2 - z * U];
@@ -132,37 +173,40 @@
       const i = y * n + x;
       return (fg[i] !== 255 ? fg[i] : h[i]) * vS;
     };
-    const NONE = [];
-    // что может закрыть моба: столбы земли (список [низ, верх])
-    const solidsAt = (x, y) => {
-      if (x < 0 || y < 0 || x >= n || y >= n) return NONE;
-      const i = y * n + x, z = h[i] * vS;
-      return fg[i] !== 255 ? [[-2, fg[i] * vS], [z - 2 * vS, z]] : [[-2, z]];
+    const hazeBucket = (s, z) => {
+      const far = Math.max(0, 1 - s / (2 * n - 2));
+      const t = clamp((far - 2 / 3) * 3, 0, 1);
+      const hi = 0.75 + 0.25 * clamp(z / (120 * vS), 0, 1);
+      return Math.min(HZB - 1, Math.round(Math.pow(t, 0.8) * hi * (HZB - 1)));
     };
     const [cx, cy] = spots.camp;
-    // куда мобам нельзя: вода, парящее, костёр, перепады высоты
-    const walkable = (x, y, g) => {
-      if (x < 0 || y < 0 || x >= n || y >= n || (x === cx && y === cy)) return false;
-      const i = y * n + x;
-      return !waterSet[c[i]] && fg[i] === 255 && Math.abs(h[i] * vS - g) < 0.01;
-    };
 
-    // ---------- цвета: кэш по палитре ----------
-    const shades = (v) => [rgb(v, SHADE.t), rgb(v, SHADE.l), rgb(v, SHADE.r)];
+    // ---------- цвета: кэш по палитре, градиенту и затенению ----------
+    const dayBase = [];
+    for (let i = 0; i < pal.length; i++) {
+      const row = i >> 2;
+      let v = saturate(pal[i], row >= 5 && row <= 12 ? 1.15 : 1.45);
+      if (row < 5) v = v.map((x, j) => lerp(x, [130, 190, 205][j], 0.08));
+      dayBase[i] = v.map(clampByte);
+    }
     const dayC = [], nightC = [];
-    const colDay = (i) => dayC[i] || (dayC[i] = shades(pal[i].map((v) => lerp(v, 246, CFG.dayFade))));
-    const colNight = (i, lt) => {
-      const k = i * 16 + lt;
-      if (nightC[k]) return nightC[k];
+    const texBucket = (x, y, b = 0) => Math.min(TB - 1, (hash(x * 13 + b * 7, y * 7 + b * 11) * TB) | 0);
+    const dayFace = (i, face, hz, ao, tex) => {
+      const key = ((((i * HZB + hz) * TB + tex) << 1) | (ao ? 1 : 0));
+      return dayC[key] || (dayC[key] = [0, 1, 2].map((f) => rgb(gradeCell(dayBase[i], f, hz / (HZB - 1), ao, false, tex, i >> 2))));
+    };
+    const nightFace = (i, lt, face, hz, ao, tex) => {
+      const key = (((((i * 16 + lt) * HZB + hz) * TB + tex) << 1) | (ao ? 1 : 0));
+      if (nightC[key]) return nightC[key];
       const warm = Math.pow(lt / 15, 2) * 0.75, tg = [255, 165, 80];
-      return (nightC[k] = shades(pal[i].map((v, j) => {
-        const nv = v * 0.17 + [4, 6, 14][j];
-        return lerp(nv, tg[j] * (v / 255 * 0.6 + 0.4), warm);
-      })));
+      let v = pal[i].map((x, j) => x * 0.17 + [4, 6, 14][j]);
+      v = v.map((x, j) => lerp(x, tg[j] * (pal[i][j] / 255 * 0.6 + 0.4), warm));
+      if ((i >> 2) < 5) v = v.map((x, j) => lerp(x, [90, 120, 170][j], 0.06));
+      return (nightC[key] = [0, 1, 2].map((f) => rgb(gradeCell(v, f, hz / (HZB - 1), ao, true, tex, i >> 2))));
     };
 
     // ---------- отрисовка земли в два слоя ----------
-    const edgeD = U >= 6 ? 'rgba(40,40,40,0.10)' : null, edgeN = U >= 6 ? 'rgba(255,255,255,0.045)' : null;
+    const edgeD = U >= 6 ? 'rgba(38,34,30,0.055)' : null, edgeN = U >= 6 ? 'rgba(215,228,255,0.028)' : null;
     const mk = () => {
       const cv = document.createElement('canvas');
       cv.width = Math.round(CW * dpr);
@@ -174,23 +218,51 @@
       return [cv, g];
     };
     const [day, cd] = mk(), [night, cn] = mk();
-    const q = (pts, fd, fn) => { quad(cd, pts, fd, edgeD); quad(cn, pts, fn, edgeN); };
+    const qSide = (pts, fd, fn) => { quad(cd, pts, fd, null); quad(cn, pts, fn, null); };
+    const qTop = (pts, fd, fn) => { quad(cd, pts, fd, edgeD); quad(cn, pts, fn, edgeN); };
     const emissive = [], water = [], seenEm = new Set();
 
-    // столб земли от zt вниз: боковые грани одним четырёхугольником, затем верх
-    const column = (x, y, X, Y, zt, dS, nS) => {
+    const bandGradient = (g, yTop, yBot, zt, zb, colorAt) => {
+      const gr = g.createLinearGradient(0, yTop, 0, yBot);
+      const span = zt - zb;
+      for (let b = Math.ceil(zt / vS) - 1; b >= Math.floor(zb / vS); b--) {
+        const z1 = Math.min(zt, (b + 1) * vS), z0 = Math.max(zb, b * vS);
+        if (z1 <= z0) continue;
+        const col = colorAt(b);
+        gr.addColorStop(clamp((zt - z1) / span, 0, 1), col);
+        gr.addColorStop(clamp((zt - z0) / span, 0, 1), col);
+      }
+      return gr;
+    };
+
+    // столб земли от zt вниз: левая грань, правая грань, верхний ромб
+    const column = (x, y, X, Y, zt, i, ci, lt, hz) => {
       const zl = Math.min(zt, gz(x, y + 1)), zr = Math.min(zt, gz(x + 1, y));
-      if (zt > zl) q([P(X, Y + 1, zt), P(X + 1, Y + 1, zt), P(X + 1, Y + 1, zl), P(X, Y + 1, zl)], dS[1], nS[1]);
-      if (zt > zr) q([P(X + 1, Y, zt), P(X + 1, Y + 1, zt), P(X + 1, Y + 1, zr), P(X + 1, Y, zr)], dS[2], nS[2]);
-      q([P(X, Y, zt), P(X + 1, Y, zt), P(X + 1, Y + 1, zt), P(X, Y + 1, zt)], dS[0], nS[0]);
+      const aoL = y + 1 < n && h[(y + 1) * n + x] - h[i] >= 4;
+      const aoR = x + 1 < n && h[y * n + x + 1] - h[i] >= 4;
+      if (zt > zl) {
+        const p0 = P(X, Y + 1, zt), p1 = P(X + 1, Y + 1, zt), p2 = P(X + 1, Y + 1, zl), p3 = P(X, Y + 1, zl);
+        qSide([p0, p1, p2, p3],
+          bandGradient(cd, p0[1], p3[1], zt, zl, (b) => dayFace(ci, 1, hz, aoL, texBucket(x, y, b))),
+          bandGradient(cn, p0[1], p3[1], zt, zl, (b) => nightFace(ci, lt, 1, hz, aoL, texBucket(x, y, b))));
+      }
+      if (zt > zr) {
+        const p0 = P(X + 1, Y, zt), p1 = P(X + 1, Y + 1, zt), p2 = P(X + 1, Y + 1, zr), p3 = P(X + 1, Y, zr);
+        qSide([p0, p1, p2, p3],
+          bandGradient(cd, p0[1], p3[1], zt, zr, (b) => dayFace(ci, 2, hz, aoR, texBucket(x + 1, y, b))),
+          bandGradient(cn, p0[1], p3[1], zt, zr, (b) => nightFace(ci, lt, 2, hz, aoR, texBucket(x + 1, y, b))));
+      }
+      qTop([P(X, Y, zt), P(X + 1, Y, zt), P(X + 1, Y + 1, zt), P(X, Y + 1, zt)],
+        dayFace(ci, 0, hz, aoL || aoR, texBucket(x, y)),
+        nightFace(ci, lt, 0, hz, aoL || aoR, texBucket(x, y)));
     };
 
     // костёр на клетке spots.camp (рисуется чуть позже, чтобы соседи его не перекрыли)
     const campZ = h[cy * n + cx] * vS;
     const drawCamp = () => {
       const mx = cx + 0.5 - half, my = cy + 0.5 - half;
-      for (const [g, T, e] of [[cd, DAY, edgeD], [cn, NIGHT, edgeN]]) {
-        const B = (x, y, z, dx, dy, dz, top, side) => box(g, P, mx + (x - 0.5) * S, my + (y - 0.5) * S, campZ + z * S, dx * S, dy * S, dz * S, top, side, e);
+      for (const [g, T, e, n] of [[cd, DAY, edgeD, false], [cn, NIGHT, edgeN, true]]) {
+        const B = (x, y, z, dx, dy, dz, top, side) => box(g, P, mx + (x - 0.5) * S, my + (y - 0.5) * S, campZ + z * S, dx * S, dy * S, dz * S, top, side, e, 1, n);
         B(0.1, 0.1, 0, 0.8, 0.8, 0.1, T.ash, T.ash);
         B(0.15, 0.38, 0.1, 0.7, 0.24, 0.2, T.logtop, T.log);
         B(0.38, 0.15, 0.3, 0.24, 0.7, 0.2, T.logtop, T.log);
@@ -207,14 +279,21 @@
         const sx = ox + (X - Y) * U;
         if (sx + U < 0 || sx - U > CW || oy + (X + Y + 2) * U / 2 < 0 || oy + (X + Y) * U / 2 - z * U > CH) continue;
         const ci = c[i], wat = waterSet[ci] === 1, lt = wat ? 0 : Math.min(15, l[i]);
+        const hz = hazeBucket(s, z);
         if (fg[i] !== 255) {
           // парящая постройка: земля под ней, затем плита своего цвета с обоими боками
-          column(x, y, X, Y, fg[i] * vS, colDay(fc[i]), colNight(fc[i], 0));
-          const dS = colDay(ci), nS = colNight(ci, lt), zb = z - 2 * vS;
-          q([P(X, Y + 1, z), P(X + 1, Y + 1, z), P(X + 1, Y + 1, zb), P(X, Y + 1, zb)], dS[1], nS[1]);
-          q([P(X + 1, Y, z), P(X + 1, Y + 1, z), P(X + 1, Y + 1, zb), P(X + 1, Y, zb)], dS[2], nS[2]);
-          q([P(X, Y, z), P(X + 1, Y, z), P(X + 1, Y + 1, z), P(X, Y + 1, z)], dS[0], nS[0]);
-        } else column(x, y, X, Y, z, colDay(ci), colNight(ci, lt));
+          const fz = fg[i] * vS;
+          column(x, y, X, Y, fz, i, fc[i], 0, hazeBucket(s, fz));
+          const aoL = y + 1 < n && h[(y + 1) * n + x] - h[i] >= 4;
+          const aoR = x + 1 < n && h[y * n + x + 1] - h[i] >= 4;
+          const zb = z - 2 * vS;
+          qSide([P(X, Y + 1, z), P(X + 1, Y + 1, z), P(X + 1, Y + 1, zb), P(X, Y + 1, zb)],
+            dayFace(ci, 1, hz, aoL, texBucket(x, y)), nightFace(ci, lt, 1, hz, aoL, texBucket(x, y)));
+          qSide([P(X + 1, Y, z), P(X + 1, Y + 1, z), P(X + 1, Y + 1, zb), P(X + 1, Y, zb)],
+            dayFace(ci, 2, hz, aoR, texBucket(x + 1, y)), nightFace(ci, lt, 2, hz, aoR, texBucket(x + 1, y)));
+          qTop([P(X, Y, z), P(X + 1, Y, z), P(X + 1, Y + 1, z), P(X, Y + 1, z)],
+            dayFace(ci, 0, hz, aoL || aoR, texBucket(x, y)), nightFace(ci, lt, 0, hz, aoL || aoR, texBucket(x, y)));
+        } else column(x, y, X, Y, z, i, ci, lt, hz);
         if (wat) {
           if ((x * 7 + y * 13) % 9 === 0 && water.length < 700) water.push([...P(X + 0.5, Y + 0.5, z), hash(x, y)]);
         } else if (lt >= 14 && emissive.length < 160) {
@@ -225,26 +304,24 @@
     }
     if (!campDone) drawCamp();
 
-    // дымка у горизонта: верх кадра растворяется в небе
-    for (const [g, sky] of [[cd, SKY.day], [cn, SKY.night]]) {
-      const gr = g.createLinearGradient(0, 0, 0, M + H * 0.28);
-      gr.addColorStop(0, rgb(sky, 1, 1));
-      gr.addColorStop(1, rgb(sky, 1, 0));
-      g.fillStyle = gr;
-      g.fillRect(0, 0, CW, M + H * 0.28);
+    // дымка, тёплый свет и лёгкая виньетка запекаются в слои — в кадре только crossfade
+    for (const [g, glow, night] of [
+      [cd, [255, 205, 120, 0.14], false],
+      [cn, [110, 140, 230, 0.10], true],
+    ]) {
+      const gx = CW * 0.86, gy = M + H * 0.14, sr = Math.max(W, H) * 0.75;
+      const sun = g.createRadialGradient(gx, gy, 0, gx, gy, sr);
+      sun.addColorStop(0, `rgba(${glow[0]},${glow[1]},${glow[2]},${glow[3]})`);
+      sun.addColorStop(1, `rgba(${glow[0]},${glow[1]},${glow[2]},0)`);
+      g.fillStyle = sun;
+      g.fillRect(0, 0, CW, CH);
+      const vr = Math.max(W, H) * 0.78;
+      const vig = g.createRadialGradient(CW / 2, CH / 2, Math.min(W, H) * 0.28, CW / 2, CH / 2, vr);
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, night ? 'rgba(0,0,0,0.32)' : 'rgba(48,34,22,0.12)');
+      g.fillStyle = vig;
+      g.fillRect(0, 0, CW, CH);
     }
-
-    // ---------- живность ----------
-    const mobs = [];
-    const spawn = (kind, spot, rad, count, speed, wait) => {
-      const [sx, sy] = spot, g = h[sy * n + sx] * vS;
-      for (let i = 0; i < count; i++) {
-        mobs.push({ kind, x: lerp(sx - rad, sx + rad + 1, rand()), y: lerp(sy - rad, sy + rad + 1, rand()), g,
-          bounds: [sx - rad, sx + rad, sy - rad, sy + rad], speed, face: i % 4, state: 'idle', timer: rand() * wait, phase: rand() * 6, spot });
-      }
-    };
-    spawn('sheep', spots.sheep, 4, 4, 0.55, 3);
-    spawn('chicken', spots.chicken, 3, 3, 0.9, 2);
 
     const clouds = [];
     if (CFG.clouds) {
@@ -260,20 +337,11 @@
 
     const stars = Array.from({ length: 60 }, () => [rand() * W, rand() * H * 0.22, rand() * 6, 0.6 + rand() * 1.2]);
 
-    // моб стартует только на клетке, где можно стоять
-    for (const m of mobs) {
-      const [x0, x1, y0, y1] = m.bounds;
-      for (let i = 0; i < 40 && !walkable(Math.floor(m.x), Math.floor(m.y), m.g); i++) {
-        m.x = Math.floor(lerp(x0, x1 + 1, rand())) + 0.5; m.y = Math.floor(lerp(y0, y1 + 1, rand())) + 0.5;
-      }
-      if (!walkable(Math.floor(m.x), Math.floor(m.y), m.g)) { m.x = m.spot[0] + 0.5; m.y = m.spot[1] + 0.5; }
-    }
-
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     building = false;
-    world = { U, M, CW, CH, P, Pg, fromScreen, solidsAt, walkable, sun: pixelTex('sun'), moon: pixelTex('moon'),
-      day, night, emissive, water, mobs, clouds, stars,
+    world = { U, M, CW, CH, P, Pg, fromScreen, sun: pixelTex('sun'), moon: pixelTex('moon'),
+      day, night, emissive, water, clouds, stars,
       camp: Pg(cx + 0.5, cy + 0.5, campZ + 0.35 * S), smoke: [], smokeT: 0 };
     return true;
   }
@@ -284,64 +352,6 @@
   let time = 0, last = 0, raf = 0, visible = true;
   let ptr = { x: 0, y: 0, inside: false }, par = { x: 0, y: 0, tx: 0, ty: 0 };
   const light = finePointer ? document.createElement('canvas') : null;
-
-  function updateMob(m, dt) {
-    m.timer -= dt;
-    if (m.state === 'idle') {
-      if (m.timer <= 0) {
-        // цель берём только такую, до которой можно дойти «буквой Г» по проходимым клеткам:
-        // мобы не лезут на деревья, дома и в воду
-        const [x0, x1, y0, y1] = m.bounds, ok = world.walkable;
-        const fx = Math.floor(m.x), fy = Math.floor(m.y);
-        m.timer = 0.6;
-        for (let i = 0; i < 8; i++) {
-          const tx = Math.floor(lerp(x0, x1 + 1, Math.random())), ty = Math.floor(lerp(y0, y1 + 1, Math.random()));
-          let free = true;
-          for (let x = Math.min(fx, tx); x <= Math.max(fx, tx) && free; x++) free = ok(x, fy, m.g);
-          for (let y = Math.min(fy, ty); y <= Math.max(fy, ty) && free; y++) free = ok(tx, y, m.g);
-          if (!free) continue;
-          m.tx = tx + 0.5; m.ty = ty + 0.5; m.state = 'walk'; m.graze = false;
-          break;
-        }
-      }
-    } else {
-      const dx = m.tx - m.x, dy = m.ty - m.y, s = m.speed * dt;
-      if (Math.abs(dx) > 0.02) { m.face = dx > 0 ? 0 : 1; m.x += Math.sign(dx) * Math.min(Math.abs(dx), s); }
-      else if (Math.abs(dy) > 0.02) { m.face = dy > 0 ? 2 : 3; m.y += Math.sign(dy) * Math.min(Math.abs(dy), s); }
-      else { m.state = 'idle'; m.timer = 1.5 + Math.random() * 4; m.graze = m.kind === 'sheep' && Math.random() < 0.5; }
-    }
-  }
-
-  function drawMob(c, P, m, n) {
-    const S = CFG.mobScale;
-    // все размеры и смещения масштабируются от центра моба, ноги остаются на m.g
-    const B = (x, y, z, dx, dy, dz, top, side, edge) => box(c, P, m.x + (x - m.x) * S, m.y + (y - m.y) * S, m.g + (z - m.g) * S, dx * S, dy * S, dz * S, top, side, edge);
-    const alongX = m.face < 2, dir = m.face === 0 || m.face === 2 ? 1 : -1;
-    const bob = m.state === 'walk' ? Math.abs(Math.sin(time * (m.kind === 'chicken' ? 14 : 8) + m.phase)) * 0.05 : 0;
-    const z = m.g + bob;
-    const sheep = m.kind === 'sheep';
-    const len = sheep ? 0.8 : 0.34, wid = sheep ? 0.5 : 0.26, hgt = sheep ? 0.42 : 0.24, leg = sheep ? 0.28 : 0.12;
-    const bx = m.x - (alongX ? len : wid) / 2, by = m.y - (alongX ? wid : len) / 2;
-    const bw = alongX ? len : wid, bd = alongX ? wid : len;
-    const body = mix(sheep ? 'wool' : 'feather', n), skin = mix(sheep ? 'skin' : 'beak', n);
-    const legs = [[0.08, 0.08], [bw - 0.2, 0.08], [0.08, bd - 0.2], [bw - 0.2, bd - 0.2]];
-    for (const [lx, ly] of legs) B(bx + lx, by + ly, m.g, 0.12, 0.12, leg, skin, skin, null);
-    const hs = sheep ? 0.32 : 0.16;
-    const hx = m.x + (alongX ? dir * (len / 2 + hs * 0.35) : 0) - hs / 2;
-    const hy = m.y + (alongX ? 0 : dir * (len / 2 + hs * 0.35)) - hs / 2;
-    const hz = z + (sheep ? (m.graze ? 0.12 : leg + hgt - 0.1) : leg + hgt - 0.02);
-    const head = () => {
-      B(hx, hy, hz, hs, hs, sheep ? hs : hs * 1.2, sheep ? skin : body, sheep ? skin : body, null);
-      if (!sheep) {
-        const bxk = hx + (alongX ? (dir > 0 ? hs : -0.06) : hs / 2 - 0.03), byk = hy + (alongX ? hs / 2 - 0.03 : (dir > 0 ? hs : -0.06));
-        B(bxk, byk, hz + 0.06, 0.06, 0.06, 0.05, skin, skin, null);
-        B(bxk, byk, hz - 0.02, 0.05, 0.05, 0.06, mix('wattle', n), mix('wattle', n), null);
-      }
-    };
-    if (dir < 0) head();
-    B(bx, by, z + leg, bw, bd, hgt, body, body, 'rgba(0,0,0,0.12)');
-    if (dir > 0) head();
-  }
 
   function glow(c, x, y, r, col, a) {
     const g = c.createRadialGradient(x, y, 0, x, y, r);
@@ -354,8 +364,7 @@
   function draw() {
     const w = world;
     if (!w || building) return;
-    // земля (день/ночь, закат, факел) собирается в отдельный кадр: из него же потом
-    // берутся блоки, стоящие перед мобами
+    // земля (день/ночь, градинг, закат, факел) собирается в отдельный кадр
     if (frameCv.width !== canvas.width || frameCv.height !== canvas.height) { frameCv.width = canvas.width; frameCv.height = canvas.height; }
     const ctx = frameCv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -407,25 +416,19 @@
     main.globalAlpha = 1;
     main.clearRect(0, 0, canvas.width, canvas.height);
     main.drawImage(frameCv, 0, 0);
-    drawScene(main, w, ox, oy, torchOn, R);
+    drawScene(main, w, ox, oy);
   }
 
-  function drawScene(ctx, w, ox, oy, torchOn, R) {
+  function drawScene(ctx, w, ox, oy) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const nightAt = (sx, sy) => {
-      if (!torchOn) return t;
-      const d = Math.hypot(sx + ox - ptr.x, sy + oy - ptr.y);
-      return t * (1 - clamp(1 - d / R, 0, 1) * 0.85);
-    };
-
     ctx.save();
     ctx.translate(ox, oy);
     const P = w.P, S = CFG.mobScale;
 
     // блики на воде
-    const wl = t < 0.5 ? '255,255,255' : '170,190,240';
-    const wa = lerp(0.55, 0.22, t);
-    ctx.lineWidth = 1.5;
+    const wl = t < 0.5 ? '245,250,255' : '180,205,255';
+    const wa = lerp(0.6, 0.26, t);
+    ctx.lineWidth = Math.max(1.5, w.U * 0.22);
     const vx = w.U * 0.28, vy = w.U * 0.14;
     for (const [x, y, ph] of w.water) {
       const a = Math.sin(time * 1.1 + ph * 40);
@@ -449,11 +452,6 @@
     const cs = Math.max(2, w.U * 0.16 * S);
     for (let i = 0; i < 3; i++) fire(w.camp[0] + (i - 1) * cs * 1.1, w.camp[1], cs, i);
 
-    // мобы — по глубине
-    const actors = w.mobs.map((m) => ({ k: m.x + m.y, x: m.x, y: m.y, z: m.g, f: () => drawMob(ctx, w.Pg, m, nightAt(...w.Pg(m.x, m.y, m.g))) }));
-    // по глубине; блоки перед каждым кладём обратно поверх: курица за деревом прячется за ним
-    actors.sort((a, b) => a.k - b.k).forEach((a) => { a.f(); coverActor(ctx, w, a.x, a.y, a.z); });
-
     // дым костра: серые квадраты поднимаются высоко и тают, как в Minecraft
     const sc = lerp(150, 70, t);
     for (const p of w.smoke) {
@@ -476,39 +474,10 @@
     if (w.clouds.length) {
       ctx.translate(par.x * 1.5, par.y * 1.5);
       const C = CFG.cloudCell, top = mix('wool', t * 0.9), alpha = lerp(0.5, 0.18, t);
-      for (const cl of w.clouds) for (const [dx, dy] of cl.shape) box(ctx, P, cl.x + dx * C, cl.y + dy * C, CFG.cloudZ, C, C, C * 0.6, top, top, null, alpha);
+      for (const cl of w.clouds) for (const [dx, dy] of cl.shape) box(ctx, P, cl.x + dx * C, cl.y + dy * C, CFG.cloudZ, C, C, C * 0.6, top, top, null, alpha, t > 0.5);
     }
     ctx.restore();
 
-  }
-
-  // Перекрыть моба тем, что стоит перед ним: обводим силуэты блоков/столбов спереди
-  // и копируем эти места из готового кадра земли (там уже день/ночь, закат и факел).
-  function coverActor(ctx, w, mx, my, mz) {
-    const P = w.Pg, fx = Math.floor(mx), fy = Math.floor(my);
-    let any = false;
-    ctx.beginPath();
-    for (let i = 0; i <= 10; i++) for (let j = 0; j <= 10; j++) {
-      if (!i && !j) continue;
-      const list = w.solidsAt(fx + i, fy + j);
-      const x = fx + i, y = fy + j;
-      for (const [z0, z1] of list) {
-        if (z1 <= mz + 0.01) continue;
-        // экранная высота: столб на расстоянии d ниже на d*U/2 — низкие дальние моба не заденут
-        if (z1 - mz < (i + j) / 2 - 1.2) continue;
-        const pts = [P(x, y, z1), P(x + 1, y, z1), P(x + 1, y, z0), P(x + 1, y + 1, z0), P(x, y + 1, z0), P(x, y + 1, z1)];
-        ctx.moveTo(pts[0][0], pts[0][1]);
-        for (let k = 1; k < 6; k++) ctx.lineTo(pts[k][0], pts[k][1]);
-        ctx.closePath();
-        any = true;
-      }
-    }
-    if (!any) return;
-    ctx.save();
-    ctx.clip();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(frameCv, 0, 0);
-    ctx.restore();
   }
 
   // Пиксельные текстуры 8x8, как у солнца и луны в игре
@@ -604,7 +573,6 @@
     }
     par.x += (par.tx - par.x) * 0.06;
     par.y += (par.ty - par.y) * 0.06;
-    for (const m of w.mobs) updateMob(m, dt);
     w.smokeT -= dt;
     if (w.smokeT <= 0 && w.smoke.length < 70) {
       w.smokeT = 0.14;
