@@ -50,7 +50,7 @@ export function MinecraftSection() {
     } catch (err) {
       if ((err as Error)?.message === NEED_NICK_PIN) {
         setNeedNickPin(true);
-        setError('Ник уже занят. Если он ваш, введите и PIN от него');
+        setError(`Ник ${nick.trim()} уже есть. Введите PIN, который задавали при его регистрации, и нажмите «Подключить» ещё раз`);
       } else setError(friendlyError(err, 'Не удалось подключить ник'));
       setBusy(false);
     }
@@ -130,8 +130,9 @@ export function MinecraftSection() {
           />
           {needNickPin && (
             <Field
-              label="PIN от ника"
+              label={`PIN от ника ${nick.trim()}`}
               name="mc-oldpin"
+              autoFocus
               type="password"
               inputMode="numeric"
               pattern="[0-9]*"
