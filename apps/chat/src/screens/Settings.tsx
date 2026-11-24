@@ -10,7 +10,7 @@ import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
 import { switchToPin } from '../lib/switchToPin';
 import { getOldHistoryInfo, resetHistoryProtection, restoreWithOldSecret, type OldHistoryInfo } from '../lib/restoreOld';
-import { normalizePhone } from '../lib/phone';
+import { getBoundPhone, normalizePhone } from '../lib/phone';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
 import { PhoneSection } from './PhoneSection';
@@ -111,7 +111,19 @@ function AdminSection() {
 /** Вход по паролю → вход по номеру и PIN. Секретных фраз больше нет. */
 function SwitchToPinSection() {
   const client = useClient();
+  const { logout } = useMatrix();
   const [state] = useSecurityState(client);
+  // номер уже привязан (переход сделан на другом устройстве или админом на сервере): здесь только перевойти
+  const [boundMask, setBoundMask] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    const token = client.getAccessToken();
+    if (!token) return setBoundMask(null);
+    let alive = true;
+    getBoundPhone(token).then((m) => alive && setBoundMask(m), () => alive && setBoundMask(null));
+    return () => {
+      alive = false;
+    };
+  }, [client]);
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
@@ -149,6 +161,18 @@ function SwitchToPinSection() {
       setBusy(false);
     }
   };
+
+  if (boundMask) {
+    return (
+      <Card solid className="settings-card">
+        <h2 className="settings-card__title"><Icon name="shield" size={18} /> Вход по номеру и PIN</h2>
+        <p className="settings-card__text">
+          Вход по номеру {boundMask} и PIN уже настроен, пароль больше не действует. Выйдите и войдите по номеру и PIN.
+        </p>
+        <Button variant="primary" onClick={() => void logout()}>Выйти и войти по номеру</Button>
+      </Card>
+    );
+  }
 
   const lost = state === 'needs-unlock';
   const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
