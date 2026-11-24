@@ -885,3 +885,47 @@ a { color: inherit; }
 .onboarding p, .onboarding ol { margin: 0; color: var(--rl-color-text-muted); line-height: var(--rl-leading-relaxed); }
 .onboarding ol { padding-left: 1.25rem; }
 [tabindex="-1"]:focus { outline: none; }
+
+/* «Семья | Minecraft» — у кого оба мира */
+.realm-switch {
+  display: flex;
+  gap: var(--rl-space-1);
+  padding: var(--rl-space-2) var(--rl-space-3);
+  border-bottom: 1px solid var(--rl-color-border);
+  background: var(--chat-bar);
+  flex: none;
+}
+.realm-switch__tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 var(--rl-space-3);
+  border: 1px solid var(--rl-color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--rl-color-text-muted);
+  font: inherit;
+  font-weight: var(--rl-weight-semibold);
+  cursor: pointer;
+}
+.realm-switch__tab.is-active {
+  color: var(--rl-color-text);
+  border-color: rgb(var(--rl-red-500-rgb) / 0.8);
+  background: rgb(var(--rl-red-500-rgb) / 0.16);
+  cursor: default;
+}
+.realm-switch__badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--rl-color-accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: var(--rl-weight-black);
+  line-height: 20px;
+}
+@media (hover: hover) { .realm-switch__tab:not(.is-active):hover { color: var(--rl-color-text); } }

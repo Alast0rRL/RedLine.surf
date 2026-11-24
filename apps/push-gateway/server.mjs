@@ -77,6 +77,11 @@ const mcApi = MC_HS
       registrationToken: process.env.MC_REGISTRATION_TOKEN || '',
     })
   : null;
+// семья и Minecraft видят записи друг друга только для связки аккаунтов одного человека
+if (mcApi) {
+  phoneApi.setPeer(mcApi.store);
+  mcApi.setPeer(phoneApi.store);
+}
 const mcGuard = MC_HS ? createLoginGuard({ homeserverUrl: MC_HS, log, prefix: '/mc' }) : null;
 
 function endpointAllowed(endpoint) {
@@ -89,7 +94,7 @@ function endpointAllowed(endpoint) {
 }
 
 /** Компактный payload (< 4 КБ). Содержимое шифрованных сообщений сервер не знает — их нет. */
-function buildPayload(n) {
+function buildPayload(n, realm) {
   const content = n.content && typeof n.content === 'object' ? n.content : {};
   const body = typeof content.body === 'string' ? content.body.slice(0, 300) : undefined;
   return JSON.stringify({
@@ -104,13 +109,14 @@ function buildPayload(n) {
     body,
     unread: n.counts?.unread,
     prio: n.prio,
+    // мир аккаунта (из data pusher'а): по клику открыть нужный сервер
+    realm: realm === 'mc' ? 'mc' : undefined,
   });
 }
 
 async function notify(notification) {
   const rejected = [];
   const devices = Array.isArray(notification.devices) ? notification.devices : [];
-  const payload = buildPayload(notification);
 
   await Promise.all(
     devices.map(async (d) => {
@@ -126,7 +132,7 @@ async function notify(notification) {
         return;
       }
       try {
-        await webpush.sendNotification({ endpoint, keys: { p256dh: d.pushkey, auth } }, payload, {
+        await webpush.sendNotification({ endpoint, keys: { p256dh: d.pushkey, auth } }, buildPayload(notification, d.data?.realm), {
           TTL,
           urgency: notification.prio === 'low' ? 'normal' : 'high',
           topic: undefined,

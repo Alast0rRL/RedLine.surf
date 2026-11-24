@@ -9,6 +9,7 @@ import { getClearedTs } from '../lib/clear';
 import { formatListTime, previewText } from '../lib/events';
 import { sweepExpiredInvites } from '../lib/invites';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { RealmSwitch } from '../components/RealmSwitch';
 import { isPinUser } from '../lib/pin';
 import { isBotUser } from '../bots/registry';
 import { leaveRoom, setRoomMuted, setRoomPinned } from '../lib/rooms';
@@ -275,6 +276,7 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
           </Button>
         </span>
       </header>
+      <RealmSwitch />
 
       {showRecovery && !recoveryHidden && (
         <div className="banner banner--action banner--compact">

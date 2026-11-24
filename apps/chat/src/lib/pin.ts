@@ -12,6 +12,7 @@ import { changePassword, checkInvite, registerWithInvite, slugUsername } from '.
 import { loginWithPassword } from './matrix';
 import { getSecurityState, KEY_MISMATCH, setupRecovery, unlockWithRecovery } from './security';
 import { clearSession, type StoredSession } from './session';
+import { getRealm, type Realm } from '../config';
 
 export const PIN_MIN = 4;
 export const PIN_MAX = 6;
@@ -28,7 +29,8 @@ export interface PersonalLink {
 
 export type LinkState = 'create' | 'enter' | 'invalid';
 
-const SAVED_LINK = 'rl.link';
+/** Ссылка (ключ) у каждого мира своя: семья — прежний ключ, Minecraft — с суффиксом. */
+const savedLinkKey = (r: Realm) => (r === 'mc' ? 'rl.link.mc' : 'rl.link');
 /** Логин в личной ссылке: раньше всегда с хвостом `.<12 hex>`, теперь просто `ded`, `ded2`. */
 const USER_RE = /^[a-z0-9][a-z0-9._=-]{0,31}$/;
 /** Старые логины со случайным хвостом: по нему одному видно, что человек входит по PIN. */
@@ -56,10 +58,11 @@ export function rememberPinUsers(users: string[]): void {
   for (const u of users) knownPinUsers.add(u);
 }
 
-let savedLinkUser: string | null | undefined;
+const savedLinkUser = new Map<Realm, string | null>();
 function savedUser(): string | null {
-  if (savedLinkUser === undefined) savedLinkUser = loadLink()?.user ?? null;
-  return savedLinkUser;
+  const r = getRealm();
+  if (!savedLinkUser.has(r)) savedLinkUser.set(r, loadLink(r)?.user ?? null);
+  return savedLinkUser.get(r) ?? null;
 }
 
 /**
@@ -101,28 +104,28 @@ export function parseLink(input: string): PersonalLink | null {
 }
 
 /** iOS-приложение с экрана «Домой» открывается без hash, поэтому ссылку помним на устройстве. */
-export function loadLink(): PersonalLink | null {
+export function loadLink(r: Realm = getRealm()): PersonalLink | null {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(SAVED_LINK) ?? 'null');
+    const value: unknown = JSON.parse(localStorage.getItem(savedLinkKey(r)) ?? 'null');
     return isPersonalLink(value) ? value : null;
   } catch {
     return null;
   }
 }
 
-export function saveLink({ user, key, token, name }: PersonalLink): void {
+export function saveLink({ user, key, token, name }: PersonalLink, r: Realm = getRealm()): void {
   try {
-    localStorage.setItem(SAVED_LINK, JSON.stringify({ user, key, token, name }));
-    savedLinkUser = user;
+    localStorage.setItem(savedLinkKey(r), JSON.stringify({ user, key, token, name }));
+    savedLinkUser.set(r, user);
   } catch {
     console.warn('Не удалось запомнить ссылку');
   }
 }
 
-export function forgetLink(): void {
+export function forgetLink(r: Realm = getRealm()): void {
   try {
-    localStorage.removeItem(SAVED_LINK);
-    savedLinkUser = null;
+    localStorage.removeItem(savedLinkKey(r));
+    savedLinkUser.set(r, null);
   } catch {
     console.warn('Не удалось забыть ссылку');
   }
@@ -189,9 +192,9 @@ function isForbidden(e: unknown): boolean {
   return (e as { errcode?: string } | null)?.errcode === 'M_FORBIDDEN';
 }
 
-export async function loginWithPin(baseUrl: string, link: PersonalLink, pin: string): Promise<PinLogin> {
+export async function loginWithPin(baseUrl: string, link: PersonalLink, pin: string, realm: Realm = getRealm()): Promise<PinLogin> {
   try {
-    return await loginWithPinInner(baseUrl, link, pin);
+    return await loginWithPinInner(baseUrl, link, pin, realm);
   } catch (e) {
     // удалённый аккаунт — не неверный PIN
     if (isDeactivated(e)) throw new Error(ACCOUNT_DELETED);
@@ -199,7 +202,7 @@ export async function loginWithPin(baseUrl: string, link: PersonalLink, pin: str
   }
 }
 
-async function loginWithPinInner(baseUrl: string, link: PersonalLink, pin: string): Promise<PinLogin> {
+async function loginWithPinInner(baseUrl: string, link: PersonalLink, pin: string, realm: Realm): Promise<PinLogin> {
   const password = await derive(link, 'pin', pin);
   const state = await linkState(baseUrl, link);
   if (state === 'invalid') throw new Error('Ссылка больше не действует. Попросите новую');
@@ -209,7 +212,7 @@ async function loginWithPinInner(baseUrl: string, link: PersonalLink, pin: strin
   }
 
   try {
-    return { session: await loginWithPassword(baseUrl, link.user, password), created: false, password };
+    return { session: await loginWithPassword(baseUrl, link.user, password, realm), created: false, password };
   } catch (e) {
     if (!isForbidden(e)) throw e;
   }
@@ -218,7 +221,7 @@ async function loginWithPinInner(baseUrl: string, link: PersonalLink, pin: strin
   const temporary = await resetSecret(link);
   let session: StoredSession;
   try {
-    session = await loginWithPassword(baseUrl, link.user, temporary);
+    session = await loginWithPassword(baseUrl, link.user, temporary, realm);
   } catch (e) {
     if (isForbidden(e)) throw new Error('Неверный PIN');
     throw e;
@@ -228,7 +231,7 @@ async function loginWithPinInner(baseUrl: string, link: PersonalLink, pin: strin
     await changePassword(client, temporary, password, false);
   } catch (e) {
     await client.logout(true).catch(() => console.warn('Не удалось закрыть временный сеанс'));
-    clearSession();
+    clearSession(realm);
     throw e;
   }
   return { session, created: false, password };

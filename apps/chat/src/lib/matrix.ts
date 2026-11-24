@@ -7,10 +7,12 @@ import {
   type SecretStorage,
 } from 'matrix-js-sdk';
 import { clearMediaCache } from './media';
-import { clearSession, saveSession, type StoredSession } from './session';
+import { clearSession, loadSession, saveSession, type StoredSession } from './session';
+import { getRealm, otherRealm, type Realm } from '../config';
 
-const SYNC_DB = 'rl-sync';
-const CRYPTO_DB_PREFIX = 'rl-crypto';
+/** Хранилища у каждого мира свои: два аккаунта одного человека не делят ключи и кеш. */
+const syncDb = (r: Realm) => (r === 'mc' ? 'rl-sync-mc' : 'rl-sync');
+const cryptoPrefix = (r: Realm) => (r === 'mc' ? 'rl-crypto-mc' : 'rl-crypto');
 
 /**
  * Ключи хранилища секретов, которые пользователь ввёл (ключ восстановления)
@@ -64,7 +66,7 @@ export function deviceName(): string {
 }
 
 /** Логин по паролю. `username` — «mari», «@mari:server» или «mari:server». */
-export async function loginWithPassword(baseUrl: string, username: string, password: string): Promise<StoredSession> {
+export async function loginWithPassword(baseUrl: string, username: string, password: string, realm: Realm = getRealm()): Promise<StoredSession> {
   const tmp = createClient({ baseUrl });
   const user = username.trim().replace(/^@/, '');
   const res = await tmp.loginRequest({
@@ -79,16 +81,17 @@ export async function loginWithPassword(baseUrl: string, username: string, passw
     deviceId: res.device_id,
     accessToken: res.access_token,
   };
-  saveSession(session);
+  saveSession(session, realm);
   return session;
 }
 
 /** Создаёт клиент, поднимает хранилища и E2E и запускает синхронизацию. */
 export async function startMatrix(session: StoredSession, retried = false): Promise<MatrixClient> {
   await pendingWipe;
+  const realm = getRealm();
   let store: IndexedDBStore | MemoryStore;
   try {
-    store = new IndexedDBStore({ indexedDB: window.indexedDB, dbName: SYNC_DB, localStorage: window.localStorage });
+    store = new IndexedDBStore({ indexedDB: window.indexedDB, dbName: syncDb(realm), localStorage: window.localStorage });
     await store.startup();
   } catch (e) {
     // приватный режим Firefox и т.п. — работаем без кеша синхронизации
@@ -107,13 +110,13 @@ export async function startMatrix(session: StoredSession, retried = false): Prom
   });
 
   try {
-    await client.initRustCrypto({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX });
+    await client.initRustCrypto({ cryptoDatabasePrefix: cryptoPrefix(realm) });
   } catch (e) {
     if (retried || !isForeignCryptoStore(e)) throw e;
     // Чужие ключи нашему сеансу не нужны: его собственных в браузере всё равно нет
     console.warn('crypto store belongs to another session, wiping it', e);
     client.stopClient();
-    await withTimeout(client.clearStores({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX }), 10_000);
+    await withTimeout(client.clearStores({ cryptoDatabasePrefix: cryptoPrefix(realm) }), 10_000);
     return startMatrix(session, true);
   }
 
@@ -144,21 +147,25 @@ export async function logout(client: MatrixClient | null): Promise<void> {
 /** Локальная очистка — после выхода или если сервер отозвал токен. */
 export function wipeLocalData(client: MatrixClient | null): Promise<void> {
   // сразу, а не в очереди: иначе сотрётся сессия входа, начатого во время очистки
-  clearSession();
+  const realm = getRealm();
+  clearSession(realm);
+  // подписка браузера одна на оба мира: пока второй мир открыт, она ему нужна
+  const unsubscribe = !loadSession(otherRealm(realm));
   secretStorageKeys.clear();
-  const wipe = pendingWipe.then(() => wipeStores(client));
+  const wipe = pendingWipe.then(() => wipeStores(client, realm, unsubscribe));
   pendingWipe = wipe.catch(() => undefined);
   return wipe;
 }
 
-async function wipeStores(client: MatrixClient | null): Promise<void> {
+async function wipeStores(client: MatrixClient | null, realm: Realm, unsubscribe: boolean): Promise<void> {
   await clearMediaCache();
   try {
     // deleteDatabase ждёт закрытия всех соединений: без предела зависнет вход
-    if (client) await withTimeout(client.clearStores({ cryptoDatabasePrefix: CRYPTO_DB_PREFIX }), 10_000);
+    if (client) await withTimeout(client.clearStores({ cryptoDatabasePrefix: cryptoPrefix(realm) }), 10_000);
   } catch (e) {
     console.warn('clearStores failed', e);
   }
+  if (!unsubscribe) return;
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
     const sub = await reg?.pushManager.getSubscription();
@@ -166,4 +173,31 @@ async function wipeStores(client: MatrixClient | null): Promise<void> {
   } catch {
     /* нет SW — нечего чистить */
   }
+}
+
+function deleteDb(name: string): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.deleteDatabase(name);
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/** Выход из неактивного мира: его клиент не запущен, поэтому сеанс закрываем по токену и стираем базы по именам. */
+export async function logoutStored(r: Realm): Promise<void> {
+  const s = loadSession(r);
+  clearSession(r);
+  if (s) {
+    await createClient({ baseUrl: s.baseUrl, accessToken: s.accessToken, userId: s.userId, deviceId: s.deviceId })
+      .logout(true)
+      .catch(() => console.warn('Не удалось закрыть сеанс второго мира'));
+  }
+  await Promise.all([
+    deleteDb(`matrix-js-sdk:${syncDb(r)}`),
+    deleteDb(`${cryptoPrefix(r)}::matrix-sdk-crypto`),
+    deleteDb(`${cryptoPrefix(r)}::matrix-sdk-crypto-meta`),
+  ]);
 }

@@ -53,10 +53,20 @@ export function apiBase(): string {
   return getRealm() === 'mc' ? '/mc' : '';
 }
 
-function current(): AppConfig {
+/** Второй мир этого человека (для переключателя «Семья | Minecraft»). */
+export function otherRealm(r: Realm = getRealm()): Realm {
+  return r === 'mc' ? 'family' : 'mc';
+}
+
+/** Настройки конкретного мира (не обязательно текущего). */
+export function realmConfig(r: Realm): AppConfig {
   if (!base) throw new Error('config not loaded');
-  if (getRealm() === 'mc' && mc) return { ...base, ...mc, botUsers: [] };
+  if (r === 'mc' && mc) return { ...base, ...mc, botUsers: [] };
   return base;
+}
+
+function current(): AppConfig {
+  return realmConfig(getRealm());
 }
 
 export async function loadConfig(): Promise<AppConfig> {

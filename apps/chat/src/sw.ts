@@ -16,6 +16,8 @@ self.addEventListener('message', (e) => {
 
 /* ---------- push ---------- */
 interface PushPayload {
+  /** мир аккаунта: 'mc' — сервер Minecraft, иначе семья */
+  realm?: string;
   event_id?: string;
   room_id?: string;
   type?: string;
@@ -92,7 +94,7 @@ self.addEventListener('push', (event) => {
         tag: p.room_id,
         icon: '/icons/icon-192.png',
         badge: '/icons/badge-96.png',
-        data: { room_id: p.room_id, count, ts: Date.now() },
+        data: { room_id: p.room_id, realm: p.realm === 'mc' ? 'mc' : 'family', count, ts: Date.now() },
         // renotify есть в браузерах, но не в типах TS
         ...({ renotify: true } as object),
       });
@@ -103,6 +105,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const roomId: string | undefined = event.notification.data?.room_id;
+  const realm: string = event.notification.data?.realm === 'mc' ? 'mc' : 'family';
   event.waitUntil(
     (async () => {
       const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -112,13 +115,13 @@ self.addEventListener('notificationclick', (event) => {
       if (win) {
         try {
           await win.focus();
-          if (roomId) win.postMessage({ type: 'open-room', roomId });
+          if (roomId) win.postMessage({ type: 'open-room', roomId, realm });
           return;
         } catch {
           /* окно не удалось поднять — откроем новое */
         }
       }
-      await self.clients.openWindow(roomId ? `/#/room/${encodeURIComponent(roomId)}` : '/');
+      await self.clients.openWindow(`/?realm=${realm}${roomId ? `#/room/${encodeURIComponent(roomId)}` : ''}`);
     })(),
   );
 });

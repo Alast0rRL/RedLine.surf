@@ -1,5 +1,6 @@
 import type { MatrixClient } from 'matrix-js-sdk';
-import { getConfig } from '../config';
+import { getConfig, getRealm, otherRealm, type Realm } from '../config';
+import { loadSession } from './session';
 
 /** Должен совпадать с PUSH_APP_ID push-шлюза. */
 export const PUSH_APP_ID = 'surf.redline.chat.web';
@@ -54,6 +55,12 @@ export async function enablePush(client: MatrixClient): Promise<PushState> {
   }
   sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
 
+  await registerPusher(client, sub, pushGatewayUrl, getRealm());
+  return 'on';
+}
+
+/** pusher этого аккаунта на его сервере; realm уходит в push, чтобы по клику открыть нужный мир. */
+async function registerPusher(client: MatrixClient, sub: PushSubscription, pushGatewayUrl: string, realm: Realm): Promise<void> {
   const json = sub.toJSON();
   const p256dh = json.keys?.p256dh;
   const auth = json.keys?.auth;
@@ -66,10 +73,22 @@ export async function enablePush(client: MatrixClient): Promise<PushState> {
     device_display_name: client.getDeviceId() ?? 'web',
     pushkey: p256dh,
     lang: 'ru',
-    data: { url: pushGatewayUrl, endpoint: json.endpoint, auth } as never,
+    data: { url: pushGatewayUrl, endpoint: json.endpoint, auth, ...(realm === 'mc' ? { realm: 'mc' } : {}) } as never,
     append: false,
   });
-  return 'on';
+}
+
+/**
+ * Уведомления уже включены в браузере — тихо регистрирует pusher и для этого аккаунта
+ * (второй мир того же человека). Без запроса разрешения.
+ */
+export async function ensurePusher(client: MatrixClient, realm: Realm): Promise<void> {
+  if (!pushSupported() || Notification.permission !== 'granted') return;
+  const { vapidPublicKey, pushGatewayUrl } = getConfig();
+  if (!vapidPublicKey || !pushGatewayUrl) return;
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = await reg?.pushManager.getSubscription();
+  if (sub) await registerPusher(client, sub, pushGatewayUrl, realm);
 }
 
 export async function disablePush(client: MatrixClient): Promise<PushState> {
@@ -83,6 +102,7 @@ export async function disablePush(client: MatrixClient): Promise<PushState> {
       console.warn('pusher removal failed', e);
     }
   }
-  await sub?.unsubscribe();
+  // подписка общая с другим миром: пока он открыт, отписываем только этот аккаунт
+  if (!loadSession(otherRealm())) await sub?.unsubscribe();
   return getPushState();
 }

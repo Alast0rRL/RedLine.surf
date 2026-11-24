@@ -203,9 +203,12 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
       return send(res, 409, { error: byLogin ? 'Этот ник уже занят' : 'Этот номер уже привязан к другому человеку' });
     }
     const old = findByUser(user);
+    const oldRec = old ? db[old] : undefined;
     if (old && old !== key) delete db[old];
     const mask = maskOf(phone, body);
+    const keep = pickLinks(db[key] ?? (old ? oldRec : undefined));
     db[key] = {
+      ...keep,
       user,
       mask,
       check: sha256hex('check\n' + body.proof),
@@ -219,8 +222,54 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     send(res, 200, { mask });
   }
 
+  /** Связь семья ↔ Minecraft: у записи семьи `mc` (ник) и `mcAllowed`, у записи игрока `family` (логин). */
+  const pickLinks = (rec) => {
+    const out = {};
+    if (rec?.mc) out.mc = rec.mc;
+    if (rec?.mcAllowed) out.mcAllowed = true;
+    if (rec?.family) out.family = rec.family;
+    return out;
+  };
+  const linkedOf = (rec) =>
+    rec.mc ? { linked: { realm: 'mc', user: rec.mc } } : rec.family ? { linked: { realm: 'family', user: rec.family } } : {};
+  /** Записи другого мира (задаётся из server.mjs: семья видит базу Minecraft). */
+  let peer = null;
+  function unlinkRecord(rec) {
+    if (!rec) return;
+    if (rec.mc && peer) peer.clearFamily(rec.mc, rec.user);
+    if (rec.family && peer) peer.clearMc(rec.family, rec.user);
+    delete rec.mc;
+    delete rec.family;
+  }
+
   /** Блокировки входа по номеру: в памяти, по ключу номера (есть он в базе или нет). */
   const locks = new Map();
+
+  /** Проверка proof с тем же счётчиком ошибок, что у входа. 'locked' | null | запись. */
+  function checkProof(id, proof, lockMap = locks, lockKey = recordKey(id)) {
+    const key = recordKey(id);
+    const rec = db[key];
+    const now = Date.now();
+    const st = lockMap.get(lockKey);
+    // кривой запрос — не попытка PIN
+    if (typeof proof !== 'string' || !PROOF_RE.test(proof)) return st && st.until > now ? 'locked' : null;
+    if (st && st.until > now) return 'locked';
+    const ok = safeEqualHex(sha256hex('check\n' + proof), rec ? rec.check : dummyCheck);
+    if (rec && ok) {
+      lockMap.delete(lockKey);
+      return rec;
+    }
+    const next = st && st.until <= now && st.until !== 0 ? { fails: 0, until: 0 } : (st ?? { fails: 0, until: 0 });
+    next.fails += 1;
+    if (next.fails >= MAX_FAILS) {
+      next.fails = 0;
+      next.until = now + LOCK_MS;
+    }
+    lockMap.set(lockKey, next);
+    return next.until > now ? 'locked' : null;
+  }
+  /** Подбор PIN ника через связку считается отдельно (по тому, кто связывает): вход игрока им не блокируется. */
+  const linkLocks = new Map();
 
   async function login(req, res) {
     if (!ipAllowed(clientIp(req))) {
@@ -266,14 +315,21 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
       rec.fails = 0;
       save();
     }
-    send(res, 200, payload);
+    send(res, 200, { ...payload, ...linkedOf(rec) });
   }
 
   async function status(req, res) {
     const user = await whoami(req);
     if (!user) return send(res, 401, { error: 'Нужен вход' });
     const k = findByUser(user);
-    if (req.method === 'GET') return send(res, 200, { mask: k ? db[k].mask : null });
+    if (req.method === 'GET') {
+      const rec = k ? db[k] : null;
+      return send(res, 200, {
+        mask: rec ? rec.mask : null,
+        ...(byLogin ? { family: rec?.family ?? null } : { mc: rec?.mc ?? null, mcAllowed: !!rec?.mcAllowed || admins.has(user) }),
+      });
+    }
+    if (k) unlinkRecord(db[k]);
     if (k) {
       delete db[k];
       save();
@@ -375,6 +431,7 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     if (!USER_RE.test(target)) return send(res, 400, { error: 'Неверный запрос' });
     const k = findByUser(target);
     if (k) {
+      unlinkRecord(db[k]);
       delete db[k];
       save();
       log('info', 'phone removed by admin');
@@ -382,8 +439,72 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
     send(res, 200, { removed: !!k });
   }
 
+  /**
+   * Семья: подключить ник Minecraft к своему аккаунту. Ник доказывается старым proof, дальше запись
+   * игрока переписывается под ключ и PIN семьи (пароль Matrix клиент уже сменил сам).
+   */
+  async function link(req, res) {
+    if (byLogin || !peer) return send(res, 404, { error: 'not found' });
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    const fk = findByUser(caller);
+    if (!fk) return send(res, 409, { error: 'Сначала привяжите номер телефона' });
+    const fam = db[fk];
+    if (req.method === 'DELETE') {
+      unlinkRecord(fam);
+      save();
+      log('info', 'mc unlinked');
+      return send(res, 200, { mc: null });
+    }
+    if (!fam.mcAllowed && !admins.has(caller)) return send(res, 403, { error: 'Minecraft вам не открыт' });
+    if (!ipAllowed(clientIp(req))) return send(res, 429, { error: 'Слишком много попыток, попробуйте через 15 минут' });
+    const body = await readBody(req);
+    const login = normalizeLogin(body.login);
+    if (!login) return send(res, 400, { error: 'Ник: латиница, цифры и _, от 3 до 16 символов' });
+    if (typeof body.proof !== 'string' || !PROOF_RE.test(body.proof)) return send(res, 400, { error: 'Неверный запрос' });
+    if (typeof body.key !== 'string' || !KEY_RE.test(body.key)) return send(res, 400, { error: 'Неверный запрос' });
+    // за время await запись могла смениться (перепривязка номера)
+    const fk2 = findByUser(caller);
+    if (!fk2) return send(res, 409, { error: 'Сначала привяжите номер телефона' });
+    const fam2 = db[fk2];
+    const r = peer.relink(login, body.oldProof, body.proof, body.key, caller);
+    if (r === 'locked') return send(res, 429, { error: 'Слишком много попыток, попробуйте через 15 минут' });
+    if (r === 'taken') return send(res, 409, { error: 'Этот ник уже связан с другим человеком' });
+    if (r !== 'ok') return send(res, 401, { error: 'Неверный ник или PIN' });
+    if (fam2.mc && fam2.mc !== login) peer.clearFamily(fam2.mc, caller);
+    fam2.mc = login;
+    save();
+    log('info', 'mc linked');
+    send(res, 200, { mc: login });
+  }
+
+  /** Админ: роли людей (Minecraft открыт или нет) и их ники. */
+  async function roles(req, res) {
+    if (byLogin) return send(res, 404, { error: 'not found' });
+    const caller = await whoami(req);
+    if (!caller) return send(res, 401, { error: 'Нужен вход' });
+    if (!admins.has(caller)) return send(res, 403, { error: 'Нет прав' });
+    if (req.method === 'GET') {
+      return send(res, 200, {
+        users: Object.values(db).map((r) => ({ user: r.user, mc: r.mc ?? null, mcAllowed: !!r.mcAllowed || admins.has(r.user) })),
+      });
+    }
+    const body = await readBody(req);
+    const target = typeof body.user === 'string' ? body.user.replace(/^@/, '').split(':')[0] : '';
+    if (!USER_RE.test(target) || typeof body.mc !== 'boolean') return send(res, 400, { error: 'Неверный запрос' });
+    const k = findByUser(target);
+    if (!k) return send(res, 404, { error: 'У человека нет входа по номеру' });
+    if (body.mc) db[k].mcAllowed = true;
+    else {
+      delete db[k].mcAllowed;
+      unlinkRecord(db[k]);
+    }
+    save();
+    send(res, 200, { user: target, mc: db[k].mc ?? null, mcAllowed: !!db[k].mcAllowed });
+  }
+
   /** true — маршрут обработан. */
-  return async function handle(req, res, url) {
+  async function handle(req, res, url) {
     if (!url.pathname.startsWith(prefix)) return false;
     const p = url.pathname.slice(prefix.length);
     try {
@@ -391,6 +512,8 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
       else if (p === 'bind' && (req.method === 'GET' || req.method === 'DELETE')) await status(req, res);
       else if (p === 'login' && req.method === 'POST') await login(req, res);
       else if (p === 'register' && req.method === 'POST') await register(req, res);
+      else if (p === 'link' && (req.method === 'PUT' || req.method === 'DELETE')) await link(req, res);
+      else if (p === 'roles' && (req.method === 'GET' || req.method === 'PUT')) await roles(req, res);
       else if (p.startsWith('user/') && req.method === 'DELETE') {
         let mxid;
         try {
@@ -405,5 +528,44 @@ export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', pre
       if (!e.status) log('error', 'phone route failed', { err: String(e?.message).slice(0, 100) });
     }
     return true;
+  }
+
+  /** Доступ соседнего мира к записям (в одном процессе, по сети не виден). */
+  handle.store = {
+    /** Переписать запись игрока под новый ключ и proof, если старый proof верен. */
+    relink(login, oldProof, proof, key, familyUser) {
+      const rec = checkProof(login, oldProof, linkLocks, `${familyUser}\n${login}`);
+      if (rec === 'locked') return 'locked';
+      if (!rec) return 'wrong';
+      if (rec.family && rec.family !== familyUser) return 'taken';
+      const name = rec.mask || login;
+      db[recordKey(login)] = {
+        ...rec,
+        family: familyUser,
+        check: sha256hex('check\n' + proof),
+        blob: encryptBlob(proof, { user: rec.user, key, name }),
+        fails: 0,
+      };
+      save();
+      return 'ok';
+    },
+    clearFamily(login, familyUser) {
+      const k = findByUser(login);
+      if (k && db[k].family === familyUser) {
+        delete db[k].family;
+        save();
+      }
+    },
+    clearMc(familyUser, login) {
+      const k = findByUser(familyUser);
+      if (k && db[k].mc === login) {
+        delete db[k].mc;
+        save();
+      }
+    },
   };
+  handle.setPeer = (store) => {
+    peer = store;
+  };
+  return handle;
 }

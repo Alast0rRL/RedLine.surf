@@ -6,11 +6,14 @@ export interface StoredSession {
   accessToken: string;
 }
 
-const KEY = 'rl.session';
+import { getRealm, type Realm } from '../config';
 
-export function loadSession(): StoredSession | null {
+/** У каждого мира своя сессия: семья — прежний ключ, Minecraft — с суффиксом. */
+const key = (r: Realm) => (r === 'mc' ? 'rl.session.mc' : 'rl.session');
+
+export function loadSession(r: Realm = getRealm()): StoredSession | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key(r));
     if (!raw) return null;
     const s = JSON.parse(raw) as StoredSession;
     return s.accessToken && s.userId && s.deviceId && s.baseUrl ? s : null;
@@ -19,10 +22,10 @@ export function loadSession(): StoredSession | null {
   }
 }
 
-export function saveSession(s: StoredSession): void {
-  localStorage.setItem(KEY, JSON.stringify(s));
+export function saveSession(s: StoredSession, r: Realm = getRealm()): void {
+  localStorage.setItem(key(r), JSON.stringify(s));
 }
 
-export function clearSession(): void {
-  localStorage.removeItem(KEY);
+export function clearSession(r: Realm = getRealm()): void {
+  localStorage.removeItem(key(r));
 }

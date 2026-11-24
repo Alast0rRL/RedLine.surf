@@ -13,6 +13,8 @@ import { getBoundPhone, normalizePhone } from '../lib/phone';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
 import { PhoneSection } from './PhoneSection';
+import { MinecraftSection } from './MinecraftSection';
+import { getRealm } from '../config';
 
 const PUSH_TEXT: Record<PushState, string> = {
   unsupported: 'Этот браузер не умеет присылать уведомления. На iPhone сначала добавьте Redline на экран «Домой»',
@@ -430,7 +432,8 @@ export function Settings() {
         <AdminSection />
         <PushSection />
         <ThemeSection />
-        {pin && <PhoneSection />}
+        {pin && getRealm() === 'family' && <PhoneSection />}
+        {pin && getRealm() === 'family' && <MinecraftSection />}
         {!pin && (
           <>
             <SwitchToPinSection />

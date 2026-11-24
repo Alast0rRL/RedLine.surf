@@ -10,7 +10,8 @@ import { navigate } from '../hooks/useHashRoute';
 import { useClient } from '../state/MatrixContext';
 import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
 import { QrCode } from '../components/QrCode';
-import { adminUnbindPhone } from '../lib/phone';
+import { adminUnbindPhone, getRoles, setMcRole } from '../lib/phone';
+import { getRealm, hasMcRealm } from '../config';
 import { getFamilyRoomId, isInFamily, setInFamily } from '../lib/family';
 import '../styles/people.css';
 
@@ -162,6 +163,42 @@ export function People() {
         return rest;
       });
       setFamilyTick((n) => n + 1);
+    }
+  };
+
+  // роль «Minecraft» (только на сервере семьи): у кого открыт чат сервера и какой ник подключён
+  const family = getRealm() === 'family';
+  const [roles, setRoles] = useState<Map<string, { mc: string | null; mcAllowed: boolean }> | null>(null);
+  const [roleBusy, setRoleBusy] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const token = client.getAccessToken();
+    if (!family || !hasMcRealm() || !token) return;
+    let cancelled = false;
+    getRoles(token)
+      .then((r) => !cancelled && setRoles(r))
+      .catch(() => !cancelled && setRoles(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [client, family, retry]);
+  const localOf = (id: string) => id.replace(/^@/, '').split(':')[0];
+
+  const toggleMc = async (person: Person, value: boolean) => {
+    const token = client.getAccessToken();
+    const user = localOf(person.id);
+    if (!token || roleBusy[user]) return;
+    setRoleBusy((b) => ({ ...b, [user]: true }));
+    try {
+      const r = await setMcRole(token, user, value);
+      setRoles((m) => new Map(m ?? []).set(user, { mc: r.mc, mcAllowed: r.mcAllowed }));
+      toast(value ? 'Minecraft открыт: ник подключается в настройках' : 'Minecraft закрыт, ник отвязан');
+    } catch (e) {
+      toast(friendlyError(e, 'Не удалось изменить роль'), { variant: 'error' });
+    } finally {
+      setRoleBusy((b) => {
+        const { [user]: _drop, ...rest } = b;
+        return rest;
+      });
     }
   };
 
@@ -416,8 +453,25 @@ export function People() {
                         {bot && <span className="bot-tag">бот</span>}
                       </span>
                       {!pinUser && <span className="people-row__meta">{person.id}</span>}
+                      {roles?.get(localOf(person.id))?.mc && (
+                        <span className="people-row__meta">Minecraft: {roles.get(localOf(person.id))?.mc}</span>
+                      )}
                     </span>
-                    {!bot && (
+                    {!bot && family && !self && roles?.has(localOf(person.id)) && (
+                      <label className="family-toggle">
+                        {roleBusy[localOf(person.id)] && <span className="rl-spinner family-toggle__spin" aria-hidden="true" />}
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          aria-checked={!!roles.get(localOf(person.id))?.mcAllowed}
+                          checked={!!roles.get(localOf(person.id))?.mcAllowed}
+                          disabled={!!roleBusy[localOf(person.id)]}
+                          onChange={(e) => void toggleMc(person, e.target.checked)}
+                        />
+                        <span>Minecraft</span>
+                      </label>
+                    )}
+                    {!bot && family && (
                       self ? (
                         <span className="people-row__meta">Вы в семье</span>
                       ) : (

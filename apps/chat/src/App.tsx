@@ -6,7 +6,7 @@ import { Button, Card, Icon, Modal, RedLines } from './components/ui';
 import { isPinUser } from './lib/pin';
 import { ThemeToggle } from './components/ThemeToggle';
 import { McRegister } from './screens/McRegister';
-import { setRealm } from './config';
+import { getRealm, setRealm } from './config';
 import { loadLink } from './lib/pin';
 import { Splash } from './screens/Splash';
 import { Login } from './screens/Login';
@@ -117,18 +117,23 @@ function AppLines() {
 }
 
 export function App() {
-  const { status, error, progress, client } = useMatrix();
+  const { status, error, progress, client, switchRealm } = useMatrix();
   const route = useHashRoute();
   useEdgeSwipeBack();
 
   // клик по уведомлению: service worker просит открыть комнату
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
-      if (e.data?.type === 'open-room' && typeof e.data.roomId === 'string') navigate.room(e.data.roomId);
+      if (e.data?.type !== 'open-room' || typeof e.data.roomId !== 'string') return;
+      const roomId: string = e.data.roomId;
+      // уведомление из другого мира — сначала переключаемся
+      const r = e.data.realm === 'mc' ? 'mc' : 'family';
+      if (r !== getRealm()) void switchRealm(r).then(() => navigate.room(roomId));
+      else navigate.room(roomId);
     };
     navigator.serviceWorker?.addEventListener('message', onMessage);
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
-  }, []);
+  }, [switchRealm]);
 
   useEffect(() => {
     if (status !== 'ready') return;
