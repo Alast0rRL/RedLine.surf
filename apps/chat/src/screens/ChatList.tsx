@@ -10,7 +10,8 @@ import { formatListTime, previewText } from '../lib/events';
 import { sweepExpiredInvites } from '../lib/invites';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { RealmSwitch } from '../components/RealmSwitch';
-import { isPinUser } from '../lib/pin';
+import { isPinUser, repairWithPin } from '../lib/pin';
+import { RealmPin } from './RealmPin';
 import { isBotUser } from '../bots/registry';
 import { leaveRoom, setRoomMuted, setRoomPinned } from '../lib/rooms';
 import { Avatar, Button, Icon, toast } from '../components/ui';
@@ -195,7 +196,7 @@ function RowMenu({ menu, onClose, onToggle, onLeave }: { menu: MenuState; onClos
 
 export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const client = useClient();
-  const { logout } = useMatrix();
+  const { logout, realm } = useMatrix();
   const pin = isPinUser(client.getUserId());
   const { rooms, invites, totalUnread } = useRoomList(client);
   const [security, refreshSecurity] = useSecurityState(client);
@@ -204,6 +205,7 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
   const [query, setQuery] = useState('');
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [leaving, setLeaving] = useState<Room | null>(null);
+  const [repair, setRepair] = useState(false);
 
   const [hiddenUntil, setHiddenUntil] = useState(readRecoveryHidden);
   // показ баннера (условия не менялись): тихая разблокировка PIN — только при сбое, иначе по состоянию безопасности
@@ -277,13 +279,26 @@ export function ChatList({ activeRoomId }: { activeRoomId?: string }) {
         </span>
       </header>
       <RealmSwitch />
+      {repair && (
+        <RealmPin
+          realm={realm}
+          title="Открыть старые сообщения"
+          onClose={() => setRepair(false)}
+          onSubmit={async (p) => {
+            await repairWithPin(client, p);
+            setRepair(false);
+            unlock.retry();
+            toast('Готово');
+          }}
+        />
+      )}
 
       {showRecovery && !recoveryHidden && (
         <div className="banner banner--action banner--compact">
           <button
             type="button"
             className="banner__main"
-            onClick={() => (pin ? void logout() : navigate.settings())}
+            onClick={() => (pin ? (unlock.silent ? setRepair(true) : void logout()) : navigate.settings())}
           >
             <Icon name="key" size={18} />
             <span className="banner__text">{recoveryText}</span>

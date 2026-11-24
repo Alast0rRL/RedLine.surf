@@ -137,6 +137,13 @@ export async function getBindStatus(token: string): Promise<BindStatus> {
   return { mask: r.mask ?? null, mc: r.mc ?? null, mcAllowed: !!r.mcAllowed };
 }
 
+/** Логин связанного аккаунта во втором мире (по сеансу этого мира), если связка есть. */
+export async function getLinkedUser(token: string, realm: Realm): Promise<string | null> {
+  const r = await api<{ mc?: string | null; family?: string | null }>('GET', 'bind', undefined, token, realm);
+  const u = realm === 'mc' ? r.family : r.mc;
+  return typeof u === 'string' && u ? u : null;
+}
+
 export async function bindPhone(token: string, link: PersonalLink, phoneInput: string, pin: string): Promise<string> {
   const phone = normalizeId(phoneInput);
   if (!phone) throw new Error(getRealm() === 'mc' ? 'Проверьте ник' : 'Проверьте номер');

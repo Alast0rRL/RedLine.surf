@@ -157,6 +157,31 @@ export async function unlockSilently(client: MatrixClient): Promise<void> {
   await unlockShared(client, await derive(link, 'storage'));
 }
 
+/**
+ * Баннер «Нужно заново ввести PIN»: тихо не открылось — значит, защита на аккаунте закрыта чужим ключом
+ * (например, ник Minecraft со своим старым ключом, переведённый на ключ семьи). С PIN в руках
+ * заводим защиту под ключ этой ссылки, без выхода. Неверный PIN сервер не примет.
+ */
+export async function repairWithPin(client: MatrixClient, pin: string): Promise<void> {
+  const link = loadLink();
+  const own = client.getUserId()?.replace(/^@/, '').split(':')[0];
+  if (!link || link.user !== own) throw new Error('Нет ссылки на этом устройстве');
+  const secret = await derive(link, 'storage');
+  try {
+    await unlockShared(client, secret);
+    return;
+  } catch (e) {
+    if ((e as Error)?.message !== KEY_MISMATCH) throw e;
+  }
+  try {
+    await setupRecovery(client, await derive(link, 'pin', pin), secret);
+  } catch (e) {
+    const code = (e as { errcode?: string; httpStatus?: number } | null);
+    if (code?.errcode === 'M_FORBIDDEN' || code?.httpStatus === 401) throw new Error('Неверный PIN');
+    throw e;
+  }
+}
+
 /** Одна идущая попытка открыть историю на клиента: вход и usePinUnlock не гоняются друг с другом. */
 const unlocking = new WeakMap<MatrixClient, Promise<unknown>>();
 

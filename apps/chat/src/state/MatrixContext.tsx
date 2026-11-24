@@ -3,7 +3,7 @@ import { ClientEvent, HttpApiEvent, SyncState, type MatrixClient } from 'matrix-
 import { getRealm, hasMcRealm, loadConfig, otherRealm, realmConfig, setRealm, type Realm } from '../config';
 import { ACCOUNT_DELETED, forgetLink, isDeactivated, loadLink, loginWithPin, preparePinSession, saveLink, type PersonalLink, type PinLogin } from '../lib/pin';
 import { loadSession } from '../lib/session';
-import { bindPhone, getBoundPhone, NO_TOKEN, savedPhone, type LinkedAccount } from '../lib/phone';
+import { bindPhone, getBoundPhone, getLinkedUser, NO_TOKEN, savedPhone, type LinkedAccount } from '../lib/phone';
 import { PhoneOffer, type PhoneOfferData } from '../screens/PhoneOffer';
 import { RealmPin } from '../screens/RealmPin';
 import { loginWithPassword, logout as doLogout, logoutStored, startMatrix, wipeLocalData } from '../lib/matrix';
@@ -190,6 +190,27 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [start]);
+
+  // Ссылки второго мира на устройстве нет (вышли из него), а связка на сервере жива: возвращаем
+  // переключатель. Ключ у связанных аккаунтов общий, PIN спросим при открытии.
+  useEffect(() => {
+    if (status !== 'ready' || !client || !hasMcRealm() || otherAvailable()) return;
+    const own = loadLink();
+    const token = client.getAccessToken();
+    if (!own || !token) return;
+    const r = getRealm();
+    let stop = false;
+    getLinkedUser(token, r)
+      .then((user) => {
+        if (stop || !user || getRealm() !== r || otherAvailable()) return;
+        saveLink({ user, key: own.key, token: NO_TOKEN, name: user }, otherRealm(r));
+        setHasOther(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [status, client, realm]);
 
   const login = useCallback(
     async (username: string, password: string) => {

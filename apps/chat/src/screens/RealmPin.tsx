@@ -5,7 +5,17 @@ import { PIN_HINT, PIN_MAX, pinOk } from '../lib/pin';
 import { Button, Field, Modal } from '../components/ui';
 
 /** PIN для второго мира, если вход в него не случился вместе с основным (на этом устройстве один раз). */
-export function RealmPin({ realm, onSubmit, onClose }: { realm: Realm; onSubmit: (pin: string) => Promise<void>; onClose: () => void }) {
+export function RealmPin({
+  realm,
+  title,
+  onSubmit,
+  onClose,
+}: {
+  realm: Realm;
+  title?: string;
+  onSubmit: (pin: string) => Promise<void>;
+  onClose: () => void;
+}) {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +37,7 @@ export function RealmPin({ realm, onSubmit, onClose }: { realm: Realm; onSubmit:
     <Modal
       open
       onClose={onClose}
-      title={realm === 'mc' ? 'Открыть Minecraft' : 'Открыть Семью'}
+      title={title ?? (realm === 'mc' ? 'Открыть Minecraft' : 'Открыть Семью')}
       actions={
         <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>
