@@ -258,16 +258,37 @@
       if (Math.abs(dx) > 40) { slide(dx < 0 ? 'next' : 'prev'); swipedAt = Date.now(); }
     }, { passive: true });
 
-    function show(i) {
+    // Фото грузятся через ретранслятор по секунде-две. Пока новое не готово, старое не показываем
+    // (иначе счётчик бежит, а на экране «застывает» прежний кадр), соседей качаем заранее.
+    const cache = new Map();
+    const load = (i) => {
+      const src = sources[(i + sources.length) % sources.length];
+      if (!cache.has(src)) {
+        const im = new Image();
+        im.src = src;
+        cache.set(src, im.decode().catch(() => {}));
+      }
+      return cache.get(src);
+    };
+    const lbSpinner = $('[data-lb-spinner]', lightbox);
+    let token = 0;
+    async function show(i) {
       index = (i + sources.length) % sources.length;
+      const my = ++token;
+      lbCurrent.textContent = String(index + 1);
+      lbImg.style.opacity = '0';
+      const spin = setTimeout(() => lbSpinner.classList.remove('hidden'), 200);
+      await load(index);
+      clearTimeout(spin);
+      if (my !== token) return; // пока грузилось, уже листнули дальше
+      lbSpinner.classList.add('hidden');
       lbImg.src = sources[index];
       lbImg.alt = `Фото ${index + 1} из ${sources.length}`;
-      lbCurrent.textContent = String(index + 1);
+      lbImg.style.opacity = '1';
+      load(index + 1);
+      load(index - 1);
     }
-    function change(delta) {
-      lbImg.style.opacity = '0.4';
-      setTimeout(() => { show(index + delta); lbImg.style.opacity = '1'; }, 150);
-    }
+    const change = (delta) => show(index + delta);
 
     track.addEventListener('click', (e) => {
       const item = e.target.closest('.gallery-item');

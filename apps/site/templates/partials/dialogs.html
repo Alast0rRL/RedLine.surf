@@ -20,7 +20,8 @@
         <svg class="w-10 h-10 md:w-12 md:h-12 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"></path></svg>
     </button>
     <div data-lb-backdrop class="w-full h-full flex items-center justify-center p-4 md:p-12">
-        <img id="lightbox-img" src="" alt="" class="max-w-full max-h-full w-auto h-auto rounded-lg shadow-2xl object-contain transition duration-150">
+        <img id="lightbox-img" src="" alt="" class="max-w-full max-h-full w-auto h-auto rounded-lg shadow-2xl object-contain transition-opacity duration-200">
+        <span data-lb-spinner class="hidden absolute w-10 h-10 rounded-full border-4 border-white/20 border-t-redline-red animate-spin" aria-label="Загрузка"></span>
     </div>
     <button type="button" data-lb="next" aria-label="Следующее фото" class="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:scale-110 p-4 transition z-[310]">
         <svg class="w-10 h-10 md:w-12 md:h-12 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path></svg>
