@@ -36,7 +36,7 @@ function extractUser(body) {
   return normalizeUser(body.user);
 }
 
-export function createLoginGuard({ homeserverUrl, log = () => {}, now = Date.now }) {
+export function createLoginGuard({ homeserverUrl, log = () => {}, now = Date.now, prefix = '' }) {
   const target = new URL(homeserverUrl);
   const client = target.protocol === 'https:' ? https : http;
 
@@ -129,8 +129,10 @@ export function createLoginGuard({ homeserverUrl, log = () => {}, now = Date.now
 
   function open(req, headers, onResponse) {
     const u = new URL(req.url, target);
+    // второй сервер (Minecraft) отвечает по /mc/...: наверх уходит путь без префикса
+    const pathname = prefix && u.pathname.startsWith(prefix + '/') ? u.pathname.slice(prefix.length) : u.pathname;
     const up = client.request(
-      { protocol: target.protocol, hostname: target.hostname, port: target.port || undefined, method: req.method, path: u.pathname + u.search, headers, timeout: UPSTREAM_TIMEOUT_MS },
+      { protocol: target.protocol, hostname: target.hostname, port: target.port || undefined, method: req.method, path: pathname + u.search, headers, timeout: UPSTREAM_TIMEOUT_MS },
       onResponse,
     );
     up.on('timeout', () => up.destroy(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })));
@@ -236,7 +238,7 @@ export function createLoginGuard({ homeserverUrl, log = () => {}, now = Date.now
 
   /** true — запрос обработан здесь */
   return async function loginGuard(req, res, url) {
-    if (!LOGIN_RE.test(url.pathname)) return false;
+    if (prefix ? !url.pathname.startsWith(prefix + '/') || !LOGIN_RE.test(url.pathname.slice(prefix.length)) : !LOGIN_RE.test(url.pathname)) return false;
     if (req.method !== 'POST') passthrough(req, res);
     else await handlePost(req, res);
     return true;

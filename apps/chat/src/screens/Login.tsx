@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { PIN_MAX, PIN_HINT, pinOk } from '../lib/pin';
-import { fetchLinkByPhone, normalizePhone } from '../lib/phone';
+import { fetchLinkByPhone, normalizeLogin, normalizePhone } from '../lib/phone';
+import { hasMcRealm, setRealm } from '../config';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -16,8 +17,12 @@ export function Login() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy || !pinOk(pin)) return;
-    if (!normalizePhone(phone)) {
-      setError('Проверьте номер');
+    // номер — сервер семьи, ник — сервер Minecraft
+    const isPhone = /^[\d\s+()-]+$/.test(phone.trim()) && !!normalizePhone(phone);
+    if (isPhone) setRealm('family');
+    else if (hasMcRealm() && normalizeLogin(phone)) setRealm('mc');
+    else {
+      setError(hasMcRealm() ? 'Введите номер телефона или ник' : 'Проверьте номер');
       return;
     }
     setBusy(true);
@@ -46,12 +51,14 @@ export function Login() {
 
         <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
           <Field
-            label="Номер телефона"
+            label={hasMcRealm() ? 'Телефон или ник' : 'Номер телефона'}
             name="phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="+7 900 123-45-67"
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder={hasMcRealm() ? '+7 900 123-45-67 или ник' : '+7 900 123-45-67'}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             disabled={busy}
@@ -76,6 +83,11 @@ export function Login() {
           <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !phone.trim() || !pinOk(pin)}>
             Войти
           </Button>
+          {hasMcRealm() && (
+            <Button variant="ghost" size="sm" className="login__link" disabled={busy} onClick={() => { location.hash = '#/mc'; }}>
+              Играешь на сервере? Регистрация по нику
+            </Button>
+          )}
         </form>
       </div>
     </main>

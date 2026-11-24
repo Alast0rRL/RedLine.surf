@@ -5,6 +5,8 @@ import { useEdgeSwipeBack } from './hooks/useEdgeSwipeBack';
 import { Button, Card, Icon, Modal, RedLines } from './components/ui';
 import { isPinUser } from './lib/pin';
 import { ThemeToggle } from './components/ThemeToggle';
+import { McRegister } from './screens/McRegister';
+import { setRealm } from './config';
 import { loadLink } from './lib/pin';
 import { Splash } from './screens/Splash';
 import { Login } from './screens/Login';
@@ -131,7 +133,7 @@ export function App() {
   useEffect(() => {
     if (status !== 'ready') return;
     const ownLocalpart = client?.getUserId()?.replace(/^@/, '').split(':')[0];
-    if (route.name === 'old-invite' || (route.name === 'personal' && ownLocalpart === route.link.user)) {
+    if (route.name === 'old-invite' || route.name === 'mc' || (route.name === 'personal' && ownLocalpart === route.link.user)) {
       history.replaceState(null, '', '/#/');
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     }
@@ -140,7 +142,11 @@ export function App() {
   if (status === 'boot') return <Splash />;
   if (status === 'fatal') return <Splash error={error} />;
   if (status === 'logged-out') {
-    if (route.name === 'personal') return <PinEntry key={route.link.user + route.link.key} link={route.link} />;
+    if (route.name === 'personal') {
+      setRealm('family'); // личные ссылки — только для семьи
+      return <PinEntry key={route.link.user + route.link.key} link={route.link} />;
+    }
+    if (route.name === 'mc') return <McRegister />;
     if (route.name === 'old-invite') {
       return (
         <main className="screen login">

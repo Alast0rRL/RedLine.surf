@@ -65,6 +65,20 @@ const loginGuard = createLoginGuard({
   log,
 });
 
+// Второй сервер чата — Minecraft (своя база). Вход по нику, регистрация игроков; всё по префиксу /mc.
+const MC_HS = (process.env.MC_HOMESERVER_INTERNAL_URL || '').replace(/\/+$/, '');
+const mcApi = MC_HS
+  ? createPhoneApi({
+      dbPath: process.env.MC_LOGIN_DB || '/data/mc-logins.json',
+      homeserverUrl: MC_HS,
+      log,
+      mode: 'login',
+      prefix: '/mc/api/phone/',
+      registrationToken: process.env.MC_REGISTRATION_TOKEN || '',
+    })
+  : null;
+const mcGuard = MC_HS ? createLoginGuard({ homeserverUrl: MC_HS, log, prefix: '/mc' }) : null;
+
 function endpointAllowed(endpoint) {
   try {
     const u = new URL(endpoint);
@@ -165,6 +179,8 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://gateway');
   if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true });
   if (await phoneApi(req, res, url)) return;
+  if (mcApi && (await mcApi(req, res, url))) return;
+  if (mcGuard && (await mcGuard(req, res, url))) return;
   if (await loginGuard(req, res, url)) return;
   if (url.pathname !== '/_matrix/push/v1/notify') return send(res, 404, { errcode: 'M_UNRECOGNIZED' });
   if (req.method !== 'POST') return send(res, 405, { errcode: 'M_UNRECOGNIZED' });

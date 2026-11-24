@@ -4,10 +4,11 @@
  * Номер и PIN остаются на устройстве: серверу уходят номер (для поиска записи) и proof =
  * PBKDF2(PIN, соль из номера). Личный ключ сервер хранит зашифрованным ключом из proof.
  */
-import { loadConfig } from '../config';
-import { ACCOUNT_DELETED, isPersonalLink, pinPassword, type PersonalLink } from './pin';
+import { apiBase, getRealm, loadConfig } from '../config';
+import { ACCOUNT_DELETED, isPersonalLink, newPerson, pinPassword, type PersonalLink } from './pin';
 
 const PROOF_SALT = 'redline-phone-v1\n';
+const LOGIN_SALT = 'redline-login-v1\n';
 const PROOF_ITERATIONS = 200_000;
 /** Токен регистрации после входа по номеру не нужен: аккаунт уже существует. */
 export const NO_TOKEN = 'PhoneLogin000000';
@@ -19,6 +20,21 @@ export function normalizePhone(input: string): string | null {
   return d.length >= 11 && d.length <= 15 ? d : null;
 }
 
+/** Ник Minecraft как логин: латиница, цифры, _, 3–16 символов; в аккаунте — строчными. */
+export function normalizeLogin(input: string): string | null {
+  const v = input.trim();
+  return /^[A-Za-z0-9_]{3,16}$/.test(v) ? v.toLowerCase() : null;
+}
+
+/** Номер (семья) или ник (Minecraft) — в зависимости от текущего мира. */
+function normalizeId(input: string): string | null {
+  return getRealm() === 'mc' ? normalizeLogin(input) : normalizePhone(input);
+}
+
+function idBody(id: string): Record<string, string> {
+  return getRealm() === 'mc' ? { login: id } : { phone: id };
+}
+
 export function maskPhone(phone: string): string {
   if (phone.length === 11 && phone[0] === '7') return `+7 *** ***-**-${phone.slice(-2)}`;
   return `+${'*'.repeat(Math.max(phone.length - 2, 0))}${phone.slice(-2)}`;
@@ -28,7 +44,7 @@ export async function phoneProof(phone: string, pin: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(PROOF_SALT + phone), iterations: PROOF_ITERATIONS },
+    { name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode((getRealm() === 'mc' ? LOGIN_SALT : PROOF_SALT) + phone), iterations: PROOF_ITERATIONS },
     key,
     256,
   );
@@ -38,7 +54,7 @@ export async function phoneProof(phone: string, pin: string): Promise<string> {
 async function api<T>(method: string, path: string, body?: unknown, token?: string): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`/api/phone/${path}`, {
+    res = await fetch(`${apiBase()}/api/phone/${path}`, {
       method,
       headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -73,10 +89,10 @@ function rememberPhone(user: string, phone: string | null): void {
 
 /** Ссылка человека по номеру и PIN; дальше вход идёт как по обычной ссылке. */
 export async function fetchLinkByPhone(phoneInput: string, pin: string): Promise<PersonalLink> {
-  const phone = normalizePhone(phoneInput);
-  if (!phone) throw new Error('Проверьте номер');
+  const phone = normalizeId(phoneInput);
+  if (!phone) throw new Error(getRealm() === 'mc' ? 'Проверьте ник' : 'Проверьте номер');
   const r = await api<{ user: string; key: string; name?: string }>('POST', 'login', {
-    phone,
+    ...idBody(phone),
     proof: await phoneProof(phone, pin),
   });
   const link = { user: r.user, key: r.key, token: NO_TOKEN, name: r.name || 'Участник' };
@@ -90,12 +106,12 @@ export async function getBoundPhone(token: string): Promise<string | null> {
 }
 
 export async function bindPhone(token: string, link: PersonalLink, phoneInput: string, pin: string): Promise<string> {
-  const phone = normalizePhone(phoneInput);
-  if (!phone) throw new Error('Проверьте номер');
+  const phone = normalizeId(phoneInput);
+  if (!phone) throw new Error(getRealm() === 'mc' ? 'Проверьте ник' : 'Проверьте номер');
   const r = await api<{ mask: string }>(
     'PUT',
     'bind',
-    { phone, proof: await phoneProof(phone, pin), key: link.key, name: link.name },
+    { ...idBody(phone), proof: await phoneProof(phone, pin), key: link.key, name: link.name },
     token,
   );
   rememberPhone(link.user, phone);
@@ -152,4 +168,25 @@ export async function checkPassword(user: string, password: string, wrong: strin
     headers: { authorization: `Bearer ${data.access_token}`, 'content-type': 'application/json' },
     body: '{}',
   }).catch(() => console.warn('Не удалось закрыть проверочный сеанс'));
+}
+
+/**
+ * Регистрация игрока Minecraft: ник = логин. Ключ и пароль считаются здесь, аккаунт создаёт сервер
+ * (секрет регистрации туда не уходит). Дальше вход идёт как по обычной ссылке.
+ */
+export async function registerPlayer(nickInput: string, pin: string): Promise<PersonalLink> {
+  if (getRealm() !== 'mc') throw new Error('Регистрация доступна только для Minecraft');
+  const nick = nickInput.trim();
+  const login = normalizeLogin(nick);
+  if (!login) throw new Error('Ник: латиница, цифры и _, от 3 до 16 символов');
+  const link: PersonalLink = { ...newPerson(nick, login), token: NO_TOKEN };
+  await api('POST', 'register', {
+    login,
+    name: nick,
+    password: await pinPassword(link, pin),
+    proof: await phoneProof(login, pin),
+    key: link.key,
+  });
+  rememberPhone(login, login);
+  return link;
 }

@@ -6,7 +6,7 @@ set -eu
 : "${SERVER_NAME:?SERVER_NAME is required}"
 
 # Проверка — до генерации: exit внутри $(...) завершил бы только подоболочку.
-for v in "$HOMESERVER_URL" "$SERVER_NAME" "${PUSH_GATEWAY_URL:-}" "${VAPID_PUBLIC_KEY:-}" "${BOT_USERS:-}"; do
+for v in "$HOMESERVER_URL" "$SERVER_NAME" "${PUSH_GATEWAY_URL:-}" "${VAPID_PUBLIC_KEY:-}" "${BOT_USERS:-}" "${MC_HOMESERVER_URL:-}" "${MC_SERVER_NAME:-}"; do
   case "$v" in
     *'"'* | *'\'*) echo "40-redline-config: недопустимый символ в значении: $v" >&2; exit 1 ;;
   esac
@@ -23,13 +23,20 @@ for b in ${BOT_USERS:-}; do
 done
 IFS=$old_ifs
 
+# второй сервер (Minecraft): если задан, клиент входит туда по нику
+mc=""
+if [ -n "${MC_HOMESERVER_URL:-}" ]; then
+  mc=",
+  \"mc\": { \"homeserverUrl\": $(json_str "$MC_HOMESERVER_URL"), \"serverName\": $(json_str "${MC_SERVER_NAME:-mc.redline.surf}") }"
+fi
+
 cat > /usr/share/nginx/html/config.json <<EOF
 {
   "homeserverUrl": $(json_str "$HOMESERVER_URL"),
   "serverName": $(json_str "$SERVER_NAME"),
   "pushGatewayUrl": $(json_str "${PUSH_GATEWAY_URL:-}"),
   "vapidPublicKey": $(json_str "${VAPID_PUBLIC_KEY:-}"),
-  "botUsers": [$bots]
+  "botUsers": [$bots]$mc
 }
 EOF
 echo "40-redline-config: config.json для $SERVER_NAME готов"

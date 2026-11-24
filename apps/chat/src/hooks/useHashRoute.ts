@@ -10,7 +10,8 @@ export type Route =
   | { name: 'room-info'; roomId: string }
   | { name: 'room-media'; roomId: string }
   | { name: 'personal'; link: PersonalLink }
-  | { name: 'old-invite' };
+  | { name: 'old-invite' }
+  | { name: 'mc' };
 
 function parse(hash: string): Route {
   const link = parseLink(hash);
@@ -26,6 +27,7 @@ function parse(hash: string): Route {
   if (m) return { name: 'room', roomId: decodeURIComponent(m[1]) };
   if (hash === '#/settings') return { name: 'settings' };
   if (hash === '#/people') return { name: 'people' };
+  if (hash === '#/mc') return { name: 'mc' };
   return { name: 'list' };
 }
 

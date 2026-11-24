@@ -24,6 +24,23 @@ services:
       - "127.0.0.1:${HOMESERVER_PORT:-8008}:8008"
     networks: [redline]
 
+  # Второй сервер чата — для игроков Minecraft. Своя база, связь между серверами выключена:
+  # игроки и семья друг о друге не знают. Регистрация только через push-шлюз (секретный токен).
+  continuwuity-mc:
+    image: forgejo.ellis.link/continuwuation/continuwuity:${CONTINUWUITY_VERSION:?укажите версию в .env}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      CONTINUWUITY_CONFIG: /etc/continuwuity.toml
+      CONTINUWUITY_SERVER_NAME: ${MC_SERVER_NAME:-mc.redline.surf}
+      CONTINUWUITY_REGISTRATION_TOKEN: ${MC_REGISTRATION_TOKEN:?укажите MC_REGISTRATION_TOKEN в .env}
+    volumes:
+      - ./continuwuity.toml:/etc/continuwuity.toml:ro
+      - continuwuity-mc-data:/var/lib/continuwuity
+    ports:
+      - "127.0.0.1:${MC_HOMESERVER_PORT:-8009}:8008"
+    networks: [redline]
+
   push:
     build:
       context: ..
@@ -36,6 +53,8 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?}
       PUSH_PROXY: ${PUSH_PROXY:-}
       HOMESERVER_INTERNAL_URL: http://continuwuity:8008
+      MC_HOMESERVER_INTERNAL_URL: http://continuwuity-mc:8008
+      MC_REGISTRATION_TOKEN: ${MC_REGISTRATION_TOKEN:?}
     volumes:
       - push-data:/data
     # портов нет: шлюз зовёт только homeserver по внутренней сети
@@ -53,6 +72,8 @@ services:
       PUSH_GATEWAY_URL: http://push:8080/_matrix/push/v1/notify
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?}
       BOT_USERS: ${BOT_USERS:-}
+      MC_HOMESERVER_URL: ${MC_HOMESERVER_URL:-}
+      MC_SERVER_NAME: ${MC_SERVER_NAME:-mc.redline.surf}
     ports:
       - "127.0.0.1:${CHAT_PORT:-8090}:8080"
     networks: [redline]
@@ -83,5 +104,6 @@ networks:
 
 volumes:
   continuwuity-data:
+  continuwuity-mc-data:
   push-data:
   site-data:

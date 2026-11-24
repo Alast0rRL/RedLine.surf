@@ -16,25 +16,68 @@ export interface AppConfig {
   botUsers: string[];
 }
 
-let config: AppConfig | null = null;
+/** Мир: сервер семьи или отдельный сервер Minecraft (своя база, общей связи нет). */
+export type Realm = 'family' | 'mc';
+const REALM_KEY = 'rl.realm';
+
+let base: AppConfig | null = null;
+let mc: Pick<AppConfig, 'homeserverUrl' | 'serverName'> | null = null;
+let realm: Realm = (() => {
+  try {
+    return localStorage.getItem(REALM_KEY) === 'mc' ? 'mc' : 'family';
+  } catch {
+    return 'family';
+  }
+})();
+
+export function getRealm(): Realm {
+  return realm === 'mc' && mc ? 'mc' : 'family';
+}
+
+export function hasMcRealm(): boolean {
+  return !!mc;
+}
+
+/** Выбор мира до входа (по введённому номеру или нику); запоминается на устройстве. */
+export function setRealm(r: Realm): void {
+  realm = r;
+  try {
+    localStorage.setItem(REALM_KEY, r);
+  } catch {
+    /* приватный режим: до перезагрузки */
+  }
+}
+
+/** Префикс API push-шлюза для текущего мира: '' или '/mc'. */
+export function apiBase(): string {
+  return getRealm() === 'mc' ? '/mc' : '';
+}
+
+function current(): AppConfig {
+  if (!base) throw new Error('config not loaded');
+  if (getRealm() === 'mc' && mc) return { ...base, ...mc, botUsers: [] };
+  return base;
+}
 
 export async function loadConfig(): Promise<AppConfig> {
-  if (config) return config;
+  if (base) return current();
   const res = await fetch('/config.json', { cache: 'no-store' });
   if (!res.ok) throw new Error(`config.json: HTTP ${res.status}`);
-  const raw = (await res.json()) as Partial<AppConfig>;
+  const raw = (await res.json()) as Partial<AppConfig> & { mc?: Partial<AppConfig> };
   if (!raw.homeserverUrl || !raw.serverName) throw new Error('config.json: нужны homeserverUrl и serverName');
-  config = {
+  base = {
     homeserverUrl: raw.homeserverUrl.replace(/\/+$/, ''),
     serverName: raw.serverName,
     pushGatewayUrl: raw.pushGatewayUrl ?? '',
     vapidPublicKey: raw.vapidPublicKey ?? '',
     botUsers: (raw.botUsers ?? []).filter(Boolean),
   };
-  return config;
+  mc = raw.mc?.homeserverUrl && raw.mc.serverName
+    ? { homeserverUrl: raw.mc.homeserverUrl.replace(/\/+$/, ''), serverName: raw.mc.serverName }
+    : null;
+  return current();
 }
 
 export function getConfig(): AppConfig {
-  if (!config) throw new Error('config not loaded');
-  return config;
+  return current();
 }

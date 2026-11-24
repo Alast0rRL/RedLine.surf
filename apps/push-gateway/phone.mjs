@@ -29,6 +29,13 @@ export function normalizePhone(input) {
   return d.length >= 11 && d.length <= 15 ? d : null;
 }
 
+/** Ник Minecraft как логин: латиница, цифры, _, 3–16 символов, без регистра. */
+export function normalizeLogin(input) {
+  if (typeof input !== 'string') return null;
+  const v = input.trim();
+  return /^[A-Za-z0-9_]{3,16}$/.test(v) ? v.toLowerCase() : null;
+}
+
 export function maskPhone(phone) {
   if (phone.length === 11 && phone[0] === '7') return `+7 *** ***-**-${phone.slice(-2)}`;
   return `+${'*'.repeat(phone.length - 2)}${phone.slice(-2)}`;
@@ -60,7 +67,14 @@ function decryptBlob(proof, blob) {
   return JSON.parse(pt.toString('utf8'));
 }
 
-export function createPhoneApi({ dbPath, homeserverUrl, log }) {
+/**
+ * mode 'phone' — записи по номеру (семья), 'login' — по нику (Minecraft, плюс регистрация игроков).
+ * prefix — путь API, registrationToken — секрет регистрации на сервере Minecraft (только здесь, не в браузере).
+ */
+export function createPhoneApi({ dbPath, homeserverUrl, log, mode = 'phone', prefix = '/api/phone/', registrationToken = '', regLimit = 5, regWindowMs = 60 * 60 * 1000 }) {
+  const byLogin = mode === 'login';
+  const ident = (body) => (byLogin ? normalizeLogin(body.login) : normalizePhone(body.phone));
+  const maskOf = (id, body) => (byLogin ? (typeof body.name === 'string' && normalizeLogin(body.name) === id ? body.name : id) : maskPhone(id));
   const dir = path.dirname(dbPath);
   fs.mkdirSync(dir, { recursive: true });
 
@@ -173,8 +187,9 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
     const user = await whoami(req);
     if (!user) return send(res, 401, { error: 'Нужен вход' });
     const body = await readBody(req);
-    const phone = normalizePhone(body.phone);
-    if (!phone) return send(res, 400, { error: 'Проверьте номер' });
+    const phone = ident(body);
+    if (!phone) return send(res, 400, { error: byLogin ? 'Проверьте ник' : 'Проверьте номер' });
+    if (byLogin && phone !== user) return send(res, 400, { error: 'Логин — это ваш ник' });
     if (typeof body.proof !== 'string' || !PROOF_RE.test(body.proof)) return send(res, 400, { error: 'Неверный запрос' });
     if (typeof body.key !== 'string' || !KEY_RE.test(body.key)) return send(res, 400, { error: 'Неверный запрос' });
     let name;
@@ -185,11 +200,11 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
 
     const key = recordKey(phone);
     if (db[key] && db[key].user !== user) {
-      return send(res, 409, { error: 'Этот номер уже привязан к другому человеку' });
+      return send(res, 409, { error: byLogin ? 'Этот ник уже занят' : 'Этот номер уже привязан к другому человеку' });
     }
     const old = findByUser(user);
     if (old && old !== key) delete db[old];
-    const mask = maskPhone(phone);
+    const mask = maskOf(phone, body);
     db[key] = {
       user,
       mask,
@@ -212,9 +227,10 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
       return send(res, 429, { error: 'Слишком много попыток, попробуйте через 15 минут' });
     }
     const body = await readBody(req);
-    const phone = normalizePhone(body.phone);
+    const phone = ident(body);
+    const wrong = byLogin ? 'Неверный ник или PIN' : 'Неверный номер или PIN';
     if (!phone || typeof body.proof !== 'string' || !PROOF_RE.test(body.proof)) {
-      return send(res, 401, { error: 'Неверный номер или PIN' });
+      return send(res, 401, { error: wrong });
     }
     const key = recordKey(phone);
     const rec = db[key];
@@ -237,14 +253,14 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
       if (locks.size > 10000) for (const [k, v] of locks) if (v.until <= now) locks.delete(k);
       locks.set(key, next);
       if (next.until > now) return send(res, 429, { error: 'Слишком много попыток, попробуйте через 15 минут' });
-      return send(res, 401, { error: 'Неверный номер или PIN' });
+      return send(res, 401, { error: wrong });
     }
     locks.delete(key);
     let payload;
     try {
       payload = decryptBlob(body.proof, rec.blob);
     } catch {
-      return send(res, 401, { error: 'Неверный номер или PIN' });
+      return send(res, 401, { error: wrong });
     }
     if (rec.fails) {
       rec.fails = 0;
@@ -263,6 +279,87 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
       save();
     }
     send(res, 200, { mask: null });
+  }
+
+  /** Регистрация игрока (только в режиме ника): аккаунт создаёт сервер, секрет регистрации в браузер не уходит. */
+  const regHits = new Map();
+  async function hs(path, method, body, token) {
+    let r;
+    try {
+      r = await fetch(`${homeserverUrl}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      throw Object.assign(new Error('Сервер чата недоступен, попробуйте позже'), { status: 502 });
+    }
+    return { status: r.status, data: await r.json().catch(() => ({})) };
+  }
+
+  async function register(req, res) {
+    if (!byLogin || !registrationToken) return send(res, 404, { error: 'not found' });
+    const ip = clientIp(req);
+    const now = Date.now();
+    const hits = (regHits.get(ip) ?? []).filter((t) => t > now - regWindowMs);
+    if (hits.length >= regLimit) return send(res, 429, { error: 'Слишком много регистраций, попробуйте позже' });
+    const body = await readBody(req);
+    const login = normalizeLogin(body.login);
+    if (!login || typeof body.name !== 'string' || normalizeLogin(body.name) !== login) {
+      return send(res, 400, { error: 'Ник: латиница, цифры и _, от 3 до 16 символов' });
+    }
+    if (typeof body.password !== 'string' || !PROOF_RE.test(body.password)) return send(res, 400, { error: 'Неверный запрос' });
+    if (typeof body.proof !== 'string' || !PROOF_RE.test(body.proof)) return send(res, 400, { error: 'Неверный запрос' });
+    if (typeof body.key !== 'string' || !KEY_RE.test(body.key)) return send(res, 400, { error: 'Неверный запрос' });
+    const rk = recordKey(login);
+    if (db[rk]) return send(res, 409, { error: 'Этот ник уже занят' });
+    hits.push(now);
+    regHits.set(ip, hits);
+
+    const reqBody = { username: login, password: body.password, initial_device_display_name: 'Redline: регистрация' };
+    let r = await hs('/_matrix/client/v3/register', 'POST', reqBody);
+    for (let i = 0; i < 3 && r.status === 401 && r.data.session; i++) {
+      const done = new Set(r.data.completed ?? []);
+      const flow = (r.data.flows ?? []).find((f) => f.stages?.includes('m.login.registration_token')) ?? r.data.flows?.[0];
+      const stage = flow?.stages?.find((st) => !done.has(st));
+      if (!stage) break;
+      const auth = stage === 'm.login.registration_token'
+        ? { type: stage, token: registrationToken, session: r.data.session }
+        : { type: stage, session: r.data.session };
+      r = await hs('/_matrix/client/v3/register', 'POST', { ...reqBody, auth });
+    }
+    if (r.data.errcode === 'M_USER_IN_USE') return send(res, 409, { error: 'Этот ник уже занят' });
+    if (r.status !== 200 || !r.data.access_token) {
+      log('warn', 'mc register failed', { status: r.status, errcode: r.data.errcode });
+      return send(res, 502, { error: 'Не удалось зарегистрироваться, попробуйте позже' });
+    }
+    const token = r.data.access_token;
+    const server = String(r.data.user_id).split(':')[1];
+    try {
+      await hs(`/_matrix/client/v3/profile/${encodeURIComponent(r.data.user_id)}/displayname`, 'PUT', { displayname: body.name }, token);
+      // общая группа игроков: есть — входим, нет — создаём (первый игрок становится её владельцем)
+      const alias = encodeURIComponent(`#minecraft:${server}`);
+      const found = await hs(`/_matrix/client/v3/directory/room/${alias}`, 'GET', undefined, token);
+      if (found.status === 200) await hs(`/_matrix/client/v3/join/${alias}`, 'POST', {}, token);
+      else await hs('/_matrix/client/v3/createRoom', 'POST', { name: 'Minecraft', room_alias_name: 'minecraft', preset: 'public_chat', visibility: 'private' }, token);
+    } catch (e) {
+      log('warn', 'mc register: profile/group step failed', { err: String(e?.message).slice(0, 80) });
+    } finally {
+      await hs('/_matrix/client/v3/logout', 'POST', {}, token).catch(() => undefined);
+    }
+    db[rk] = {
+      user: login,
+      mask: body.name,
+      check: sha256hex('check\n' + body.proof),
+      blob: encryptBlob(body.proof, { user: login, key: body.key, name: body.name }),
+      fails: 0,
+      lockedUntil: 0,
+      createdAt: Date.now(),
+    };
+    save();
+    log('info', 'mc player registered');
+    send(res, 200, { ok: true });
   }
 
   const admins = new Set(
@@ -287,15 +384,17 @@ export function createPhoneApi({ dbPath, homeserverUrl, log }) {
 
   /** true — маршрут обработан. */
   return async function handle(req, res, url) {
-    if (!url.pathname.startsWith('/api/phone/')) return false;
+    if (!url.pathname.startsWith(prefix)) return false;
+    const p = url.pathname.slice(prefix.length);
     try {
-      if (url.pathname === '/api/phone/bind' && req.method === 'PUT') await bind(req, res);
-      else if (url.pathname === '/api/phone/bind' && (req.method === 'GET' || req.method === 'DELETE')) await status(req, res);
-      else if (url.pathname === '/api/phone/login' && req.method === 'POST') await login(req, res);
-      else if (url.pathname.startsWith('/api/phone/user/') && req.method === 'DELETE') {
+      if (p === 'bind' && req.method === 'PUT') await bind(req, res);
+      else if (p === 'bind' && (req.method === 'GET' || req.method === 'DELETE')) await status(req, res);
+      else if (p === 'login' && req.method === 'POST') await login(req, res);
+      else if (p === 'register' && req.method === 'POST') await register(req, res);
+      else if (p.startsWith('user/') && req.method === 'DELETE') {
         let mxid;
         try {
-          mxid = decodeURIComponent(url.pathname.slice('/api/phone/user/'.length));
+          mxid = decodeURIComponent(p.slice('user/'.length));
         } catch {
           return send(res, 400, { error: 'Неверный запрос' }), true;
         }
