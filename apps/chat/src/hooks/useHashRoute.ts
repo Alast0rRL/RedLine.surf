@@ -6,6 +6,7 @@ export type Route =
   | { name: 'room'; roomId: string }
   | { name: 'settings' }
   | { name: 'people' }
+  | { name: 'mc-players' }
   | { name: 'user'; userId: string }
   | { name: 'room-info'; roomId: string }
   | { name: 'room-media'; roomId: string }
@@ -27,6 +28,7 @@ function parse(hash: string): Route {
   if (m) return { name: 'room', roomId: decodeURIComponent(m[1]) };
   if (hash === '#/settings') return { name: 'settings' };
   if (hash === '#/people') return { name: 'people' };
+  if (hash === '#/mc-players') return { name: 'mc-players' };
   if (hash === '#/mc') return { name: 'mc' };
   return { name: 'list' };
 }
@@ -63,6 +65,10 @@ export const navigate = {
   },
   people: () => {
     history.pushState({ rlFromList: true }, '', '#/people');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  },
+  mcPlayers: () => {
+    history.pushState({ rlFromList: true }, '', '#/mc-players');
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   },
   user: (userId: string) => {

@@ -226,8 +226,8 @@ a { color: inherit; }
 }
 .topbar__logo {
   flex: 1;
-  font-family: var(--rl-font-display);
-  font-weight: var(--rl-weight-black);
+  font-family: 'Montserrat', var(--rl-font-display);
+  font-weight: 900;
   font-size: var(--rl-text-2xl);
   color: var(--rl-color-accent);
   text-transform: uppercase;
@@ -715,31 +715,42 @@ a { color: inherit; }
 
 /* ============ Настройки ============ */
 .settings { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: stretch; gap: var(--rl-space-3); width: 100%; max-width: 40rem; margin: 0 auto; padding: var(--rl-space-4) var(--rl-space-4) calc(var(--chat-safe-bottom) + var(--rl-space-8)); }
-.profile { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--rl-space-4) var(--rl-space-6); padding: 0; width: 100%; }
-.profile__photo { display: flex; flex-direction: column; align-items: center; gap: var(--rl-space-1); flex: none; }
-.profile__avatar { position: relative; padding: 0; border: 0; border-radius: var(--rl-radius-xl); background: none; }
+.profile { display: flex; align-items: center; gap: var(--rl-space-4); width: 100%; min-width: 0; }
+.profile__photo { flex: none; }
+.profile__avatar { position: relative; display: block; padding: 0; border: 0; border-radius: var(--rl-radius-lg); background: none; }
+.profile__avatar .rl-avatar { --_size: 4rem; border-radius: var(--rl-radius-lg); }
 .profile__avatar:disabled { cursor: progress; }
 .profile__avatar:focus-visible { outline: 2px solid var(--rl-color-accent); outline-offset: 3px; }
 .profile__badge {
   position: absolute;
-  right: -6px;
-  bottom: -6px;
+  right: -5px;
+  bottom: -5px;
   display: grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 3px solid var(--rl-color-bg);
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 2px solid var(--rl-color-bg);
   border-radius: 50%;
   background: var(--rl-color-accent);
   color: #fff;
   transition: scale var(--rl-duration-fast) var(--rl-ease-standard);
 }
-.profile__badge .rl-spinner { width: 1rem; height: 1rem; border-color: #fff; border-right-color: transparent; }
+.profile__badge .rl-spinner { width: 0.875rem; height: 0.875rem; border-color: #fff; border-right-color: transparent; }
 @media (hover: hover) { .profile__avatar:not(:disabled):hover .profile__badge { scale: 1.1; } }
-.profile__form { display: flex; flex-direction: column; align-items: flex-start; gap: var(--rl-space-3); flex: 1 1 14rem; min-width: 0; }
+.profile__form { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--rl-space-1); min-width: 0; }
 .profile__form .rl-field { width: 100%; }
-.profile .profile__id { flex-basis: 100%; }
-.profile__id { min-width: 0; max-width: 100%; color: var(--rl-color-text-muted); font-size: var(--rl-text-sm); overflow-wrap: anywhere; word-break: break-all; }
+.profile-name .rl-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.profile__lines { display: flex; align-items: center; flex-wrap: wrap; gap: var(--rl-space-2); min-width: 0; }
+.profile__id { min-width: 0; max-width: 100%; color: var(--rl-color-text-muted); font-size: var(--rl-text-xs); overflow-wrap: anywhere; word-break: break-all; }
+.profile__remove-photo { padding: 0; border: 0; background: none; color: var(--rl-color-text-muted); font: inherit; font-size: var(--rl-text-xs); text-decoration: underline; cursor: pointer; }
+.profile__remove-photo:disabled { opacity: 0.5; cursor: progress; }
 /* кольцо фокуса — только для клавиатуры */
 :focus:not(:focus-visible) { outline: none; }
 .settings-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--rl-space-3); }
@@ -889,15 +900,8 @@ a { color: inherit; }
 .rl-btn--danger { color: var(--chat-accent-text); border-color: rgb(var(--rl-red-500-rgb) / 0.6); }
 .rl-btn--danger:hover:not(:disabled) { background: rgb(var(--rl-red-500-rgb) / 0.15); }
 
-/* единый шаблон экранов: карточки на всю ширину колонки, аватар 96px на телефоне */
 .settings > .rl-card { width: 100%; }
 .settings-card { padding: var(--rl-space-4); }
-@media (max-width: 599px) {
-  .rl-avatar--xl { --_size: 6rem; }
-  .profile { flex-direction: column; flex-wrap: nowrap; align-items: center; }
-  .profile__form { width: 100%; flex-basis: auto; }
-  .profile .profile__id { flex-basis: auto; text-align: center; }
-}
 .settings-card > .rl-btn:only-child { align-self: stretch; }
 
 /* кнопка «Сохранить»: понятно, когда она недоступна */
@@ -910,6 +914,89 @@ a { color: inherit; }
 .skeleton-line--short { width: 65%; }
 @keyframes skeleton-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton-line { animation: none; } }
+
+/* Компактные настройки: группы строк в одну колонку */
+.settings-group { padding: 0 var(--rl-space-4); }
+.settings-group__title {
+  margin: var(--rl-space-4) 0 var(--rl-space-1);
+  color: var(--rl-color-text-muted);
+  font-size: var(--rl-text-2xs);
+  font-weight: var(--rl-weight-black);
+  letter-spacing: var(--rl-tracking-caps);
+  text-transform: uppercase;
+}
+.settings-rows { display: flex; flex-direction: column; width: 100%; min-width: 0; }
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--rl-space-2) 0;
+  color: var(--rl-color-text);
+  font: inherit;
+  text-align: left;
+}
+.settings-row + .settings-row { border-top: 1px solid var(--rl-color-border); }
+.settings-row--button {
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: none;
+  cursor: pointer;
+}
+.settings-row--button + .settings-row--button { border-top: 1px solid var(--rl-color-border); }
+.settings-row--button:hover { background: var(--rl-color-fill); }
+.settings-row--danger { color: var(--rl-danger-500); }
+.settings-row--danger .settings-row__icon { color: var(--rl-danger-500); }
+.settings-row__icon { display: grid; place-items: center; flex: none; width: 1.5rem; color: var(--rl-color-accent); }
+.settings-row__label { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; font-size: var(--rl-text-sm); overflow-wrap: anywhere; }
+.settings-row__note { color: var(--rl-color-text-muted); font-size: var(--rl-text-xs); line-height: var(--rl-leading-normal); }
+.settings-row__value {
+  max-width: 55%;
+  color: var(--rl-color-text-muted);
+  font-size: var(--rl-text-xs);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.settings-row__chevron { display: grid; place-items: center; flex: none; color: var(--rl-color-text-subtle); transform: rotate(180deg); }
+.settings-row__chevron--open { transform: rotate(90deg); }
+.settings-row > .segmented { flex: none; }
+.segmented--compact { gap: 2px; padding: 2px; }
+.segmented--compact button { min-height: 2rem; font-size: var(--rl-text-2xs); }
+.rl-switch {
+  position: relative;
+  flex: none;
+  width: 2.75rem;
+  height: 1.625rem;
+  padding: 0;
+  border: 1px solid var(--rl-color-border-strong);
+  border-radius: var(--rl-radius-full);
+  background: var(--rl-color-fill);
+  cursor: pointer;
+  transition: background var(--rl-duration-fast) var(--rl-ease-standard);
+}
+.rl-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--rl-color-text-muted);
+  transition: transform var(--rl-duration-fast) var(--rl-ease-standard);
+}
+.rl-switch[aria-checked='true'] { border-color: var(--rl-color-accent); background: var(--rl-color-accent); }
+.rl-switch[aria-checked='true']::after { transform: translateX(1.125rem); background: #fff; }
+.rl-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.profile-name .rl-input-affix__suffix { pointer-events: auto; }
+.settings-expand { padding: var(--rl-space-3) 0; border-top: 1px solid var(--rl-color-border); }
+.settings-expand > .rl-card { margin-bottom: var(--rl-space-3); }
+.settings-logout { display: flex; flex-direction: column; gap: var(--rl-space-2); }
+.settings-logout .settings-row { border-bottom: 1px solid var(--rl-color-border); }
+.settings__devices-link { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--rl-color-text-muted); font: inherit; font-size: var(--rl-text-xs); text-decoration: underline; cursor: pointer; }
+.settings__device { margin: 0; color: var(--rl-color-text-subtle); font-size: var(--rl-text-xs); overflow-wrap: anywhere; }
 
 /* ============ Нет связи ============ */
 .offline-bar {

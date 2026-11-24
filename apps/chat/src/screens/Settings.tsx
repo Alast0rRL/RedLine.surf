@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useClient, useMatrix } from '../state/MatrixContext';
 import { navigate } from '../hooks/useHashRoute';
 import { useSecurityState } from '../hooks/useSecurityState';
@@ -10,7 +10,7 @@ import { NAME_MAX, nameProblem, removeAvatar, setAvatar, setName } from '../lib/
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/push';
 import { switchToPin } from '../lib/switchToPin';
 import { getBoundPhone, normalizePhone } from '../lib/phone';
-import { Avatar, Button, Card, Field, Icon, Modal, toast } from '../components/ui';
+import { Avatar, Button, Card, Field, Icon, Modal, toast, type IconName } from '../components/ui';
 import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
 import { PhoneSection } from './PhoneSection';
 import { MinecraftSection } from './MinecraftSection';
@@ -27,27 +27,85 @@ const PUSH_TEXT: Record<PushState, string> = {
 const THEME_OPTIONS: { mode: ThemeMode; label: string }[] = [
   { mode: 'light', label: 'Светлая' },
   { mode: 'dark', label: 'Тёмная' },
-  { mode: 'system', label: 'Как в системе' },
+  { mode: 'system', label: 'Авто' },
 ];
 
-function ThemeSection() {
-  const mode = useThemeMode();
-  const current = THEME_OPTIONS.find((o) => o.mode === mode)!;
+type SectionKey = 'phone' | 'mc' | 'pin' | 'password';
+
+const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
+
+function SettingsGroup({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
   return (
-    <Card solid className="settings-card">
-      <h2 className="settings-card__title"><Icon name="settings" size={18} /> Тема: {current.label}</h2>
-      <div className="segmented" role="group" aria-label="Тема оформления">
+    <Card solid className="settings-card settings-group">
+      <h2 className="settings-group__title">{title}</h2>
+      <div className="settings-rows" id={id}>{children}</div>
+    </Card>
+  );
+}
+
+function SettingsRow({
+  icon,
+  label,
+  note,
+  value,
+  onClick,
+  expanded,
+  danger,
+  children,
+}: {
+  icon: IconName;
+  label: string;
+  note?: string;
+  value?: ReactNode;
+  onClick?: () => void;
+  expanded?: boolean;
+  danger?: boolean;
+  children?: ReactNode;
+}) {
+  const content = (
+    <>
+      <span className="settings-row__icon"><Icon name={icon} size={20} /></span>
+      <span className="settings-row__label">
+        <span>{label}</span>
+        {note && <span className="settings-row__note">{note}</span>}
+      </span>
+      {children ?? (value !== undefined && <span className="settings-row__value">{value}</span>)}
+      {onClick && (
+        <span className={cx('settings-row__chevron', expanded && 'settings-row__chevron--open')}>
+          <Icon name="back" size={18} />
+        </span>
+      )}
+    </>
+  );
+  const className = cx(
+    'settings-row',
+    onClick && 'settings-row--button',
+    danger && 'settings-row--danger',
+    expanded && 'settings-row--expanded',
+  );
+  return onClick ? (
+    <button type="button" className={className} onClick={onClick}>{content}</button>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
+
+function ThemeRow() {
+  const mode = useThemeMode();
+  return (
+    <SettingsRow icon="settings" label="Тема">
+      <div className="segmented segmented--compact" role="group" aria-label="Тема оформления">
         {THEME_OPTIONS.map((o) => (
           <button key={o.mode} type="button" aria-pressed={o.mode === mode} onClick={() => setThemeMode(o.mode)}>
             {o.label}
           </button>
         ))}
       </div>
-    </Card>
+    </SettingsRow>
   );
 }
 
-function PushSection() {
+function PushRow() {
   const client = useClient();
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,21 +126,26 @@ function PushSection() {
     }
   };
 
+  const available = state === 'on' || state === 'off';
+
   return (
-    <Card solid className="settings-card">
-      <h2 className="settings-card__title"><Icon name="bell" size={18} /> Уведомления</h2>
-      <p className="settings-card__text">{state ? PUSH_TEXT[state] : '…'}</p>
-      {(state === 'on' || state === 'off') && (
-        <Button variant={state === 'on' ? 'secondary' : 'primary'} busy={busy} onClick={toggle}>
-          {state === 'on' ? 'Выключить' : 'Включить'}
-        </Button>
-      )}
-    </Card>
+    <SettingsRow icon="bell" label="Уведомления" note={state && !available ? PUSH_TEXT[state] : undefined}>
+      <button
+        type="button"
+        role="switch"
+        className="rl-switch"
+        aria-label="Уведомления"
+        aria-checked={state === 'on'}
+        disabled={!available || busy}
+        onClick={() => void toggle()}
+      />
+    </SettingsRow>
   );
 }
 
-function AdminSection() {
+function AdminGroup() {
   const client = useClient();
+  const { realm } = useMatrix();
   const [adminRoom, setAdminRoom] = useState<string | null>(null);
 
   useEffect(() => {
@@ -100,12 +163,15 @@ function AdminSection() {
   }, [client]);
 
   if (!adminRoom) return null;
+  const mc = realm === 'mc';
   return (
-    <Card solid className="settings-card">
-      <h2 className="settings-card__title"><Icon name="shield" size={18} /> Люди</h2>
-      <p className="settings-card__text">Здесь можно приглашать родных и близких и управлять доступом.</p>
-      <Button variant="primary" onClick={() => navigate.people()}>Пригласить и управлять</Button>
-    </Card>
+    <SettingsGroup title="Администрирование">
+      <SettingsRow
+        icon="shield"
+        label={mc ? 'Игроки' : 'Люди'}
+        onClick={() => (mc ? navigate.mcPlayers() : navigate.people())}
+      />
+    </SettingsGroup>
   );
 }
 
@@ -368,47 +434,53 @@ function ProfileSection({ fallbackName }: { fallbackName: string }) {
 
   return (
     <Card solid className="settings-card profile-card">
-    <div className="profile">
-      <div className="profile__photo">
-        <button
-          type="button"
-          className="profile__avatar"
-          aria-label={avatar ? 'Сменить фото' : 'Добавить фото'}
-          disabled={photoBusy}
-          onClick={() => fileInput.current?.click()}
-        >
-          <Avatar client={client} name={shown} seed={userId} mxc={avatar} size="xl" />
-          <span className="profile__badge" aria-hidden="true">
-            {photoBusy ? <span className="rl-spinner" /> : <Icon name="image" size={18} />}
-          </span>
-        </button>
-        <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0])} />
-        {avatar && (
-          <Button variant="ghost" size="sm" disabled={photoBusy} onClick={() => void dropPhoto()}>
-            Убрать фото
-          </Button>
-        )}
+      <div className="profile">
+        <div className="profile__photo">
+          <button
+            type="button"
+            className="profile__avatar"
+            aria-label={avatar ? 'Сменить фото' : 'Добавить фото'}
+            disabled={photoBusy}
+            onClick={() => fileInput.current?.click()}
+          >
+            <Avatar client={client} name={shown} seed={userId} mxc={avatar} size="xl" />
+            <span className="profile__badge" aria-hidden="true">
+              {photoBusy ? <span className="rl-spinner" /> : <Icon name="image" size={16} />}
+            </span>
+          </button>
+          <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0])} />
+        </div>
+        <form className="profile__form" onSubmit={saveName} noValidate>
+          <Field
+            className="profile-name"
+            label="Имя"
+            name="displayname"
+            autoComplete="nickname"
+            maxLength={NAME_MAX}
+            value={draft}
+            error={nameError}
+            disabled={savingName}
+            onChange={(e) => {
+              edited.current = true;
+              setDraft(e.target.value);
+              setNameError(null);
+            }}
+            suffix={changed ? (
+              <Button type="submit" variant="primary" size="sm" icon aria-label="Сохранить имя" busy={savingName} disabled={savingName}>
+                <Icon name="check" size={18} />
+              </Button>
+            ) : null}
+          />
+          <div className="profile__lines">
+            {userId && <span className="profile__id">{formatLogin(userId)}</span>}
+            {avatar && (
+              <button type="button" className="profile__remove-photo" disabled={photoBusy} onClick={() => void dropPhoto()}>
+                Убрать фото
+              </button>
+            )}
+          </div>
+        </form>
       </div>
-      <form className="profile__form" onSubmit={saveName} noValidate>
-        <Field
-          label="Имя"
-          name="displayname"
-          autoComplete="nickname"
-          maxLength={NAME_MAX}
-          value={draft}
-          error={nameError}
-          disabled={savingName}
-          onChange={(e) => {
-            edited.current = true;
-            setDraft(e.target.value);
-            setNameError(null);
-          }}
-          hint="Так вас видят другие"
-        />
-        <Button type="submit" variant="primary" busy={savingName} disabled={!changed || savingName}>Сохранить</Button>
-      </form>
-      {userId && <div className="profile__id">{formatLogin(userId)}</div>}
-    </div>
     </Card>
   );
 }
@@ -418,8 +490,14 @@ export function Settings() {
   const { logout } = useMatrix();
   const me = client.getUser(client.getUserId()!);
   const [confirm, setConfirm] = useState(false);
+  const [expanded, setExpanded] = useState<SectionKey | null>(null);
   const pin = isPinUser(client.getUserId());
   const name = me?.displayName ?? (pin ? 'Вы' : client.getUserId()!);
+  const toggle = (key: SectionKey) => setExpanded((current) => (current === key ? null : key));
+  const openPassword = () => {
+    setExpanded('password');
+    document.getElementById('settings-account')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <section className="pane pane--room" aria-label="Настройки">
@@ -429,21 +507,45 @@ export function Settings() {
       </header>
       <div className="settings">
         <ProfileSection fallbackName={name} />
-        <AdminSection />
-        <PushSection />
-        <ThemeSection />
-        {pin && getRealm() === 'family' && <PhoneSection />}
-        {pin && getRealm() === 'family' && <MinecraftSection />}
-        {!pin && (
-          <>
-            <SwitchToPinSection />
-            <PasswordSection />
-          </>
-        )}
-        <Card solid className="settings-card">
-          <h2 className="settings-card__title"><Icon name="logout" size={18} /> Сеанс</h2>
-          {!pin && <p className="settings-card__text">Устройство: <code>{client.getDeviceId()}</code></p>}
-          <Button variant="outline" onClick={() => setConfirm(true)}>Выйти</Button>
+
+        <SettingsGroup title="Общие">
+          <PushRow />
+          <ThemeRow />
+        </SettingsGroup>
+
+        <SettingsGroup id="settings-account" title="Аккаунт">
+          {pin && getRealm() === 'family' && (
+            <>
+              <SettingsRow icon="key" label="Вход по номеру" expanded={expanded === 'phone'} onClick={() => toggle('phone')} />
+              {expanded === 'phone' && <div className="settings-expand"><PhoneSection /></div>}
+              <SettingsRow icon="bot" label="Minecraft" expanded={expanded === 'mc'} onClick={() => toggle('mc')} />
+              {expanded === 'mc' && <div className="settings-expand"><MinecraftSection /></div>}
+            </>
+          )}
+          {!pin && (
+            <>
+              <SettingsRow icon="shield" label="Вход по номеру и PIN" expanded={expanded === 'pin'} onClick={() => toggle('pin')} />
+              {expanded === 'pin' && <div className="settings-expand"><SwitchToPinSection /></div>}
+              <SettingsRow icon="lock" label="Пароль и безопасность" expanded={expanded === 'password'} onClick={() => toggle('password')} />
+              {expanded === 'password' && <div className="settings-expand"><PasswordSection /></div>}
+            </>
+          )}
+        </SettingsGroup>
+
+        <AdminGroup />
+
+        <Card solid className="settings-card settings-logout">
+          <button type="button" className="settings-row settings-row--button settings-row--danger" onClick={() => setConfirm(true)}>
+            <span className="settings-row__icon"><Icon name="logout" size={20} /></span>
+            <span className="settings-row__label">Выйти</span>
+            <span className="settings-row__chevron"><Icon name="back" size={18} /></span>
+          </button>
+          {!pin && (
+            <>
+              <button type="button" className="settings__devices-link" onClick={openPassword}>Выйти на других устройствах</button>
+              <p className="settings__device">Устройство: <code>{client.getDeviceId()}</code></p>
+            </>
+          )}
         </Card>
         <p className="settings__version">Redline Chat · {__APP_VERSION__}</p>
       </div>

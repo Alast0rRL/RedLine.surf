@@ -15,6 +15,7 @@ import { ChatList } from './screens/ChatList';
 import { RoomView } from './screens/RoomView';
 import { Settings } from './screens/Settings';
 import { People } from './screens/People';
+import { McPlayers } from './screens/McPlayers';
 import { RoomInfo } from './screens/RoomInfo';
 import { RoomMedia } from './screens/RoomMedia';
 import { UserProfile } from './screens/UserProfile';
@@ -204,6 +205,7 @@ export function App() {
       {route.name === 'user' && <UserProfile key={route.userId} userId={route.userId} />}
       {route.name === 'settings' && <Settings />}
       {route.name === 'people' && <People />}
+      {route.name === 'mc-players' && <McPlayers />}
       {route.name === 'list' && (
         <section className="pane pane--room pane--placeholder" aria-hidden="true">
           <p>Выберите чат</p>
