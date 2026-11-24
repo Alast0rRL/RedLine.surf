@@ -13,6 +13,10 @@ export function toUserId(input: string): string {
   return v.includes(':') ? `@${v}` : `@${v}:${getConfig().serverName}`;
 }
 
+export function localpart(input: string): string {
+  return input.trim().replace(/^@+/, '').split(/[@:]/)[0];
+}
+
 export async function addDirect(client: MatrixClient, userId: string, roomId: string) {
   const direct = client.getAccountData(EventType.Direct)?.getContent<Record<string, string[]>>() ?? {};
   const list = direct[userId] ?? [];
@@ -61,7 +65,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    const parsed = parseLogins(who);
+    const parsed = parseLogins(mode === 'dm' && who ? `${who}@${server}` : who);
     if ('error' in parsed) return setError(parsed.error);
     const users = parsed.userIds;
     if (users.includes(client.getUserId()!)) return setError('Себя приглашать не нужно');
@@ -126,15 +130,16 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
           label={mode === 'dm' ? 'Кому' : 'Участники'}
           value={who}
           onChange={(e) => {
-            setWho(e.target.value);
+            setWho(mode === 'dm' ? localpart(e.target.value) : e.target.value);
             setError(null);
           }}
-          placeholder={mode === 'dm' ? `example@${server}` : `example@${server}, friend@${server}`}
+          placeholder={mode === 'dm' ? 'login' : `example@${server}, friend@${server}`}
+          suffix={mode === 'dm' ? `@${server}` : undefined}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
           inputMode="email"
-          hint={mode === 'dm' ? 'Логин собеседника' : 'Логины через запятую'}
+          hint={mode === 'group' ? 'Логины через запятую' : undefined}
           error={error}
         />
         <Button type="submit" variant="primary" size="lg" block busy={busy}>

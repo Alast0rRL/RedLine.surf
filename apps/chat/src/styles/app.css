@@ -118,8 +118,10 @@ a { color: inherit; }
   flex-direction: column;
   gap: var(--rl-space-5);
   width: min(100%, 26rem);
-  background: var(--chat-card);
+  background: var(--rl-color-surface-raised);
   border-color: var(--rl-color-border-strong);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .login__card .rl-eyebrow { align-self: flex-start; }
 .login__card > form { width: 100%; }
@@ -143,6 +145,14 @@ a { color: inherit; }
 .login__title span { color: var(--rl-color-accent); }
 .login__note { margin: 0; color: var(--rl-color-text-muted); font-size: var(--rl-text-xs); text-align: center; }
 .login__error { margin: 0; color: var(--rl-danger-500); font-size: var(--rl-text-xs); }
+.rl-field__label-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--rl-space-2); }
+.rl-label-hint {
+  color: var(--rl-color-text-muted);
+  font-size: 0.85em;
+  font-weight: var(--rl-weight-regular);
+  letter-spacing: normal;
+  text-transform: none;
+}
 
 .splash__content { position: relative; z-index: 2; display: grid; justify-items: center; gap: var(--rl-space-6); }
 .splash__logo {
@@ -364,6 +374,36 @@ a { color: inherit; }
   text-transform: uppercase;
 }
 .segmented button[aria-selected="true"], .segmented button[aria-pressed="true"] { background: var(--rl-color-accent); color: #fff; }
+.rl-input-affix {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  padding-right: var(--rl-space-4);
+  border: 1px solid var(--rl-color-border-strong);
+  border-radius: var(--rl-radius-lg);
+  background: var(--rl-color-surface-glass);
+}
+.rl-input-affix:hover { border-color: rgb(var(--rl-red-500-rgb) / 0.5); }
+.rl-input-affix:focus-within { border-color: var(--rl-color-accent); box-shadow: 0 0 0 3px rgb(var(--rl-red-500-rgb) / 0.2); }
+.rl-input-affix .rl-input {
+  min-height: 2.875rem;
+  padding-right: var(--rl-space-2);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+.rl-input-affix .rl-input:hover,
+.rl-input-affix .rl-input:focus { border-color: transparent; box-shadow: none; }
+.rl-input-affix__suffix {
+  display: flex;
+  align-items: center;
+  flex: none;
+  color: var(--rl-color-text-muted);
+  font-size: var(--rl-text-base);
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 /* ============ Лента ============ */
 .timeline {

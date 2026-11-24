@@ -113,7 +113,7 @@ export function PinEntry({ link }: { link: PersonalLink }) {
             <Field
               name="pin"
               label={state === 'create' ? 'Придумай PIN' : 'Введи PIN'}
-              hint={state === 'create' ? `${PIN_HINT}. Запомни его: PIN нужен для входа на других устройствах` : PIN_HINT}
+              labelHint={state === 'create' ? `${PIN_HINT}. Запомни его: PIN нужен для входа на других устройствах` : PIN_HINT}
               type={state === 'create' ? 'text' : 'password'}
               inputMode="numeric"
               pattern="[0-9]*"

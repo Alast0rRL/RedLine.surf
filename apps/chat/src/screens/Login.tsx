@@ -44,7 +44,7 @@ export function Login() {
       <ThemeToggle className="screen__theme" />
       <div className="login__glow" aria-hidden="true" />
       <div className="login__card rl-card rl-card--lg">
-        <span className="rl-eyebrow">Redline Chat</span>
+        <span className="rl-eyebrow">Семейный чат</span>
         <h1 className="login__title">
           Redline <span>Chat</span>
         </h1>
@@ -58,7 +58,6 @@ export function Login() {
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            placeholder={hasMcRealm() ? '+7 900 123-45-67 или ник' : '+7 900 123-45-67'}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             disabled={busy}
@@ -67,7 +66,7 @@ export function Login() {
           <Field
             label="PIN"
             name="pin"
-            hint={PIN_HINT}
+            labelHint={PIN_HINT}
             type="password"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -83,11 +82,6 @@ export function Login() {
           <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !phone.trim() || !pinOk(pin)}>
             Войти
           </Button>
-          {hasMcRealm() && (
-            <Button variant="ghost" size="sm" className="login__link" disabled={busy} onClick={() => { location.hash = '#/mc'; }}>
-              Играешь на сервере? Регистрация по нику
-            </Button>
-          )}
         </form>
       </div>
     </main>

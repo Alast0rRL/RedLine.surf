@@ -12,7 +12,6 @@ export function McRegister() {
   const { enterPin } = useMatrix();
   const [nick, setNick] = useState('');
   const [pin, setPin] = useState('');
-  const [pin2, setPin2] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
@@ -22,7 +21,6 @@ export function McRegister() {
     if (busy) return;
     if (!normalizeLogin(nick)) return setError('Ник: латиница, цифры и _, от 3 до 16 символов');
     if (!pinOk(pin)) return setError(`PIN — ${PIN_HINT.toLowerCase()}`);
-    if (pin !== pin2) return setError('PIN не совпадает');
     setBusy(true);
     setError(null);
     try {
@@ -46,7 +44,7 @@ export function McRegister() {
       <ThemeToggle className="screen__theme" />
       <div className="login__glow" aria-hidden="true" />
       <div className="login__card rl-card rl-card--lg">
-        <span className="rl-eyebrow">Redline Minecraft</span>
+        <span className="rl-eyebrow">Minecraft</span>
         <h1 className="login__title">
           Redline <span>Chat</span>
         </h1>
@@ -67,8 +65,7 @@ export function McRegister() {
               onChange={(e) => setNick(e.target.value)}
               disabled={busy}
             />
-            <Field label="Придумай PIN" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" hint={PIN_HINT} value={pin} onChange={(e) => setPin(digits(e.target.value))} disabled={busy} />
-            <Field label="PIN ещё раз" name="pin2" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" value={pin2} error={error} onChange={(e) => setPin2(digits(e.target.value))} disabled={busy} />
+            <Field label="Придумай PIN" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" hint={PIN_HINT} error={error} value={pin} onChange={(e) => setPin(digits(e.target.value))} disabled={busy} />
             <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !nick.trim() || !pinOk(pin)}>
               Зарегистрироваться
             </Button>

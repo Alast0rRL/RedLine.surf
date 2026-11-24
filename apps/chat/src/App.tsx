@@ -70,6 +70,7 @@ function Onboarding() {
   });
   if (!key || !userId) return null;
   const pin = isPinUser(userId);
+  if (pin) return null;
   const done = (toSettings: boolean) => {
     try {
       localStorage.setItem(key, '1');
@@ -83,30 +84,22 @@ function Onboarding() {
     <Modal
       open={open}
       onClose={() => done(false)}
-      title={pin ? 'Готово!' : 'Добро пожаловать в Redline'}
+      title="Добро пожаловать в Redline"
       actions={
-        pin ? (
-          <Button variant="primary" size="lg" data-rl-close>Понятно</Button>
-        ) : (
-          <>
-            <Button variant="primary" size="lg" onClick={() => done(true)}>Настроить</Button>
-            <Button variant="ghost" size="lg" data-rl-close>Позже</Button>
-          </>
-        )
+        <>
+          <Button variant="primary" size="lg" onClick={() => done(true)}>Настроить</Button>
+          <Button variant="ghost" size="lg" data-rl-close>Позже</Button>
+        </>
       }
     >
-      {pin ? (
-        <p>Этот телефон запомнил вас — PIN больше спрашивать не будем.</p>
-      ) : (
-        <div className="onboarding">
-          <p>Перейдите на вход по номеру телефона и PIN: так переписка откроется на любом устройстве.</p>
-          <ol>
-            <li>В настройках нажмите «Перейти на номер и PIN».</li>
-            <li>Пароль больше не понадобится.</li>
-            <li>Номер никому не показывается.</li>
-          </ol>
-        </div>
-      )}
+      <div className="onboarding">
+        <p>Перейдите на вход по номеру телефона и PIN: так переписка откроется на любом устройстве.</p>
+        <ol>
+          <li>В настройках нажмите «Перейти на номер и PIN».</li>
+          <li>Пароль больше не понадобится.</li>
+          <li>Номер никому не показывается.</li>
+        </ol>
+      </div>
     </Modal>
   );
 }

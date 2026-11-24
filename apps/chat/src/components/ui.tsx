@@ -57,23 +57,38 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 type FieldProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   hint?: string;
+  labelHint?: string;
+  suffix?: ReactNode;
   error?: string | null;
 };
 
-export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field({ label, hint, error, className, ...rest }, ref) {
+export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field({ label, hint, labelHint, suffix, error, className, ...rest }, ref) {
   const id = useId();
   const hintId = `${id}-hint`;
+  const labelHintId = `${id}-label-hint`;
+  const describedBy = [labelHint && labelHintId, (hint || error) && hintId].filter(Boolean).join(' ') || undefined;
+  const input = (
+    <input
+      ref={ref}
+      id={id}
+      className="rl-input"
+      aria-invalid={error ? true : undefined}
+      aria-describedby={describedBy}
+      {...rest}
+    />
+  );
   return (
     <label className={cx('rl-field', className)} htmlFor={id}>
-      <span className="rl-label">{label}</span>
-      <input
-        ref={ref}
-        id={id}
-        className="rl-input"
-        aria-invalid={error ? true : undefined}
-        aria-describedby={hint || error ? hintId : undefined}
-        {...rest}
-      />
+      <span className="rl-field__label-row">
+        <span className="rl-label">{label}</span>
+        {labelHint && <span id={labelHintId} className="rl-label-hint">{labelHint}</span>}
+      </span>
+      {suffix ? (
+        <span className="rl-input-affix">
+          {input}
+          <span className="rl-input-affix__suffix">{suffix}</span>
+        </span>
+      ) : input}
       {(error || hint) && (
         <span id={hintId} className={cx('rl-hint', error && 'rl-hint--error')}>
           {error || hint}
