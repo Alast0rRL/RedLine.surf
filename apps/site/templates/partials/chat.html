@@ -1,0 +1,77 @@
+<section id="chat" class="py-32 bg-gray-50 dark:bg-dark-gray relative z-10">
+    <div class="container mx-auto px-6">
+        <div class="grid lg:grid-cols-2 gap-16 items-center">
+            <div class="reveal text-left">
+                <h2 class="text-4xl font-black uppercase italic tracking-tighter mb-8">Redline Чат</h2>
+                <p class="text-xl text-gray-500 dark:text-gray-400 mb-10 leading-relaxed">Наш собственный мессенджер для игроков Redline. Работает в России без VPN — прямо в браузере или как приложение на телефоне.</p>
+
+                <div class="grid md:grid-cols-2 gap-4 mb-10">
+                    <div class="reveal p-6 rounded-3xl bg-white dark:bg-white/5 backdrop-blur-md border border-gray-100 dark:border-white/5" style="--reveal-delay: 100ms">
+                        <h3 class="text-sm font-black uppercase mb-3 text-redline-red">Без VPN и блокировок</h3>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">Свой сервер и свои правила. Никаких блокировок и замедлений — открывается везде, где есть интернет.</p>
+                    </div>
+                    <div class="reveal p-6 rounded-3xl bg-white dark:bg-white/5 backdrop-blur-md border border-gray-100 dark:border-white/5" style="--reveal-delay: 200ms">
+                        <h3 class="text-sm font-black uppercase mb-3 text-redline-red">Вход по нику</h3>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">Ник из Minecraft и PIN-код. Без номера телефона, почты и длинных паролей.</p>
+                    </div>
+                    <div class="reveal p-6 rounded-3xl bg-white dark:bg-white/5 backdrop-blur-md border border-gray-100 dark:border-white/5" style="--reveal-delay: 300ms">
+                        <h3 class="text-sm font-black uppercase mb-3 text-redline-red">Всё как в мессенджере</h3>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">Личные сообщения и общий чат игроков, фото, видео и файлы, ответы, реакции и push-уведомления.</p>
+                    </div>
+                    <div class="reveal p-6 rounded-3xl bg-white dark:bg-white/5 backdrop-blur-md border border-gray-100 dark:border-white/5" style="--reveal-delay: 400ms">
+                        <div class="flex items-center gap-3 mb-3">
+                            <h3 class="text-sm font-black uppercase text-redline-red">Один чат на всех</h3>
+                            <span class="px-2 py-1 rounded-full bg-redline-red/10 text-redline-red text-[10px] font-black uppercase tracking-widest">Скоро</span>
+                        </div>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">Игра, Discord и Redline Чат в одной ленте: пишешь где удобно — тебя видят все.</p>
+                    </div>
+                </div>
+
+                <a href="https://chat.redline.surf/#/mc" target="_blank" rel="noopener" class="inline-flex items-center justify-center px-8 py-4 rounded-2xl bg-redline-red text-white font-black text-sm uppercase tracking-widest shadow-xl hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300">Открыть Redline Чат</a>
+                <p class="mt-4 max-w-xl text-xs text-gray-500 dark:text-gray-400 leading-relaxed">На телефоне: открой ссылку и нажми «Добавить на главный экран» — чат станет приложением.</p>
+            </div>
+
+            <div class="reveal relative" style="--reveal-delay: 200ms" role="img" aria-label="Redline Чат связывает Minecraft, Discord и игру">
+                <div class="chat-map">
+                    <svg class="absolute inset-0 w-full h-full text-redline-red/40" viewBox="0 0 400 360" aria-hidden="true">
+                        <line x1="200" y1="260" x2="70" y2="90" stroke="currentColor" stroke-width="2" stroke-dasharray="7 9"></line>
+                        <line x1="200" y1="260" x2="330" y2="90" stroke="currentColor" stroke-width="2" stroke-dasharray="7 9"></line>
+                        <circle class="chat-spark chat-spark--mc" cx="0" cy="0" r="5" fill="currentColor"></circle>
+                        <circle class="chat-spark chat-spark--discord" cx="0" cy="0" r="5" fill="currentColor"></circle>
+                        <text class="chat-soon" x="105" y="170" fill="currentColor">скоро</text>
+                        <text class="chat-soon" x="265" y="170" fill="currentColor">скоро</text>
+                    </svg>
+
+                    <div class="chat-node chat-node--mc">
+                        <div class="chat-node__circle">
+                            <svg class="w-11 h-11" viewBox="0 0 32 32" shape-rendering="crispEdges" aria-hidden="true">
+                                <path fill="#6B4F2A" d="M4 12h24v16H4z"></path>
+                                <path fill="#8B5E34" d="M4 12h24v3H4z"></path>
+                                <path fill="#5BA62B" d="M4 6h24v8H4z"></path>
+                                <path fill="#78C638" d="M4 6h24v4H4z"></path>
+                                <path fill="#4B8A22" d="M10 14h4v4h-4zm10 2h4v6h-4z"></path>
+                            </svg>
+                        </div>
+                        <span class="chat-node__label">Minecraft</span>
+                    </div>
+
+                    <div class="chat-node chat-node--discord">
+                        <div class="chat-node__circle">
+                            <svg class="w-11 h-11" viewBox="0 0 32 32" fill="#5865F2" aria-hidden="true">
+                                <path d="M24.5 8.2a20 20 0 00-4.9-1.5l-.6 1.2a18 18 0 00-5.9 0l-.6-1.2a20 20 0 00-4.9 1.5C5.2 13 4.4 17.6 4.8 22.2a20 20 0 006 3l1.3-2.1c-.8-.3-1.5-.7-2.2-1.2l.5-.4a14 14 0 0012 0l.5.4c-.7.5-1.4.9-2.2 1.2l1.3 2.1a20 20 0 006-3c.5-5.3-.9-9.8-3.5-14zM12.3 19.6c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4zm7.4 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4z"></path>
+                            </svg>
+                        </div>
+                        <span class="chat-node__label">Discord</span>
+                    </div>
+
+                    <div class="chat-node chat-node--main">
+                        <div class="chat-node__circle chat-node__circle--main">
+                            <span class="text-2xl font-montserrat font-black">RL</span>
+                        </div>
+                        <span class="chat-node__label">Redline Чат</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

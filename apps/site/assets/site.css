@@ -22,20 +22,81 @@ html.lenis, html.lenis body { height: auto; }
   inset: 0;
   pointer-events: none;
   z-index: var(--rl-z-glow);
-  --glow-size: 600px;
-  --glow-core: 0.12;
-  --glow-mid: 0.04;
-  background: radial-gradient(
-    var(--glow-size) circle at var(--mouse-x, -100%) var(--mouse-y, -100%),
-    rgb(var(--rl-red-500-rgb) / var(--glow-core)) 0%,
-    rgb(var(--rl-red-500-rgb) / var(--glow-mid)) 35%,
-    transparent 75%
-  );
+  overflow: hidden;
+  mix-blend-mode: screen;
 }
-.is-hovering #glow-overlay { --glow-size: 800px; --glow-core: 0.2; --glow-mid: 0.06; }
-html:not(.dark) #glow-overlay { --glow-size: 500px; --glow-core: 0.14; }
-html:not(.dark) .is-hovering #glow-overlay { --glow-size: 600px; --glow-core: 0.22; }
+.glow-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 700px;
+  height: 700px;
+  margin: -350px 0 0 -350px;
+  border-radius: 50%;
+  opacity: 1;
+  transition: opacity .3s;
+  will-change: transform;
+  background: radial-gradient(circle, rgb(var(--rl-red-500-rgb) / .22) 0%, rgb(var(--rl-red-500-rgb) / .07) 40%, transparent 70%);
+}
+.glow-dot__bright {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity .3s;
+  background: radial-gradient(circle, rgb(var(--rl-red-500-rgb) / .2) 0%, rgb(var(--rl-red-500-rgb) / .06) 40%, transparent 70%);
+}
+body.is-hovering .glow-dot__bright { opacity: .75; }
+body.glow-hidden .glow-dot { opacity: 0; }
+html:not(.dark) #glow-overlay { mix-blend-mode: multiply; }
+html:not(.dark) .glow-dot { background: radial-gradient(circle, rgb(var(--rl-red-500-rgb) / .09) 0%, rgb(var(--rl-red-500-rgb) / .03) 40%, transparent 70%); }
+html:not(.dark) .glow-dot__bright { background: radial-gradient(circle, rgb(var(--rl-red-500-rgb) / .1) 0%, rgb(var(--rl-red-500-rgb) / .04) 40%, transparent 70%); }
 @media (hover: none), (pointer: coarse) { #glow-overlay { display: none; } }
+
+/* --- Схема чата --- */
+.chat-map { position: relative; width: 100%; max-width: 26rem; aspect-ratio: 10 / 9; margin: 0 auto; }
+.chat-node { position: absolute; display: flex; flex-direction: column; align-items: center; gap: .75rem; transform: translate(-50%, -50%); text-align: center; }
+.chat-node--mc { left: 17.5%; top: 25%; }
+.chat-node--discord { left: 82.5%; top: 25%; }
+.chat-node--main { left: 50%; top: 72.2%; }
+.chat-node__circle {
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 1px solid rgb(var(--rl-red-500-rgb) / .15);
+  box-shadow: var(--rl-shadow-xl);
+}
+.dark .chat-node__circle { background: var(--rl-ink-900); border-color: rgb(255 255 255 / .1); }
+.chat-node__circle--main {
+  width: 7.5rem;
+  height: 7.5rem;
+  color: #fff;
+  background: rgb(var(--rl-red-500-rgb));
+  border-color: transparent;
+  box-shadow: 0 20px 50px rgb(var(--rl-red-500-rgb) / .35);
+}
+.chat-node__label { font-size: .75rem; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: var(--rl-gray-500); }
+.dark .chat-node__label { color: var(--rl-gray-400); }
+.chat-soon { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .18em; }
+.chat-spark { transform-box: view-box; transform-origin: 0 0; }
+.chat-spark--mc { animation: chat-spark-mc 3s linear infinite; }
+.chat-spark--discord { animation: chat-spark-discord 3s linear infinite .7s; }
+@keyframes chat-spark-mc {
+  0% { transform: translate(200px, 260px); opacity: 0; }
+  12% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translate(70px, 90px); opacity: 0; }
+}
+@keyframes chat-spark-discord {
+  0% { transform: translate(200px, 260px); opacity: 0; }
+  12% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translate(330px, 90px); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .chat-spark { display: none; } }
 
 /* --- Фон hero --- */
 .hero-background { background: linear-gradient(#e9e9e9, #fafafa); }
@@ -48,13 +109,17 @@ html:not(.dark) .is-hovering #glow-overlay { --glow-size: 600px; --glow-core: 0.
   opacity: 0; transition: opacity 1.2s var(--rl-ease-out-expo);
 }
 .world-canvas.is-ready { opacity: 1; }
-/* под заголовком мир притушен, чтобы текст читался; по краям — во всю силу */
+/* мягкая подложка под текстом: слева плотнее, к острову справа прозрачная */
 .world-vignette {
   position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(ellipse 46% 50% at 50% 50%, rgb(246 246 246 / 0.86), rgb(246 246 246 / 0.45) 55%, rgb(246 246 246 / 0.1) 85%);
+  background: radial-gradient(ellipse 80% 60% at 50% 50%, rgb(246 246 246 / 0.6), rgb(246 246 246 / 0.25) 60%, transparent 90%);
 }
 .dark .world-vignette {
-  background: radial-gradient(ellipse 46% 50% at 50% 50%, rgb(5 5 5 / 0.78), rgb(5 5 5 / 0.35) 55%, transparent 85%);
+  background: radial-gradient(ellipse 80% 60% at 50% 50%, rgb(5 5 5 / 0.6), rgb(5 5 5 / 0.25) 60%, transparent 90%);
+}
+@media (min-width: 1024px) {
+  .world-vignette { background: linear-gradient(90deg, rgb(246 246 246 / 0.7), rgb(246 246 246 / 0.7) 20%, transparent 55%); }
+  .dark .world-vignette { background: linear-gradient(90deg, rgb(5 5 5 / 0.7), rgb(5 5 5 / 0.7) 20%, transparent 55%); }
 }
 
 .blob {
@@ -98,6 +163,7 @@ dialog.rl-dialog[open] { animation: dialog-in var(--rl-duration-slow) var(--rl-e
 @keyframes dialog-in { from { opacity: 0; transform: translateY(20px) scale(0.97); } }
 
 @media (prefers-reduced-motion: reduce) {
+  #glow-overlay { display: none; }
   .blob, .parallax > use, .skeleton { animation: none; }
   .js .reveal { opacity: 1; transform: none; transition: none; }
   dialog.rl-dialog[open] { animation: none; }

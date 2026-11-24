@@ -1,12 +1,13 @@
-{% set links = [('features', 'Технологии'), ('map', 'Карта'), ('gallery', 'Галерея'), ('admin', 'Команда'), ('faq', 'F.A.Q')] %}
+{% set links = [('features', 'Технологии'), ('map', 'Карта'), ('gallery', 'Галерея'), ('chat', 'Чат'), ('admin', 'Команда'), ('faq', 'F.A.Q')] %}
 <nav class="fixed w-full z-[100] bg-white/70 dark:bg-dark-bg/70 backdrop-blur-md border-b border-gray-200 dark:border-white/5">
     <div class="container mx-auto px-6 py-4 flex justify-between items-center relative">
-        <a href="#top" class="text-2xl font-black text-redline-red tracking-tighter hover:scale-105 transition uppercase">Redline</a>
+        <a href="#top" class="text-2xl font-montserrat font-black text-redline-red tracking-tighter uppercase hover:scale-105 transition">Redline</a>
 
         <div class="hidden lg:flex items-center gap-6 lg:gap-10 text-xs font-black uppercase tracking-widest">
             {% for id, label in links %}
             <a href="#{{ id }}" class="hover:text-redline-red transition">{{ label }}</a>
             {% endfor %}
+            <a href="https://chat.redline.surf/#/mc" target="_blank" rel="noopener" class="inline-flex items-center px-5 py-2 rounded-full bg-redline-red text-white text-xs font-black uppercase tracking-widest hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300">Redline Чат</a>
             <button type="button" data-theme-toggle aria-label="Сменить тему" class="p-2 rounded-xl bg-gray-100 dark:bg-white/5 hover:rotate-12 transition">
                 <svg class="w-5 h-5 dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
                 <svg class="w-5 h-5 text-yellow-500 hidden dark:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -33,5 +34,6 @@
         {% for id, label in links %}
         <a href="#{{ id }}" data-close>{{ label }}</a>
         {% endfor %}
+        <a href="https://chat.redline.surf/#/mc" target="_blank" rel="noopener" class="mt-2 inline-flex items-center px-6 py-3 rounded-full bg-redline-red text-white text-sm font-black uppercase tracking-widest hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300">Redline Чат</a>
     </div>
 </dialog>

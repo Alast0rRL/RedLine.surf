@@ -15,7 +15,8 @@
                 </div>
                 <h3 class="text-2xl font-black {{ name_color }} uppercase mb-2">{{ nick }}</h3>
                 <p class="text-gray-500 dark:text-gray-400 text-sm mb-8 italic flex-1">{{ text }}</p>
-                <button type="button" data-copy="{{ discord }}" data-toast="Discord скопирован" class="w-full py-4 bg-white dark:bg-white/5 rounded-2xl hover:bg-redline-red hover:text-white transition font-bold text-xs uppercase tracking-widest">Discord</button>
+                <a href="https://chat.redline.surf/#/mc" target="_blank" rel="noopener" class="flex w-full items-center justify-center py-4 mb-3 bg-white dark:bg-white/5 rounded-2xl hover:bg-redline-red hover:text-white transition font-bold text-xs uppercase tracking-widest">Написать в Redline Чат</a>
+                <button type="button" data-copy="{{ discord }}" data-toast="Discord скопирован" class="flex w-full items-center justify-center py-4 bg-white dark:bg-white/5 rounded-2xl hover:bg-[#5865F2] hover:text-white transition font-bold text-xs uppercase tracking-widest">Discord</button>
             </div>
             {% endfor %}
         </div>

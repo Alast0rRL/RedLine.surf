@@ -40,28 +40,50 @@
     history.replaceState(null, '', id && id !== 'top' ? `#${id}` : location.pathname);
   });
 
-  // --- Свечение за курсором: крутится, только пока догоняет мышь ---
+  // --- Свечение за курсором: rAF только пока догоняем мышь ---
   safely('glow', () => {
     const glow = $('#glow-overlay');
     if (!glow || reducedMotion || !matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-    let mx = -1000, my = -1000, cx = -1000, cy = -1000, running = false;
+    let dot = $('.glow-dot', glow);
+    if (!dot) {
+      dot = document.createElement('div');
+      dot.className = 'glow-dot';
+      const bright = document.createElement('div');
+      bright.className = 'glow-dot__bright';
+      dot.appendChild(bright);
+      glow.appendChild(dot);
+    }
+    const interactive = 'a, button, summary, [data-copy]';
+    let mx = 0, my = 0, cx = 0, cy = 0, scale = 1, targetScale = 1;
+    let running = false, started = false;
+    document.body.classList.add('glow-hidden');
+    const render = () => { dot.style.transform = `translate3d(${cx}px, ${cy}px, 0) scale(${scale})`; };
     const tick = () => {
-      cx += (mx - cx) * 0.1;
-      cy += (my - cy) * 0.1;
-      glow.style.setProperty('--mouse-x', `${cx}px`);
-      glow.style.setProperty('--mouse-y', `${cy}px`);
-      if (Math.abs(mx - cx) + Math.abs(my - cy) > 0.5) requestAnimationFrame(tick);
-      else running = false;
+      cx += (mx - cx) * 0.15;
+      cy += (my - cy) * 0.15;
+      scale += (targetScale - scale) * 0.15;
+      const moving = Math.abs(mx - cx) + Math.abs(my - cy) > 0.5;
+      const scaling = Math.abs(targetScale - scale) > 0.003;
+      if (!moving && !scaling) { cx = mx; cy = my; scale = targetScale; render(); running = false; return; }
+      render();
+      requestAnimationFrame(tick);
     };
+    const kick = () => { if (!running) { running = true; requestAnimationFrame(tick); } };
+    const show = () => document.body.classList.remove('glow-hidden');
+    const hide = () => document.body.classList.add('glow-hidden');
     document.addEventListener('pointermove', (e) => {
-      mx = e.clientX; my = e.clientY;
-      if (cx < -999) { cx = mx; cy = my; }
-      if (!running) { running = true; requestAnimationFrame(tick); }
+      if (!started) { mx = cx = e.clientX; my = cy = e.clientY; started = true; render(); }
+      else { mx = e.clientX; my = e.clientY; }
+      show();
+      const over = e.target instanceof Element && !!e.target.closest(interactive);
+      document.body.classList.toggle('is-hovering', over);
+      targetScale = over ? 1.25 : 1;
+      kick();
     }, { passive: true });
-    const interactive = 'button, a, summary, [data-copy]';
-    document.addEventListener('pointerover', (e) => {
-      document.body.classList.toggle('is-hovering', !!e.target.closest(interactive));
-    }, { passive: true });
+    document.documentElement.addEventListener('pointerleave', hide);
+    document.documentElement.addEventListener('pointerenter', () => { if (started) show(); });
+    window.addEventListener('blur', hide);
+    window.addEventListener('focus', () => { if (started) show(); });
   });
 
   // --- Появление блоков ---
