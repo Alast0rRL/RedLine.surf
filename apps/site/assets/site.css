@@ -102,22 +102,6 @@ html:not(.dark) .glow-dot__bright { background: radial-gradient(circle, rgb(var(
 .hero-background { background: linear-gradient(#e9e9e9, #fafafa); }
 .dark .hero-background { background: linear-gradient(#030303, #0a0a0a); }
 
-/* --- Картинка-фон hero (потом заменим на гифку) --- */
-.hero-photo {
-  position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: url('/static/img/hero.webp') center / cover no-repeat;
-}
-.dark .hero-photo { filter: brightness(.55) saturate(.9); }
-
-/* мягкая подложка под текстом, чтобы мир не спорил с заголовком */
-.world-vignette {
-  position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(ellipse 46% 50% at 50% 50%, rgb(246 246 246 / 0.86), rgb(246 246 246 / 0.45) 55%, rgb(246 246 246 / 0.1) 85%);
-}
-.dark .world-vignette {
-  background: radial-gradient(ellipse 46% 50% at 50% 50%, rgb(5 5 5 / 0.78), rgb(5 5 5 / 0.35) 55%, transparent 85%);
-}
-
 .blob {
   position: absolute; width: 600px; height: 600px;
   background: radial-gradient(circle, rgb(var(--rl-red-500-rgb) / 0.08) 0%, transparent 70%);
