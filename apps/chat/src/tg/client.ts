@@ -20,6 +20,33 @@ async function startUpdates(tg: TelegramClient) {
 }
 const listeners = new Set<() => void>();
 const msgListeners = new Set<(m: TgMsg, edit: boolean) => void>();
+const readListeners = new Set<(peerId: number) => void>();
+
+/** Чат прочитан (обнулить счётчик в списке). */
+export function onTgRead(fn: (peerId: number) => void): () => void {
+  readListeners.add(fn);
+  return () => readListeners.delete(fn);
+}
+
+export function notifyTgRead(peerId: number): void {
+  for (const l of readListeners) l(peerId);
+}
+
+/**
+ * В РФ web.telegram.org заблокирован: ходим через свой сервер (chat.redline.surf/tgws/<dc>),
+ * он пересылает WebSocket в Telegram через VPN. MTProto зашифрован до Telegram — сервер видит только шум.
+ */
+function proxiedUrl(url: string): string {
+  const m = url.match(/^wss:\/\/([a-z]+)\.web\.telegram\.org\/apiws$/);
+  if (!m) return url;
+  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/tgws/${m[1]}`;
+}
+
+class ProxiedWebSocket extends WebSocket {
+  constructor(url: string | URL, protocols?: string | string[]) {
+    super(proxiedUrl(String(url)), protocols);
+  }
+}
 
 function emit() {
   for (const l of listeners) l();
@@ -66,8 +93,13 @@ export function getTg(): Promise<TelegramClient> {
   const cfg = telegramConfig();
   if (!cfg) return Promise.reject(new Error('Telegram не настроен'));
   starting = (async () => {
-    const { TelegramClient } = await import('@mtcute/web');
-    const tg = new TelegramClient({ apiId: cfg.apiId, apiHash: cfg.apiHash, storage: STORAGE });
+    const { TelegramClient, WebSocketTransport } = await import('@mtcute/web');
+    const tg = new TelegramClient({
+      apiId: cfg.apiId,
+      apiHash: cfg.apiHash,
+      storage: STORAGE,
+      transport: new WebSocketTransport({ ws: ProxiedWebSocket }),
+    });
     await tg.connect();
     tg.onNewMessage.add((m) => {
       const msg = toMsg(m);

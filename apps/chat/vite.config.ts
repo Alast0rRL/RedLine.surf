@@ -55,5 +55,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Telegram в разработке — через тот же прокси, что и в проде (в РФ web.telegram.org закрыт)
+    proxy: { '/tgws': { target: 'https://chat.redline.surf', changeOrigin: true, ws: true } },
   },
 });

@@ -115,6 +115,7 @@ export function Avatar({
   size = 'md',
   round,
   status,
+  src,
 }: {
   client?: MatrixClient;
   name: string;
@@ -124,6 +125,8 @@ export function Avatar({
   size?: AvatarSize;
   round?: boolean;
   status?: 'online';
+  /** готовая картинка (не из Matrix), например фото из Telegram */
+  src?: string | null;
 }) {
   const px = AVATAR_PX[size] * 2; // ретина
   const url = useMediaUrl(client && mxc ? { url: mxc } : null, { width: px, height: px });
@@ -133,7 +136,7 @@ export function Avatar({
       data-color={avatarColor(seed)}
       aria-hidden="true"
     >
-      {url && url !== 'error' ? <img src={url} alt="" draggable={false} /> : initials(name)}
+      {src ? <img src={src} alt="" draggable={false} /> : url && url !== 'error' ? <img src={url} alt="" draggable={false} /> : initials(name)}
       {status && <span className="rl-avatar__status" data-status={status} />}
     </span>
   );

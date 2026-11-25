@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Avatar, Button, Icon } from '../components/ui';
+import { Button, Icon } from '../components/ui';
+import { TgAvatar } from './TgAvatar';
 import { RealmSwitch } from '../components/RealmSwitch';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { navigate } from '../hooks/useHashRoute';
@@ -62,7 +63,7 @@ export function TgList({ ready, activeId }: { ready: boolean; activeId?: number 
                     navigate.tgChat(d.id);
                   }}
                 >
-                  <Avatar name={d.name} seed={`tg:${d.id}`} round />
+                  <TgAvatar peerId={d.id} name={d.name} />
                   <span className="chat-row__main">
                     <span className="chat-row__name"><span className="chat-row__title">{d.name}</span></span>
                     <span className="chat-row__preview">{d.preview}</span>

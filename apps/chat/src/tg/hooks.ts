@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { onTgChange, onTgMessage, resumeTg, tgErrorText } from './client';
-import { loadDialogs, loadHistory, markRead, msgPreview, type TgDialog, type TgMsg } from './data';
+import { onTgChange, onTgMessage, onTgRead, resumeTg, tgErrorText } from './client';
+import { loadDialogs, loadHistory, markRead, msgPreview, tgAvatar, type TgDialog, type TgMsg } from './data';
 
 /** Перерисовка при входе/выходе и новых сообщениях. */
 export function useTgVersion(): number {
@@ -72,6 +72,7 @@ export function useTgDialogs(ready: boolean): { dialogs: TgDialog[] | null; erro
       window.clearTimeout(timer);
       timer = window.setTimeout(() => void load(), DIALOGS_DEBOUNCE_MS);
     });
+    const offRead = onTgRead((id) => setDialogs((list) => list?.map((d) => (d.id === id && d.unread ? { ...d, unread: 0 } : d)) ?? list));
     const onVisible = () => {
       if (document.visibilityState === 'visible') void load();
     };
@@ -79,6 +80,7 @@ export function useTgDialogs(ready: boolean): { dialogs: TgDialog[] | null; erro
     return () => {
       alive = false;
       off();
+      offRead();
       window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
@@ -104,7 +106,7 @@ export function useTgHistory(peerId: number, ready: boolean) {
         if (!alive) return;
         setMsgs(m);
         if (m.length < 50) setAtStart(true);
-        void markRead(peerId).catch(() => {});
+        void markRead(peerId, m.at(-1)?.id).catch((e) => console.warn('tg read', e));
       },
       (e) => {
         console.error(e);
@@ -120,7 +122,7 @@ export function useTgHistory(peerId: number, ready: boolean) {
         if (edit) return list;
         return [...list, m];
       });
-      if (!m.out && document.visibilityState === 'visible') void markRead(peerId).catch(() => {});
+      if (!m.out && !edit && document.visibilityState === 'visible') void markRead(peerId, m.id).catch((e) => console.warn('tg read', e));
     });
     return () => {
       alive = false;
@@ -149,4 +151,18 @@ export function useTgHistory(peerId: number, ready: boolean) {
   }, []);
 
   return { msgs, error, loadOlder, loadingOlder, atStart, addOwn };
+}
+
+/** Фото профиля Telegram (null — нет или ещё грузится). */
+export function useTgAvatar(peerId: number, ready = true): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    let alive = true;
+    void tgAvatar(peerId).then((u) => alive && setUrl(u));
+    return () => {
+      alive = false;
+    };
+  }, [peerId, ready]);
+  return url;
 }

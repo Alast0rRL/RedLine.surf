@@ -1,5 +1,5 @@
 import type { Message, Dialog } from '@mtcute/web';
-import { getTg } from './client';
+import { getTg, notifyTgRead } from './client';
 
 export interface TgDialog {
   id: number;
@@ -51,7 +51,16 @@ function mediaLabel(m: Message): string | null {
   return label ?? 'Вложение';
 }
 
+/** Фото профиля, которые видели в диалогах и сообщениях: id → файл. */
+type PhotoLoc = NonNullable<Dialog['peer']['photo']>['small'];
+const photos = new Map<number, PhotoLoc | null>();
+
+function rememberPhoto(peer: { id: number; photo: { small: PhotoLoc } | null }) {
+  photos.set(peer.id, peer.photo?.small ?? null);
+}
+
 export function toMsg(m: Message): TgMsg {
+  rememberPhoto(m.sender);
   return {
     id: m.id,
     chatId: m.chat.id,
@@ -71,6 +80,7 @@ export function msgPreview(m: Pick<TgMsg, 'text' | 'media'>): string {
 }
 
 function toDialog(d: Dialog): TgDialog {
+  rememberPhoto(d.peer);
   const last = d.lastMessage ? toMsg(d.lastMessage) : null;
   const group = d.peer.type === 'chat' && d.peer.chatType !== 'channel';
   const prefix = last && group ? (last.out ? 'Вы: ' : `${last.sender}: `) : last?.out ? 'Вы: ' : '';
@@ -102,6 +112,7 @@ export async function loadHistory(peerId: number, beforeId?: number, limit = 50)
 export async function loadChatTitle(peerId: number): Promise<{ name: string; group: boolean }> {
   const tg = await getTg();
   const peer = await tg.getPeer(peerId);
+  rememberPhoto(peer);
   return { name: peer.displayName, group: peer.type === 'chat' && peer.chatType !== 'channel' };
 }
 
@@ -110,7 +121,51 @@ export async function sendText(peerId: number, text: string): Promise<TgMsg> {
   return toMsg(await tg.sendText(peerId, text));
 }
 
-export async function markRead(peerId: number): Promise<void> {
+/** Отметить прочитанным до сообщения maxId (или всё) и обнулить счётчик в списке. */
+export async function markRead(peerId: number, maxId?: number): Promise<void> {
   const tg = await getTg();
-  await tg.readHistory(peerId);
+  await tg.readHistory(peerId, { maxId: maxId ?? 0, clearMentions: true });
+  notifyTgRead(peerId);
+}
+
+const AVATAR_CACHE = 'rl-tg-avatars';
+const avatars = new Map<string, Promise<string | null>>();
+let active = 0;
+const queue: Array<() => void> = [];
+
+/** Не больше трёх загрузок сразу: в списке может быть сотня чатов. */
+async function limited<T>(fn: () => Promise<T>): Promise<T> {
+  if (active >= 3) await new Promise<void>((r) => queue.push(r));
+  active++;
+  try {
+    return await fn();
+  } finally {
+    active--;
+    queue.shift()?.();
+  }
+}
+
+/** Маленькое фото профиля как blob-URL; кэшируется на устройстве. null — фото нет. */
+export function tgAvatar(peerId: number): Promise<string | null> {
+  const loc = photos.get(peerId);
+  if (!loc) return Promise.resolve(null);
+  const key = `/tg-avatar/${peerId}/${loc.uniqueFileId}`;
+  let p = avatars.get(key);
+  if (!p) {
+    p = (async () => {
+      const cache = typeof caches === 'undefined' ? null : await caches.open(AVATAR_CACHE).catch(() => null);
+      const hit = await cache?.match(key).catch(() => undefined);
+      if (hit) return URL.createObjectURL(await hit.blob());
+      const bytes = await limited(async () => (await getTg()).downloadAsBuffer(loc));
+      const blob = new Blob([bytes as BlobPart], { type: 'image/jpeg' });
+      void cache?.put(key, new Response(blob)).catch(() => {});
+      return URL.createObjectURL(blob);
+    })().catch((e) => {
+      console.warn('tg avatar', e);
+      avatars.delete(key);
+      return null;
+    });
+    avatars.set(key, p);
+  }
+  return p;
 }

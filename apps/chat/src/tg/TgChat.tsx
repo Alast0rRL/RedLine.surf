@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Avatar, Button, Icon, toast } from '../components/ui';
+import { Button, Icon, toast } from '../components/ui';
+import { TgAvatar } from './TgAvatar';
 import { navigate } from '../hooks/useHashRoute';
 import { formatDay, formatTime, sameDay } from '../lib/events';
 import { loadChatTitle, sendText } from './data';
@@ -82,7 +83,7 @@ export function TgChat({ peerId, ready }: { peerId: number; ready: boolean }) {
         <Button variant="ghost" icon aria-label="Назад к чатам" className="topbar__back" onClick={() => navigate.back('#/tg')}>
           <Icon name="back" />
         </Button>
-        <Avatar name={name || '?'} seed={`tg:${peerId}`} size="sm" round />
+        {title ? <TgAvatar peerId={peerId} name={name} size="sm" /> : null}
         <span className="topbar__title">
           <span className="topbar__name">{name}</span>
           <span className="topbar__sub">Telegram</span>
@@ -107,7 +108,7 @@ export function TgChat({ peerId, ready }: { peerId: number; ready: boolean }) {
                   <div className={`msg${m.out ? ' msg--own' : ''}${first ? ' msg--first' : ''}${last ? ' msg--last' : ''}`}>
                     {!m.out && (
                       <div className="msg__avatar">
-                        {last && title?.group && <Avatar name={m.sender} seed={`tg:${m.senderId}`} size="sm" />}
+                        {last && title?.group && <TgAvatar peerId={m.senderId} name={m.sender} size="sm" />}
                       </div>
                     )}
                     <div className="msg__col">
