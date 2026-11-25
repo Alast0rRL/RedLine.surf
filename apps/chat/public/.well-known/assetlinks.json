@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "surf.redline.chat",
+      "sha256_cert_fingerprints": [
+        "37:93:82:1C:8C:10:90:EB:04:23:54:6D:23:4A:8C:23:A4:B6:BF:7F:BC:BA:AF:9A:9D:FD:BB:30:6B:1F:AE:1F"
+      ]
+    }
+  }
+]

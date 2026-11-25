@@ -30,6 +30,17 @@ const updateSW = registerSW({
     toast('Доступно обновление — нажмите, чтобы перезапустить', { duration: 0 });
     document.querySelector('.rl-toaster')?.addEventListener('click', () => void updateSW(true), { once: true });
   },
+  onRegisteredSW(_url, registration) {
+    if (!registration) return;
+    // приложение на телефоне неделями живёт в фоне без перезагрузки — проверяем sw.js при каждом возврате
+    let lastCheck = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      if (Date.now() - lastCheck < 10 * 60 * 1000) return;
+      lastCheck = Date.now();
+      void registration.update().catch(() => {});
+    });
+  },
 });
 
 initTheme();

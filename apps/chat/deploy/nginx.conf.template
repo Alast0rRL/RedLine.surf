@@ -80,6 +80,13 @@ server {
         try_files $uri =404;
     }
 
+    # Android-приложение (TWA): Chrome сверяет отпечаток ключа подписи APK, иначе покажет адресную строку
+    location = /.well-known/assetlinks.json {
+        default_type application/json;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
     location / {
         include /etc/nginx/redline-headers.conf;
         add_header Cache-Control "no-cache" always;

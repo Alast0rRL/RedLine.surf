@@ -18,3 +18,14 @@ NUL
 
 # локальный конфиг чата для vite dev
 apps/chat/public/config.json
+
+# Android (TWA): сборки и ключи — не в репозиторий
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+*.idsig
