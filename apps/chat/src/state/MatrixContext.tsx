@@ -3,7 +3,7 @@ import { ClientEvent, HttpApiEvent, SyncState, type MatrixClient } from 'matrix-
 import { getRealm, hasMcRealm, loadConfig, otherRealm, realmConfig, setRealm, type Realm } from '../config';
 import { ACCOUNT_DELETED, forgetLink, isDeactivated, loadLink, loginWithPin, preparePinSession, saveLink, type PersonalLink, type PinLogin } from '../lib/pin';
 import { loadSession } from '../lib/session';
-import { bindPhone, getBoundPhone, getLinkedUser, NO_TOKEN, savedPhone, type LinkedAccount } from '../lib/phone';
+import { bindPhone, fetchLinkByPhone, getBoundPhone, getLinkedUser, NO_TOKEN, savedPhone, type LinkedAccount } from '../lib/phone';
 import { claimGuest } from '../lib/guestInvites';
 import { PhoneOffer, type PhoneOfferData } from '../screens/PhoneOffer';
 import { RealmPin } from '../screens/RealmPin';
@@ -68,6 +68,13 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   const [realm, setRealmState] = useState<Realm>(getRealm());
   const [hasOther, setHasOther] = useState(false);
   const [askPin, setAskPin] = useState<Realm | null>(null);
+  /**
+   * Логин связанного аккаунта во втором мире, когда ключа на устройстве нет (вошли по паролю).
+   * Переключатель показываем, при открытии спросим PIN и войдём по нику, как с экрана входа.
+   */
+  const [otherUser, setOtherUser] = useState<{ realm: Realm; user: string } | null>(null);
+  const otherUserRef = useRef(otherUser);
+  otherUserRef.current = otherUser;
   const clientRef = useRef<MatrixClient | null>(null);
   const pending = useRef(new Map<Realm, PreparedRealm>());
   /** Растёт при выходе и переключении: запуск или фоновый вход старого поколения себя отменяет. */
@@ -195,17 +202,20 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   // Ссылки второго мира на устройстве нет (вышли из него), а связка на сервере жива: возвращаем
   // переключатель. Ключ у связанных аккаунтов общий, PIN спросим при открытии.
   useEffect(() => {
+    setOtherUser(null);
     if (status !== 'ready' || !client || !hasMcRealm() || otherAvailable()) return;
     const own = loadLink();
     const token = client.getAccessToken();
-    if (!own || !token) return;
+    if (!token) return;
     const r = getRealm();
     let stop = false;
     getLinkedUser(token, r)
       .then((user) => {
         if (stop || !user || getRealm() !== r || otherAvailable()) return;
-        saveLink({ user, key: own.key, token: NO_TOKEN, name: user }, otherRealm(r));
-        setHasOther(true);
+        if (own) {
+          saveLink({ user, key: own.key, token: NO_TOKEN, name: user }, otherRealm(r));
+          setHasOther(true);
+        } else setOtherUser({ realm: otherRealm(r), user });
       })
       .catch(() => undefined);
     return () => {
@@ -321,7 +331,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       const session = loadSession(r);
       if (!session) {
         // сеанса нет (вход во второй мир не удался) — спросим PIN, текущий чат пока работает
-        if (loadLink(r)) setAskPin(r);
+        if (loadLink(r) || otherUserRef.current?.realm === r) setAskPin(r);
         return;
       }
       switching.current = true;
@@ -368,9 +378,14 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
 
   const unlockOther = useCallback(
     async (r: Realm, pin: string) => {
-      const link = loadLink(r);
+      let link: PersonalLink | null = loadLink(r);
+      const ou = otherUserRef.current;
+      // ключа нет (вход по паролю): берём ссылку по нику и PIN, как на экране входа
+      if (!link && ou?.realm === r) link = await fetchLinkByPhone(ou.user, pin, r);
       if (!link) throw new Error('Войдите заново');
       const login = await loginWithPin(realmConfig(r).homeserverUrl, link, pin, r);
+      saveLink({ user: link.user, key: link.key, token: NO_TOKEN, name: link.name }, r);
+      setOtherUser(null);
       setAskPin(null);
       await switchRealm(r, { link, login });
     },
@@ -379,12 +394,15 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ status, client, syncProblem, error, progress, login, enterPin, logout, realm, hasOther, switchRealm, refreshOther }}
+      value={{ status, client, syncProblem, error, progress, login, enterPin, logout, realm, hasOther: hasOther || !!otherUser, switchRealm, refreshOther }}
     >
       {children}
       {phoneOffer && status === 'ready' && <PhoneOffer offer={phoneOffer} onClose={() => setPhoneOffer(null)} />}
       {askPin && status === 'ready' && (
-        <RealmPin realm={askPin} onSubmit={(pin) => unlockOther(askPin, pin)} onClose={() => setAskPin(null)} />
+        <RealmPin
+          realm={askPin}
+          title={otherUser?.realm === askPin ? `${askPin === 'mc' ? 'Minecraft' : 'Семья'}: PIN от ${otherUser.user}` : undefined}
+          onSubmit={(pin) => unlockOther(askPin, pin)} onClose={() => setAskPin(null)} />
       )}
     </Ctx.Provider>
   );
