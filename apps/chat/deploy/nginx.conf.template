@@ -17,7 +17,7 @@ server {
     gzip_proxied any;
     gzip_types text/css application/javascript application/json application/wasm image/svg+xml application/manifest+json;
 
-    set $csp "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; font-src 'self'; connect-src 'self' ${HOMESERVER_URL} blob: data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+    set $csp "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; font-src 'self'; connect-src 'self' ${HOMESERVER_URL} wss://*.web.telegram.org blob: data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
     # вход по номеру: тот же процесс, что и push-шлюз. Переменная + resolver: nginx стартует, даже если push недоступен
     resolver 127.0.0.11 valid=30s;

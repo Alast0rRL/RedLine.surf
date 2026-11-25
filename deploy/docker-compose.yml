@@ -76,6 +76,8 @@ services:
       BOT_USERS: ${BOT_USERS:-}
       MC_HOMESERVER_URL: ${MC_HOMESERVER_URL:-}
       MC_SERVER_NAME: ${MC_SERVER_NAME:-mc.redline.surf}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
     ports:
       - "127.0.0.1:${CHAT_PORT:-8090}:8080"
     networks: [redline]

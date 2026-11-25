@@ -16,7 +16,10 @@ export type Route =
   | { name: 'mc-login' }
   | { name: 'family-login' }
   | { name: 'start' }
-  | { name: 'join'; code: string };
+  | { name: 'join'; code: string }
+  | { name: 'tg' }
+  | { name: 'tg-connect' }
+  | { name: 'tg-chat'; peerId: number };
 
 function parse(hash: string): Route {
   const join = hash.match(/^#\/join\/([A-Za-z0-9_-]{16,64})$/);
@@ -33,6 +36,10 @@ function parse(hash: string): Route {
   if (u) return { name: 'user', userId: decodeURIComponent(u[1]) };
   const m = hash.match(/^#\/room\/(.+)$/);
   if (m) return { name: 'room', roomId: decodeURIComponent(m[1]) };
+  if (hash === '#/tg') return { name: 'tg' };
+  if (hash === '#/tg/connect') return { name: 'tg-connect' };
+  const tg = hash.match(/^#\/tg\/(-?\d+)$/);
+  if (tg) return { name: 'tg-chat', peerId: Number(tg[1]) };
   if (hash === '#/settings') return { name: 'settings' };
   if (hash === '#/people') return { name: 'people' };
   if (hash === '#/mc-players') return { name: 'mc-players' };
@@ -90,6 +97,17 @@ export const navigate = {
   },
   roomMedia: (roomId: string) => {
     history.pushState({ rlFromList: true }, '', `#/room/${encodeURIComponent(roomId)}/media`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  },
+  tg: () => {
+    location.hash = '#/tg';
+  },
+  tgChat: (peerId: number) => {
+    history.pushState({ rlFromList: true }, '', `#/tg/${peerId}`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  },
+  tgConnect: () => {
+    history.pushState({ rlFromList: true }, '', '#/tg/connect');
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   },
   /** Назад из информации/профиля: шаг истории, иначе — запасной экран. */

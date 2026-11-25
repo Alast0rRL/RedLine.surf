@@ -19,6 +19,10 @@ import { McPlayers } from './screens/McPlayers';
 import { RoomInfo } from './screens/RoomInfo';
 import { RoomMedia } from './screens/RoomMedia';
 import { UserProfile } from './screens/UserProfile';
+import { TgArea } from './tg/TgArea';
+import { TgConnect } from './tg/TgConnect';
+import { isTgConnected } from './tg/client';
+import { useTgVersion } from './tg/hooks';
 
 const OFFLINE_DELAY_MS = 5000;
 
@@ -114,6 +118,7 @@ export function App() {
   const { status, error, progress, client, switchRealm } = useMatrix();
   const route = useHashRoute();
   useEdgeSwipeBack();
+  useTgVersion();
 
   // клик по уведомлению: service worker просит открыть комнату
   useEffect(() => {
@@ -200,7 +205,17 @@ export function App() {
     );
   }
 
-  const isList = route.name === 'list' || route.name === 'start';
+  if ((route.name === 'tg' || route.name === 'tg-chat') && isTgConnected()) {
+    return (
+      <div className="app" data-view={route.name === 'tg' ? 'list' : 'detail'}>
+        <AppLines />
+        <OfflineBar />
+        <TgArea peerId={route.name === 'tg-chat' ? route.peerId : undefined} />
+      </div>
+    );
+  }
+
+  const isList = route.name === 'list' || route.name === 'start' || route.name === 'tg' || route.name === 'tg-chat';
   const view = isList ? 'list' : 'detail';
   return (
     <div className="app" data-view={view}>
@@ -215,6 +230,7 @@ export function App() {
       {route.name === 'settings' && <Settings />}
       {route.name === 'people' && <People />}
       {route.name === 'mc-players' && <McPlayers />}
+      {route.name === 'tg-connect' && <TgConnect />}
       {isList && (
         <section className="pane pane--room pane--placeholder" aria-hidden="true">
           <p>Выберите чат</p>

@@ -15,6 +15,7 @@ import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
 import { PhoneSection } from './PhoneSection';
 import { MinecraftSection } from './MinecraftSection';
 import { getRealm } from '../config';
+import { isTgConnected, tgAvailable } from '../tg/client';
 
 const PUSH_TEXT: Record<PushState, string> = {
   unsupported: 'Этот браузер не умеет присылать уведомления. На iPhone сначала добавьте Redline на экран «Домой»',
@@ -513,6 +514,9 @@ export function Settings() {
         <SettingsGroup title="Общие">
           <PushRow />
           <ThemeRow />
+          {tgAvailable() && (
+            <SettingsRow icon="send" label="Telegram" value={isTgConnected() ? 'Подключён' : 'Подключить'} onClick={() => navigate.tgConnect()} />
+          )}
         </SettingsGroup>
 
         <SettingsGroup id="settings-account" title="Аккаунт">

@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { otherRealm, type Realm } from '../config';
 import { loadSession } from '../lib/session';
 import { useMatrix } from '../state/MatrixContext';
+import { useHashRoute } from '../hooks/useHashRoute';
+import { isTgConnected } from '../tg/client';
+import { useTgVersion } from '../tg/hooks';
 
 const POLL_MS = 60_000;
 /** Лёгкая синхронизация: только счётчики непрочитанного, без ленты, состояния и присутствия. */
@@ -54,25 +57,56 @@ const TABS: Array<[Realm, string]> = [
   ['mc', 'Minecraft'],
 ];
 
-/** «Семья | Minecraft» — у кого оба мира. Как роли в Discord: какие выданы, туда и есть вход. */
+/** «Семья | Minecraft | Telegram» — у кого оба мира или подключён Telegram. Как роли в Discord: какие выданы, туда и есть вход. */
 export function RealmSwitch() {
   const { realm, hasOther, switchRealm } = useMatrix();
+  const route = useHashRoute();
+  useTgVersion();
+  const tg = isTgConnected();
+  const onTg = route.name === 'tg' || route.name === 'tg-chat';
   const unread = useOtherUnread(hasOther ? otherRealm(realm) : null);
-  if (!hasOther) return null;
+  if (!hasOther && !tg) return null;
+  const tabs = hasOther ? TABS : TABS.filter(([r]) => r === realm);
+  const open = (r: Realm) => {
+    if (r === realm) {
+      location.hash = '#/';
+      return;
+    }
+    if (onTg) {
+      history.replaceState(null, '', '/#/');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
+    void switchRealm(r);
+  };
   return (
     <nav className="realm-switch" aria-label="Чаты">
-      {TABS.map(([r, label]) => (
+      {tabs.map(([r, label]) => {
+        const active = r === realm && !onTg;
+        return (
+          <button
+            key={r}
+            type="button"
+            className={`realm-switch__tab${active ? ' is-active' : ''}`}
+            aria-pressed={active}
+            onClick={() => !active && open(r)}
+          >
+            {label}
+            {r !== realm && unread > 0 && <span className="realm-switch__badge">{unread > 99 ? '99+' : unread}</span>}
+          </button>
+        );
+      })}
+      {tg && (
         <button
-          key={r}
           type="button"
-          className={`realm-switch__tab${r === realm ? ' is-active' : ''}`}
-          aria-pressed={r === realm}
-          onClick={() => void switchRealm(r)}
+          className={`realm-switch__tab${onTg ? ' is-active' : ''}`}
+          aria-pressed={onTg}
+          onClick={() => {
+            if (!onTg) location.hash = '#/tg';
+          }}
         >
-          {label}
-          {r !== realm && unread > 0 && <span className="realm-switch__badge">{unread > 99 ? '99+' : unread}</span>}
+          Telegram
         </button>
-      ))}
+      )}
     </nav>
   );
 }

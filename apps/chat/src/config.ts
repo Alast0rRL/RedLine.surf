@@ -22,6 +22,8 @@ const REALM_KEY = 'rl.realm';
 
 let base: AppConfig | null = null;
 let mc: Pick<AppConfig, 'homeserverUrl' | 'serverName'> | null = null;
+/** Ключи приложения Telegram (my.telegram.org). Нет — вкладки Telegram нет. */
+let telegram: { apiId: number; apiHash: string } | null = null;
 let realm: Realm = (() => {
   try {
     return localStorage.getItem(REALM_KEY) === 'mc' ? 'mc' : 'family';
@@ -73,7 +75,7 @@ export async function loadConfig(): Promise<AppConfig> {
   if (base) return current();
   const res = await fetch('/config.json', { cache: 'no-store' });
   if (!res.ok) throw new Error(`config.json: HTTP ${res.status}`);
-  const raw = (await res.json()) as Partial<AppConfig> & { mc?: Partial<AppConfig> };
+  const raw = (await res.json()) as Partial<AppConfig> & { mc?: Partial<AppConfig>; telegram?: { apiId?: number | string; apiHash?: string } };
   if (!raw.homeserverUrl || !raw.serverName) throw new Error('config.json: нужны homeserverUrl и serverName');
   base = {
     homeserverUrl: raw.homeserverUrl.replace(/\/+$/, ''),
@@ -85,7 +87,13 @@ export async function loadConfig(): Promise<AppConfig> {
   mc = raw.mc?.homeserverUrl && raw.mc.serverName
     ? { homeserverUrl: raw.mc.homeserverUrl.replace(/\/+$/, ''), serverName: raw.mc.serverName }
     : null;
+  const tgId = Number(raw.telegram?.apiId);
+  telegram = tgId > 0 && raw.telegram?.apiHash ? { apiId: tgId, apiHash: raw.telegram.apiHash } : null;
   return current();
+}
+
+export function telegramConfig(): { apiId: number; apiHash: string } | null {
+  return telegram;
 }
 
 export function getConfig(): AppConfig {

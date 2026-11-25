@@ -16,6 +16,9 @@ importers:
       '@fontsource/open-sans':
         specifier: ^5.3.0
         version: 5.3.0
+      '@mtcute/web':
+        specifier: 0.32.8
+        version: 0.32.8
       '@redline/ui':
         specifier: workspace:*
         version: link:../../packages/redline-ui
@@ -629,6 +632,15 @@ packages:
   '@fontsource/open-sans@5.3.0':
     resolution: {integrity: sha512-V1bdMlGNyZrJwzrdusshMOw2YR0aqYDL7kOo9dkxUEKl8dFv66A9HLckOOXl572sG/7ohhDQrCrTFGSn9LZcSw==}
 
+  '@fuman/io@0.0.23':
+    resolution: {integrity: sha512-ln1hhwaX357gMK5GPjur2H8y/l2EM98VZXj/BweMwQJHqPSyL8GUIMZaom9dSfNf+n9ujSgqoHF0J5vkhSPMhQ==}
+
+  '@fuman/net@0.0.23':
+    resolution: {integrity: sha512-qBLUeq6iC+bfIUeP1HPZ4Bqu9LECdKcZ8WsXtEpeXOl6B0tOAwg0gxWuh8/tV/vClUUnVBRoTxx/uMXZ9Hcfvg==}
+
+  '@fuman/utils@0.0.23':
+    resolution: {integrity: sha512-dTpiCi5CLkqfpf2PvsvEyX4WP3dj3r8j/ffm0/H/Xi3atCI4O4wNWhN+nn8th6k24zC1+8ooJJdiSKylepJnag==}
+
   '@isaacs/cliui@9.0.0':
     resolution: {integrity: sha512-AokJm4tuBHillT+FpMtxQ60n8ObyXBatq7jD2/JA9dxbDDokKQm8KMht5ibGzLVU9IJDIKK4TPKgMHEYMn3lMg==}
     engines: {node: '>=18'}
@@ -655,6 +667,21 @@ packages:
   '@matrix-org/matrix-sdk-crypto-wasm@18.9.2':
     resolution: {integrity: sha512-GHeuSeb5Fj6Wg2+NE/WoLJJs9U3nOzttO+2sj7lOaS5gNBpGIksc48N/Q/kK/Z+Lxh7YMhopB7M8b6HyASXnGQ==}
     engines: {node: '>= 18'}
+
+  '@mtcute/core@0.32.8':
+    resolution: {integrity: sha512-X/CLzn1ageA8pXsFa5E/AuIq4svba4PYUeoamy9vSU569wvNBjWKMyQ8ehV04DJ2pymyYfYXgh52rsJDWqRNUQ==}
+
+  '@mtcute/file-id@0.32.6':
+    resolution: {integrity: sha512-qnHRstP/aCxl7L/OG3ZuiiLYiDNALCcU8ZpeASZx+BvqRRvsJORNdG80jWy8yhdpqQmWtamoq2ywgzOvTuBmgA==}
+
+  '@mtcute/tl-runtime@0.32.6':
+    resolution: {integrity: sha512-5Y31HHeH3GoZAqtPulh5L12OEvpk7prf1jPWkN0lN8ifCImCo+txqM1OA0yOnkpcsfNkUI4J3r3kuIAFTrl38g==}
+
+  '@mtcute/wasm@0.32.8':
+    resolution: {integrity: sha512-nT988eIWH0qQLNDXTTpLQkqx6TRc70dS1QR51zyocr6b4uPOpJ0c1SbZPrWhAoKvxT+wZjZP39oHDaoldiKlIg==}
+
+  '@mtcute/web@0.32.8':
+    resolution: {integrity: sha512-rg72qF7bf5fbhDJSs2HB7S1OSpem+8EX88DHR94j46RkGl8B83DURNfEGPKCFJi6q0Gjjluhg0q5J3klJ3kvYg==}
 
   '@napi-rs/wasm-runtime@1.2.6':
     resolution: {integrity: sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw==}
@@ -983,6 +1010,9 @@ packages:
 
   '@types/estree@1.0.10':
     resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==}
+
+  '@types/events@3.0.0':
+    resolution: {integrity: sha512-EaObqwIvayI5a8dCzhFrjKzVwKLxjoG9T6Ppd5CEo07LRKfQ8Yokw54r5+Wq7FaBQ+yXRvQAYPrHwya1/UFt9g==}
 
   '@types/events@3.0.3':
     resolution: {integrity: sha512-trOc4AAUThEz9hapPtSd7wf5tiQKvTtu5b371UxXdTuqzIh0ArcRspRP0i0Viu+LXstIQ1z96t1nsPxT9ol01g==}
@@ -1854,6 +1884,9 @@ packages:
   loglevel@1.9.2:
     resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
     engines: {node: '>= 0.6.0'}
+
+  long@5.3.2:
+    resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
 
   lru-cache@11.5.3:
     resolution: {integrity: sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg==}
@@ -3204,6 +3237,17 @@ snapshots:
 
   '@fontsource/open-sans@5.3.0': {}
 
+  '@fuman/io@0.0.23':
+    dependencies:
+      '@fuman/utils': 0.0.23
+
+  '@fuman/net@0.0.23':
+    dependencies:
+      '@fuman/io': 0.0.23
+      '@fuman/utils': 0.0.23
+
+  '@fuman/utils@0.0.23': {}
+
   '@isaacs/cliui@9.0.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
@@ -3231,6 +3275,36 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.6.0
 
   '@matrix-org/matrix-sdk-crypto-wasm@18.9.2': {}
+
+  '@mtcute/core@0.32.8':
+    dependencies:
+      '@fuman/io': 0.0.23
+      '@fuman/net': 0.0.23
+      '@fuman/utils': 0.0.23
+      '@mtcute/file-id': 0.32.6
+      '@mtcute/tl-runtime': 0.32.6
+      '@types/events': 3.0.0
+      long: 5.3.2
+
+  '@mtcute/file-id@0.32.6':
+    dependencies:
+      '@fuman/utils': 0.0.23
+      '@mtcute/tl-runtime': 0.32.6
+      long: 5.3.2
+
+  '@mtcute/tl-runtime@0.32.6':
+    dependencies:
+      '@fuman/utils': 0.0.23
+      long: 5.3.2
+
+  '@mtcute/wasm@0.32.8': {}
+
+  '@mtcute/web@0.32.8':
+    dependencies:
+      '@fuman/net': 0.0.23
+      '@fuman/utils': 0.0.23
+      '@mtcute/core': 0.32.8
+      '@mtcute/wasm': 0.32.8
 
   '@napi-rs/wasm-runtime@1.2.6(@emnapi/core@2.0.0-beta.2)(@emnapi/runtime@2.0.0-beta.2)':
     dependencies:
@@ -3441,6 +3515,8 @@ snapshots:
     optional: true
 
   '@types/estree@1.0.10': {}
+
+  '@types/events@3.0.0': {}
 
   '@types/events@3.0.3': {}
 
@@ -4262,6 +4338,8 @@ snapshots:
   lodash.debounce@4.0.8: {}
 
   loglevel@1.9.2: {}
+
+  long@5.3.2: {}
 
   lru-cache@11.5.3: {}
 
