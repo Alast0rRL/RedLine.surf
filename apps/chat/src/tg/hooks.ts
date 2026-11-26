@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { onTgChange, onTgMessage, onTgRead, resumeTg, tgErrorText } from './client';
-import { loadDialogs, loadHistory, markRead, msgPreview, tgAvatar, type TgDialog, type TgMsg } from './data';
+import { loadDialogs, msgPreview, tgAvatar, type TgDialog } from './data';
 
 /** Перерисовка при входе/выходе и новых сообщениях. */
 export function useTgVersion(): number {
