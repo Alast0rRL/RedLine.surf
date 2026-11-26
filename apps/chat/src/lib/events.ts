@@ -1,4 +1,5 @@
 import { EventType, MsgType, type MatrixEvent } from 'matrix-js-sdk';
+import { CALL_EVENT } from '../call/signal';
 import { stripReplyFallback } from './html';
 
 /** События, которые показываются в ленте как сообщения. */
@@ -12,10 +13,15 @@ export function isMessageLike(ev: MatrixEvent): boolean {
   return ev.getContent()['m.relates_to']?.rel_type !== 'm.replace';
 }
 
+/** Из сигналов звонка в ленту попадает только завершение: остальные не показываем. */
+export function isCallNotice(ev: MatrixEvent): boolean {
+  return ev.getType() === CALL_EVENT && ev.getContent<{ action?: string }>().action === 'hangup';
+}
+
 /** Служебные события, которые стоит показать строкой по центру. */
 export function isStateNotice(ev: MatrixEvent): boolean {
   const t = ev.getType();
-  return t === EventType.RoomMember || t === EventType.RoomCreate || t === EventType.RoomName || t === EventType.RoomEncryption;
+  return t === EventType.RoomMember || t === EventType.RoomCreate || t === EventType.RoomName || t === EventType.RoomEncryption || isCallNotice(ev);
 }
 
 export function isVoice(ev: MatrixEvent): boolean {

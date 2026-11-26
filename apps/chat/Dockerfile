@@ -19,6 +19,8 @@ COPY apps/chat/deploy/security-headers.conf /etc/nginx/redline-headers.conf
 COPY --chmod=755 apps/chat/deploy/40-redline-config.sh /docker-entrypoint.d/
 COPY --from=build /src/apps/chat/dist /usr/share/nginx/html
 # envsubst подставит только эти переменные — $uri и прочие nginx-переменные не тронет
-ENV NGINX_ENVSUBST_FILTER=^HOMESERVER_URL$
+ENV NGINX_ENVSUBST_FILTER=^(HOMESERVER_URL|LIVEKIT_ORIGINS)$
+# без значения envsubst оставит переменную в CSP как есть — задаём пустую строку по умолчанию
+ENV LIVEKIT_ORIGINS=""
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:8080/config.json >/dev/null || exit 1

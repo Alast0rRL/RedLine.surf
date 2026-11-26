@@ -15,6 +15,7 @@ import http from 'node:http';
 import * as webpush from 'web-push';
 import { createPhoneApi } from './phone.mjs';
 import { createLoginGuard } from './login-guard.mjs';
+import { createCallApi } from './call.mjs';
 
 const env = (name, fallback) => {
   const v = process.env[name] ?? fallback;
@@ -86,6 +87,31 @@ if (mcApi) {
   mcApi.setPeer(phoneApi.store);
 }
 const mcGuard = MC_HS ? createLoginGuard({ homeserverUrl: MC_HS, log, prefix: '/mc' }) : null;
+
+// Звонки: без ключей LiveKit маршрут отвечает 503, но шлюз всё равно стартует
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || '';
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || '';
+const LIVEKIT_URL = process.env.LIVEKIT_URL || '';
+const callApi = createCallApi({
+  homeserverUrl: familyHs,
+  prefix: '/api/call/',
+  realm: 'family',
+  apiKey: LIVEKIT_API_KEY,
+  apiSecret: LIVEKIT_API_SECRET,
+  livekitUrl: LIVEKIT_URL,
+  log,
+});
+const mcCallApi = MC_HS
+  ? createCallApi({
+      homeserverUrl: MC_HS,
+      prefix: '/mc/api/call/',
+      realm: 'mc',
+      apiKey: LIVEKIT_API_KEY,
+      apiSecret: LIVEKIT_API_SECRET,
+      livekitUrl: LIVEKIT_URL,
+      log,
+    })
+  : null;
 
 function endpointAllowed(endpoint) {
   try {
@@ -189,6 +215,8 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true });
   if (await phoneApi(req, res, url)) return;
   if (mcApi && (await mcApi(req, res, url))) return;
+  if (await callApi(req, res, url)) return;
+  if (mcCallApi && (await mcCallApi(req, res, url))) return;
   if (mcGuard && (await mcGuard(req, res, url))) return;
   if (await loginGuard(req, res, url)) return;
   if (url.pathname !== '/_matrix/push/v1/notify') return send(res, 404, { errcode: 'M_UNRECOGNIZED' });

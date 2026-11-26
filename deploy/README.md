@@ -122,6 +122,24 @@ Homeserver зовёт шлюз по внутреннему адресу `http://
 `PUSH_PROXY=http://…` в `.env`. В зашифрованных комнатах сервер не видит текст: уведомление
 «Новое сообщение» с именем отправителя и чата.
 
+## Звонки (LiveKit)
+
+Шлюз выдаёт браузеру короткоживущий JWT на комнату Matrix: токен подписывается на сервере,
+секрет в клиент не попадает. Без переменных из `.env` маршрут `/api/call/token` отвечает 503,
+остальной чат работает как раньше.
+
+```bash
+LIVEKIT_URL=wss://lk.redline.surf
+LIVEKIT_ORIGINS="https://lk.redline.surf wss://lk.redline.surf"
+LIVEKIT_API_KEY=<ключ из панели LiveKit>
+LIVEKIT_API_SECRET=<секрет из панели LiveKit>
+```
+
+`LIVEKIT_API_KEY` и `LIVEKIT_API_SECRET` — пара из панели LiveKit, это настоящие секреты:
+только `.env` на сервере, в репозиторий и в браузер их не писать. `LIVEKIT_URL` — адрес
+WebSocket-сервера, `LIVEKIT_ORIGINS` — те же адреса через пробел для `connect-src` в CSP
+(и `https:`, и `wss:`).
+
 ## Боты (Мари)
 
 Бот — обычный аккаунт (создать по приглашению), его ID в `BOT_USERS`. Клиент показывает метку

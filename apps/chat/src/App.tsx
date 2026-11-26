@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMatrix } from './state/MatrixContext';
+import { attach as attachCall, detach as detachCall } from './call/CallManager';
+import { CallOverlay } from './call/CallOverlay';
 import { navigate, useHashRoute } from './hooks/useHashRoute';
 import { useEdgeSwipeBack } from './hooks/useEdgeSwipeBack';
 import { Button, Card, Icon, Modal, RedLines } from './components/ui';
@@ -114,7 +116,19 @@ function AppLines() {
   return <RedLines noIntro speed={0.5} brightness={0.22} className="app__lines" />;
 }
 
-export function App() {
+/** Звонок не привязан к маршруту: смена экрана не должна его обрывать. */
+function CallHost() {
+  const { status, client } = useMatrix();
+  useEffect(() => {
+    if (status !== 'ready' || !client) return;
+    attachCall(client);
+    return () => detachCall();
+  }, [status, client]);
+  if (status !== 'ready' || !client) return null;
+  return <CallOverlay />;
+}
+
+function AppContent() {
   const { status, error, progress, client, switchRealm } = useMatrix();
   const route = useHashRoute();
   useEdgeSwipeBack();
@@ -238,4 +252,8 @@ export function App() {
       )}
     </div>
   );
+}
+
+export function App() {
+  return <><AppContent /><CallHost /></>;
 }

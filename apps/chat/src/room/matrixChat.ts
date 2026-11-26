@@ -28,7 +28,8 @@ import {
 } from '../lib/messageActions';
 import { buildMentionContent, isMentioningMe, mentionCandidates as matrixMentionCandidates } from '../lib/mentions';
 import { canClearForAll, isClearCommand } from '../lib/clear';
-import { isPendingDecryption, isStateNotice, isUndecryptable, isVoice, previewText } from '../lib/events';
+import { formatDuration, isPendingDecryption, isStateNotice, isUndecryptable, isVoice, previewText } from '../lib/events';
+import { CALL_EVENT } from '../call/signal';
 import { sanitizeMatrixHtml } from '../lib/html';
 import { getMediaUrl, type MediaSource } from '../lib/media';
 import { isPinUser } from '../lib/pin';
@@ -44,7 +45,7 @@ const REVEAL_PAGE = 50;
 
 type Content = Record<string, any>;
 
-function stateText(ev: MatrixEvent, pin: boolean): string | null {
+function stateText(ev: MatrixEvent, pin: boolean, me: string): string | null {
   const name = ev.sender?.name ?? (pin ? 'Участник' : ev.getSender());
   const c = ev.getContent<Content>();
   switch (ev.getType()) {
@@ -64,6 +65,12 @@ function stateText(ev: MatrixEvent, pin: boolean): string | null {
       }
       if (c.membership === 'leave') return `${name} исключил(а) ${target}`;
       return null;
+    }
+    case CALL_EVENT: {
+      if (c.action !== 'hangup') return null;
+      const duration = typeof c.duration === 'number' ? c.duration : 0;
+      if (duration > 0) return `Звонок · ${formatDuration(duration)}`;
+      return ev.getSender() === me ? 'Отменённый звонок' : 'Пропущенный звонок';
     }
     default:
       return null;
@@ -230,7 +237,7 @@ export function useMatrixChat(client: MatrixClient, room: Room): { state: ChatTi
         reactions: getReactions(room, ev, me).map((r) => ({ key: r.key, count: r.count, own: r.own })),
         edited: !!ev.replacingEventId(),
         status,
-        service: isStateNotice(ev) ? stateText(ev, pin) : null,
+        service: isStateNotice(ev) ? stateText(ev, pin, me) : null,
         mentionsMe: !own && isMentioningMe(ev, me),
         bot: !own && isBotUser(senderId),
         placeholder: undecryptable ? 'undecryptable' : decrypting ? 'decrypting' : null,

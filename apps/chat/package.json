@@ -16,6 +16,7 @@
     "@mtcute/web": "0.32.8",
     "@redline/ui": "workspace:*",
     "dompurify": "^3.4.18",
+    "livekit-client": "^2.25.0",
     "matrix-js-sdk": "^45.1.0",
     "ogg-opus-decoder": "^1.7.5",
     "opus-recorder": "^8.0.5",

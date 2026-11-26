@@ -5,6 +5,7 @@ import { navigate } from '../hooks/useHashRoute';
 import { isDirectRoom } from '../hooks/useRoomList';
 import { setCurrentRoom } from '../lib/notifications';
 import { isBotUser } from '../bots/registry';
+import { useCall, start as startCall } from '../call/CallManager';
 import { Avatar, Button, Icon } from '../components/ui';
 import { ChatTimeline } from '../chat/ChatTimeline';
 import { ChatComposer, type ComposerContext } from '../chat/ChatComposer';
@@ -42,6 +43,8 @@ function RoomScreen({ client, room, encrypted }: { client: MatrixClient; room: R
 
   const isDm = isDirectRoom(client, room);
   const peerId = isDm ? room.getAvatarFallbackMember()?.userId : undefined;
+  const canCall = !!peerId && !isBotUser(peerId);
+  const callBusy = useCall().phase !== 'idle';
   const typing = state.typing;
 
   return (
@@ -67,6 +70,16 @@ function RoomScreen({ client, room, encrypted }: { client: MatrixClient; room: R
               </span>
             </span>
           </button>
+          {canCall && (
+            <>
+              <Button variant="ghost" icon aria-label="Аудиозвонок" disabled={callBusy} onClick={() => void startCall(room.roomId, false)}>
+                <ExtraIcon name="phone" size={20} />
+              </Button>
+              <Button variant="ghost" icon aria-label="Видеозвонок" disabled={callBusy} onClick={() => void startCall(room.roomId, true)}>
+                <ExtraIcon name="video" size={20} />
+              </Button>
+            </>
+          )}
           <Button variant="ghost" icon aria-label="Поиск в чате" onClick={() => setSearching(true)}>
             <ExtraIcon name="search" size={20} />
           </Button>
