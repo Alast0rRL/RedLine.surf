@@ -43,13 +43,19 @@ function Uploads({ uploads }: { uploads: ChatUpload[] }) {
   );
 }
 
+export interface ChatSearchTarget {
+  id: string;
+  query: string;
+  nonce: number;
+}
+
 export interface ChatTimelineProps {
   backend: ChatBackend;
   state: ChatTimelineState;
   onReply(m: ChatMessage): void;
   onEdit(m: ChatMessage): void;
   /** результат поиска, к которому надо прокрутить и подсветить текст */
-  highlight?: { id: string; query: string } | null;
+  highlight?: ChatSearchTarget | null;
 }
 
 export function ChatTimeline({ backend, state, onReply, onEdit, highlight = null }: ChatTimelineProps) {
@@ -111,23 +117,40 @@ export function ChatTimeline({ backend, state, onReply, onEdit, highlight = null
     prevHeight.current = el.scrollHeight;
   }, [messages.length, state.loadingOlder]);
 
-  // переход к результату поиска
+  // переход к результату поиска; если сообщение ещё не загружено — просим backend догрузить историю
   const jumpedNonce = useRef<string | null>(null);
+  const revealTried = useRef<string | null>(null);
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (!el || !highlight || jumpedNonce.current === `${highlight.id}|${highlight.query}`) return;
-    const node = el.querySelector<HTMLElement>(`[data-evid="${CSS.escape(highlight.id)}"]`);
-    if (!node) return;
-    jumpedNonce.current = `${highlight.id}|${highlight.query}`;
-    stick.current = false;
-    unreadScrolled.current = true;
-    node.scrollIntoView({ block: 'center' });
-    prevHeight.current = el.scrollHeight;
-    node.classList.remove('msg--flash');
-    void node.offsetWidth;
-    node.classList.add('msg--flash');
-    window.setTimeout(() => node.classList.remove('msg--flash'), 1600);
-  }, [highlight, messages.length]);
+    if (!el || !highlight) return;
+    const key = `${highlight.id}|${highlight.query}|${highlight.nonce}`;
+    if (jumpedNonce.current === key) return;
+    let alive = true;
+    const jump = () => {
+      const node = el.querySelector<HTMLElement>(`[data-evid="${CSS.escape(highlight.id)}"]`);
+      if (!node) return false;
+      jumpedNonce.current = key;
+      stick.current = false;
+      unreadScrolled.current = true;
+      node.scrollIntoView({ block: 'center' });
+      prevHeight.current = el.scrollHeight;
+      node.classList.remove('msg--flash');
+      void node.offsetWidth;
+      node.classList.add('msg--flash');
+      window.setTimeout(() => node.classList.remove('msg--flash'), 1600);
+      return true;
+    };
+    if (jump()) return;
+    if (state.reveal && revealTried.current !== key) {
+      revealTried.current = key;
+      void state.reveal(highlight.id).then(() => {
+        if (alive) requestAnimationFrame(jump);
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [highlight, messages.length, state.reveal]);
 
   // непрочитанные: маркер фиксируем в момент открытия и больше не двигаем
   const unreadScrolled = useRef(false);
@@ -233,14 +256,16 @@ export function ChatTimeline({ backend, state, onReply, onEdit, highlight = null
             {state.loadingOlder ? <span className="rl-spinner" /> : <Button size="sm" variant="ghost" onClick={loadOlder}>Загрузить ещё</Button>}
           </div>
         ) : (
-          <div className="timeline__start">Начало переписки</div>
+          <div className="timeline__start">{state.cleared ? 'История очищена' : 'Начало переписки'}</div>
         )}
         {state.messages === null && <div className="timeline__older"><span className="rl-spinner" /></div>}
         {messages.map((m, i) => {
           // соседей ищем среди реально отрисованных сообщений (служебные не рвут серию)
           const prev = neighbour(i, -1);
           const next = neighbour(i, 1);
-          const newDay = !prev || !sameDay(prev.ts, m.ts);
+          // день меняется относительно любого предыдущего элемента, включая служебные
+          const before = messages[i - 1];
+          const newDay = !before || !sameDay(before.ts, m.ts);
           const dayEl = newDay ? <div className="day-sep"><span>{formatDay(m.ts)}</span></div> : null;
 
           if (m.service) {
@@ -269,6 +294,13 @@ export function ChatTimeline({ backend, state, onReply, onEdit, highlight = null
                 onJump={(id) => {
                   const el = scroller.current;
                   const node = el?.querySelector<HTMLElement>(`[data-evid="${CSS.escape(id)}"]`);
+                  if (!node && state.reveal) {
+                    void state.reveal(id).then(() => {
+                      const fresh = scroller.current?.querySelector<HTMLElement>(`[data-evid="${CSS.escape(id)}"]`);
+                      fresh?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    });
+                    return;
+                  }
                   if (!node) return;
                   stick.current = false;
                   node.scrollIntoView({ block: 'center', behavior: 'smooth' });

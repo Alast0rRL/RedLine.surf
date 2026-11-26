@@ -12,6 +12,7 @@
   "dependencies": {
     "@fontsource/montserrat": "^5.3.0",
     "@fontsource/open-sans": "^5.3.0",
+    "@matrix-org/matrix-sdk-crypto-wasm": "18.9.2",
     "@mtcute/web": "0.32.8",
     "@redline/ui": "workspace:*",
     "dompurify": "^3.4.18",

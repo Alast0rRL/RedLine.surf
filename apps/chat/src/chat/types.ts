@@ -2,6 +2,7 @@
  * Общая модель чата: один интерфейс для Matrix и Telegram.
  * Компоненты из src/chat/ знают только эти типы; всё, что зависит от протокола, — в ChatBackend.
  */
+import type { MouseEvent, ReactNode } from 'react';
 import type { VoiceRecording } from '../lib/voice/recorder';
 
 export type ChatMediaKind = 'image' | 'video' | 'voice' | 'audio' | 'file' | 'sticker';
@@ -60,6 +61,27 @@ export interface ChatMessage {
   mentionsMe?: boolean;
   /** бот — значок «бот» */
   bot?: boolean;
+  /** вместо текста — заглушка шифрования */
+  placeholder?: 'decrypting' | 'undecryptable' | null;
+  /** сообщение рисует сам backend (карточки ботов): backend.renderCustom */
+  custom?: boolean;
+  /** только «служебный» вид бота: пузырь в стиле бота */
+  botStyled?: boolean;
+  /** картинка отправителя уже разрезолвлена backend; undefined — спросить backend.avatarUrl */
+  senderAvatar?: string | null;
+  /** показывать аватар: по умолчанию только в группах */
+  showAvatar?: boolean;
+  /** меню и жесты доступны не для всех событий (например, шифрование) */
+  actionable?: boolean;
+}
+
+/** Участник для автодополнения @упоминаний. */
+export interface ChatMentionCandidate {
+  id: string;
+  name: string;
+  /** то, что показать второй строкой (логин) */
+  hint?: string;
+  avatarSeed: string;
 }
 
 /** Загрузка в процессе: пузырь с прогрессом внизу ленты. */
@@ -83,6 +105,12 @@ export interface ChatForwardTarget {
   avatarSeed: string;
 }
 
+/** Подсказка в поле ввода: /clear — очистить историю чата. */
+export interface ChatCommand {
+  command: string;
+  label: string;
+}
+
 /** Что умеет конкретный чат. Все методы бросают ошибку с понятным текстом при неудаче. */
 export interface ChatBackend {
   /** стабильный ключ чата (для черновиков, загрузок) */
@@ -94,7 +122,8 @@ export interface ChatBackend {
   /** реакции, которые предлагать в меню */
   quickReactions: string[];
 
-  sendText(text: string, replyToId?: string | null): Promise<void>;
+  /** mentions — выбранные в автодополнении участники (только если backend.mentionCandidates есть) */
+  sendText(text: string, replyToId?: string | null, mentions?: ChatMentionCandidate[]): Promise<void>;
   editText(id: string, text: string): Promise<void>;
   /** фото уходят как фото, остальное — файлами */
   sendFiles(files: File[], replyToId?: string | null): Promise<void>;
@@ -116,6 +145,25 @@ export interface ChatBackend {
   avatarUrl(senderId: string): Promise<string | null>;
   /** открыть профиль участника (может отсутствовать) */
   openProfile?(senderId: string): void;
+
+  /* ---- необязательные возможности (есть у Matrix) ---- */
+  /** удаление бывает только «у всех» (Matrix): один вариант в диалоге */
+  deleteOnlyForAll?: boolean;
+  /** ключ черновика в localStorage (по умолчанию 'rl.draft.chat:' + key) */
+  draftKey?: string;
+  /** повторить / отменить неотправленное */
+  resend?(id: string): void;
+  cancelSend?(id: string): void;
+  /** свой рендер сообщения (карточки ботов); null — обычный пузырь */
+  renderCustom?(m: ChatMessage): ReactNode | null;
+  /** кандидаты для @упоминаний по началу имени; нет метода — автодополнения нет */
+  mentionCandidates?(query: string): ChatMentionCandidate[];
+  /** HTML для ссылок-упоминаний в тексте: открыть профиль и т. п. — обработчик клика по .msg-text--html */
+  onHtmlClick?(e: MouseEvent): void;
+  /** команды для подсказки при вводе (например, /clear) */
+  commands?: ChatCommand[];
+  /** true — команда обработана (текст отправлять не надо) */
+  onCommand?(command: string): boolean | Promise<boolean>;
 }
 
 /** Состояние ленты, которое отдаёт backend-специфичный хук. */
@@ -131,4 +179,8 @@ export interface ChatTimelineState {
   firstUnreadId?: string | null;
   /** кто печатает */
   typing: string[];
+  /** история очищена: вместо «Начало переписки» показываем «История очищена» */
+  cleared?: boolean;
+  /** догрузить историю, пока сообщение id не окажется в ленте (поиск); false — не нашли */
+  reveal?(id: string): Promise<boolean>;
 }

@@ -361,6 +361,7 @@ export function ChatForwardDialog({ backend, m, onClose }: { backend: ChatBacken
 export function ChatDeleteDialog({ backend, m, onClose }: { backend: ChatBackend; m: ChatMessage; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const canAll = backend.canDeleteForAll(m);
+  const onlyAll = !!backend.deleteOnlyForAll;
   const confirm = async (forAll: boolean) => {
     if (busy) return;
     setBusy(true);
@@ -378,13 +379,20 @@ export function ChatDeleteDialog({ backend, m, onClose }: { backend: ChatBackend
     <Modal
       open
       onClose={onClose}
-      title="Удалить сообщение?"
+      title={onlyAll ? 'Удалить сообщение у всех?' : 'Удалить сообщение?'}
       actions={
-        <>
-          {canAll && <Button variant="primary" busy={busy} disabled={busy} onClick={() => void confirm(true)}>Удалить у всех</Button>}
-          <Button variant={canAll ? 'secondary' : 'primary'} busy={busy} disabled={busy} onClick={() => void confirm(false)}>Удалить у меня</Button>
-          <Button variant="ghost" onClick={onClose}>Отмена</Button>
-        </>
+        onlyAll ? (
+          <>
+            <Button variant="ghost" onClick={onClose}>Отмена</Button>
+            <Button variant="primary" busy={busy} disabled={busy} onClick={() => void confirm(true)}>Удалить</Button>
+          </>
+        ) : (
+          <>
+            {canAll && <Button variant="primary" busy={busy} disabled={busy} onClick={() => void confirm(true)}>Удалить у всех</Button>}
+            <Button variant={canAll ? 'secondary' : 'primary'} busy={busy} disabled={busy} onClick={() => void confirm(false)}>Удалить у меня</Button>
+            <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          </>
+        )
       }
     >
       <p>Это действие нельзя отменить.</p>

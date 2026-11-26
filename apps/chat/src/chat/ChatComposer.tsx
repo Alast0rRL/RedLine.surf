@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
 import { formatDuration } from '../lib/events';
 import { isVoiceRecordingSupported, VoiceRecorder } from '../lib/voice/recorder';
 import { Button, Icon, toast } from '../components/ui';
-import type { ChatBackend, ChatMessage } from './types';
+import { ChatAvatar } from './ChatAvatar';
+import type { ChatBackend, ChatMentionCandidate, ChatMessage } from './types';
 import '../room/room.css';
 
 const CANCEL_DX = 90;
@@ -36,9 +37,10 @@ export function ChatComposer({ backend, context, onClearContext }: {
 }) {
   const maxLen = backend.maxLength;
   const counterFrom = Math.max(0, maxLen - 200);
+  const draftKey = backend.draftKey ?? DRAFT_KEY(backend.key);
   const [text, setText] = useState(() => {
     try {
-      return localStorage.getItem(DRAFT_KEY(backend.key)) ?? '';
+      return localStorage.getItem(draftKey) ?? '';
     } catch {
       return '';
     }
@@ -57,16 +59,47 @@ export function ChatComposer({ backend, context, onClearContext }: {
   const typingTimer = useRef(0);
   const voiceOk = isVoiceRecordingSupported();
 
+  // '@' в группе: список участников по тексту до курсора
+  const [caret, setCaret] = useState(0);
+  const [mentionOff, setMentionOff] = useState(false);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const [picked, setPicked] = useState<ChatMentionCandidate[]>([]);
+  const mentionCtx = !backend.group || !backend.mentionCandidates || editing || mentionOff
+    ? null
+    : /(^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
+  const mentionQuery = mentionCtx ? mentionCtx[2] : null;
+  const candidates = useMemo(
+    () => (mentionQuery === null || !backend.mentionCandidates ? [] : backend.mentionCandidates(mentionQuery)),
+    [backend, mentionQuery],
+  );
+  const mentionOpen = candidates.length > 0;
+  useEffect(() => setMentionIdx(0), [mentionQuery]);
+
+  const pickMention = (i: number) => {
+    const c = candidates[i];
+    if (!c || !mentionCtx) return;
+    const start = mentionCtx.index + mentionCtx[1].length;
+    const next = `${text.slice(0, start)}@${c.name} ${text.slice(caret)}`.slice(0, maxLen);
+    const pos = Math.min(start + c.name.length + 2, next.length);
+    setText(next);
+    setCaret(pos);
+    setPicked((cur) => (cur.some((x) => x.id === c.id) ? cur : [...cur, c]));
+    requestAnimationFrame(() => {
+      textarea.current?.focus();
+      textarea.current?.setSelectionRange(pos, pos);
+    });
+  };
+
   // черновик на чат
   useEffect(() => {
     if (editing) return;
     try {
-      if (text) localStorage.setItem(DRAFT_KEY(backend.key), text);
-      else localStorage.removeItem(DRAFT_KEY(backend.key));
+      if (text) localStorage.setItem(draftKey, text);
+      else localStorage.removeItem(draftKey);
     } catch {
       /* приватный режим */
     }
-  }, [text, backend.key, editing]);
+  }, [text, draftKey, editing]);
 
   // вход в режим правки: подставляем текст; выход — возвращаем черновик
   const editId = editing?.id;
@@ -129,10 +162,23 @@ export function ChatComposer({ backend, context, onClearContext }: {
   const tooLong = text.length > maxLen;
   const showError = (e: unknown, fallback: string) => toast(errorText(e, fallback), { variant: 'error' });
 
-  const submitText = () => {
+  const submitText = async () => {
     const body = text.trim();
     if (!body || tooLong) return;
     typing(false);
+    if (!editing && backend.onCommand) {
+      try {
+        if (await backend.onCommand(body)) {
+          setText('');
+          setPicked([]);
+          textarea.current?.focus();
+          return;
+        }
+      } catch (e) {
+        showError(e, 'Не удалось выполнить команду');
+        return;
+      }
+    }
     if (editing) {
       // без изменений — просто выходим
       if (body !== editing.text.trim()) {
@@ -143,13 +189,31 @@ export function ChatComposer({ backend, context, onClearContext }: {
       return;
     }
     setText('');
-    backend.sendText(body, replying?.id ?? null).catch((e) => showError(e, 'Не удалось отправить сообщение'));
+    setPicked([]);
+    backend.sendText(body, replying?.id ?? null, picked).catch((e) => showError(e, 'Не удалось отправить сообщение'));
     if (replying) onClearContext();
     window.dispatchEvent(new Event('rl:sent'));
     textarea.current?.focus();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionOpen && !e.nativeEvent.isComposing) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIdx((i) => (i + (e.key === 'ArrowDown' ? 1 : candidates.length - 1)) % candidates.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        pickMention(mentionIdx);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionOff(true);
+        return;
+      }
+    }
     if (e.key === 'Escape' && context) {
       e.preventDefault();
       onClearContext();
@@ -158,7 +222,7 @@ export function ChatComposer({ backend, context, onClearContext }: {
     // на телефоне Enter — перенос строки, отправка кнопкой
     if (e.key === 'Enter' && !e.shiftKey && !coarsePointer() && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      submitText();
+      void submitText();
     }
   };
 
@@ -292,6 +356,8 @@ export function ChatComposer({ backend, context, onClearContext }: {
   };
 
   const recording = rec.kind === 'recording';
+  const slashOpen = !editing && !recording && !mentionOpen && text.startsWith('/') && !text.includes(' ') && !!backend.commands?.length;
+  const shownCommands = (backend.commands ?? []).filter((c) => c.command.startsWith(text));
   const showSend = text.trim().length > 0 || !voiceOk || !!editing;
   const ctxTarget = editing ?? replying;
   const preview = ctxTarget ? (ctxTarget.text.split('\n')[0] || ctxTarget.media?.name || '') : '';
@@ -310,6 +376,44 @@ export function ChatComposer({ backend, context, onClearContext }: {
             <Icon name="close" size={18} />
           </Button>
         </div>
+      )}
+      {mentionOpen && !recording && (
+        <ul className="mention-list" role="listbox" aria-label="Упомянуть участника">
+          {candidates.map((c, i) => (
+            <li key={c.id} role="option" aria-selected={i === mentionIdx}>
+              <button
+                type="button"
+                className={`mention-item${i === mentionIdx ? ' is-active' : ''}`}
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => pickMention(i)}
+              >
+                <ChatAvatar name={c.name} seed={c.avatarSeed} size="sm" />
+                <span className="mention-item__name">{c.name}</span>
+                <span className="mention-item__id">{c.hint ?? c.id}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {slashOpen && shownCommands.length > 0 && (
+        <ul className="mention-list" role="listbox" aria-label="Команды">
+          {shownCommands.map((c) => (
+            <li key={c.command} role="option" aria-selected="false">
+              <button
+                type="button"
+                className="mention-item"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setText(c.command);
+                  textarea.current?.focus();
+                }}
+              >
+                <span className="mention-item__name">{c.command}</span>
+                <span className="mention-item__id">{c.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
       {text.length >= counterFrom && !recording && (
         <div className={`composer-count${text.length >= maxLen ? ' is-max' : ''}`} aria-live="polite">{text.length}/{maxLen}</div>
@@ -350,8 +454,11 @@ export function ChatComposer({ backend, context, onClearContext }: {
               onChange={(e) => {
                 const v = e.target.value.slice(0, maxLen);
                 setText(v);
+                setCaret(e.target.selectionStart ?? v.length);
+                setMentionOff(false);
                 if (v && !editing) typing(true);
               }}
+              onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? text.length)}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
               onBlur={() => typing(false)}
@@ -362,7 +469,7 @@ export function ChatComposer({ backend, context, onClearContext }: {
         )}
 
         {showSend && !recording ? (
-          <Button variant="primary" icon round aria-label={editing ? 'Сохранить' : 'Отправить'} onClick={submitText} disabled={!text.trim() || tooLong}>
+          <Button variant="primary" icon round aria-label={editing ? 'Сохранить' : 'Отправить'} onClick={() => void submitText()} disabled={!text.trim() || tooLong}>
             <Icon name="send" />
           </Button>
         ) : recording && rec.locked ? (

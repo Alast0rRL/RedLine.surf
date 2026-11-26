@@ -9,7 +9,7 @@ import { ChatVoicePlayer } from './ChatVoicePlayer';
 import { ChatAvatar } from './ChatAvatar';
 import { useBackendAvatar } from './useBackendMedia';
 import type { MenuPoint } from './ChatMenu';
-import type { ChatBackend, ChatMessage, ChatStatus } from './types';
+import type { ChatBackend, ChatMessage } from './types';
 
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?])/g;
 
@@ -34,9 +34,17 @@ function Linkified({ text, q }: { text: string; q?: string }) {
   );
 }
 
-function Body({ m, q }: { m: ChatMessage; q?: string }) {
+function Body({ backend, m, q }: { backend: ChatBackend; m: ChatMessage; q?: string }) {
   const marked = m.html && q ? markHtml(m.html, q) : m.html ?? null;
-  if (marked) return <div className="msg-text msg-text--html" dangerouslySetInnerHTML={{ __html: marked }} />;
+  if (marked) {
+    return (
+      <div
+        className="msg-text msg-text--html"
+        onClick={(e) => backend.onHtmlClick?.(e)}
+        dangerouslySetInnerHTML={{ __html: marked }}
+      />
+    );
+  }
   const body = m.text;
   // одни эмодзи — крупно
   const onlyEmoji = /^(\p{Extended_Pictographic}|\p{Emoji_Component}|\s){1,8}$/u.test(body) && !/\d/.test(body);
@@ -60,14 +68,28 @@ function Media({ backend, m, onOpenMedia }: { backend: ChatBackend; m: ChatMessa
   }
 }
 
-function Status({ status }: { status?: ChatStatus }) {
-  switch (status) {
+function Placeholder({ kind }: { kind: 'decrypting' | 'undecryptable' }) {
+  return (
+    <div className="msg-text msg-text--muted">
+      <Icon name="lock" size={14} /> {kind === 'decrypting' ? 'Расшифровка…' : 'Старое сообщение пока недоступно'}
+    </div>
+  );
+}
+
+function Status({ backend, m }: { backend: ChatBackend; m: ChatMessage }) {
+  switch (m.status) {
     case 'sending':
       return <span className="msg-status" aria-label="Отправляется" title="Отправляется"><Icon name="clock" size={16} /></span>;
     case 'failed':
       return (
         <span className="msg-status msg-status--failed">
           <span className="msg-status__text"><Icon name="alert" size={16} /> Не отправлено</span>
+          {backend.resend && <button type="button" onClick={() => backend.resend?.(m.id)}>Повторить</button>}
+          {backend.cancelSend && (
+            <button type="button" onClick={() => backend.cancelSend?.(m.id)} aria-label="Удалить сообщение" title="Удалить сообщение">
+              <Icon name="trash" size={16} /> Удалить
+            </button>
+          )}
         </span>
       );
     case 'read':
@@ -106,12 +128,15 @@ export const ChatMessageView = memo(function ChatMessageView({
 
   const media = m.media ?? null;
   const bot = !m.own && !!m.bot;
+  const botStyled = !m.own && (!!m.botStyled || bot);
   const failed = m.status === 'failed';
   const mentioned = !m.own && !!m.mentionsMe;
   const isMedia = media?.kind === 'image' || media?.kind === 'sticker';
   const isAudio = media?.kind === 'voice' || media?.kind === 'audio';
   const isFile = media?.kind === 'file' || media?.kind === 'video';
-  const showSender = !m.own && ((backend.group && first) || bot);
+  const showSender = !m.own && ((backend.group && first) || botStyled);
+  const showAvatar = m.showAvatar ?? backend.group;
+  const actionable = m.actionable !== false;
   const openUser = () => backend.openProfile?.(m.senderId);
 
   // долгое нажатие (touch/pen); мышь — правая кнопка и кнопка «⋯»
@@ -186,7 +211,7 @@ export const ChatMessageView = memo(function ChatMessageView({
     }
   };
   const onPointerDown = (e: RPointerEvent) => {
-    if (e.pointerType === 'mouse' || !e.isPrimary) return;
+    if (!actionable || e.pointerType === 'mouse' || !e.isPrimary) return;
     cancelPress();
     const x = e.clientX;
     const y = e.clientY;
@@ -211,6 +236,7 @@ export const ChatMessageView = memo(function ChatMessageView({
     if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > MOVE_TOLERANCE) cancelPress();
   };
   const onContextMenu = (e: RMouseEvent) => {
+    if (!actionable) return;
     e.preventDefault();
     cancelPress();
     if (Date.now() - lastOpen.current < 800) return; // уже открыли долгим нажатием
@@ -237,7 +263,12 @@ export const ChatMessageView = memo(function ChatMessageView({
     onJump(m.reply!.id);
   };
 
-  const body: ReactNode = (
+  const custom = m.custom ? backend.renderCustom?.(m) ?? null : null;
+  const content: ReactNode = m.placeholder ? (
+    <Placeholder kind={m.placeholder} />
+  ) : custom ? (
+    custom
+  ) : (
     <>
       {m.forwardedFrom && <div className="bubble__forwarded">Переслано от {m.forwardedFrom}</div>}
       {m.reply && (
@@ -247,27 +278,32 @@ export const ChatMessageView = memo(function ChatMessageView({
         </div>
       )}
       {media ? <Media backend={backend} m={m} onOpenMedia={onOpenMedia} /> : null}
-      {m.text && <Body m={m} q={highlight} />}
+      {m.text && <Body backend={backend} m={m} q={highlight} />}
+    </>
+  );
+  const body: ReactNode = (
+    <>
+      {content}
       <div className="bubble__meta">
         {m.edited && <span className="bubble__edited">изменено</span>}
         <time dateTime={m.ts > 0 ? new Date(m.ts).toISOString() : undefined}>{formatTime(m.ts)}</time>
-        {m.own && !failed && <Status status={m.status} />}
+        {m.own && !failed && <Status backend={backend} m={m} />}
       </div>
-      {m.own && failed && <div className="bubble__failed"><Status status={m.status} /></div>}
+      {m.own && failed && <div className="bubble__failed"><Status backend={backend} m={m} /></div>}
     </>
   );
 
   return (
     <div
-      className={`msg${m.own ? ' msg--own' : ''}${first ? ' msg--first' : ''}${last ? ' msg--last' : ''}${bot ? ' msg--bot' : ''}`}
+      className={`msg${m.own ? ' msg--own' : ''}${first ? ' msg--first' : ''}${last ? ' msg--last' : ''}${botStyled ? ' msg--bot' : ''}`}
       data-evid={m.id}
       data-ts={m.ts}
     >
-      {!m.own && (
+      {!m.own && showAvatar && (
         <div className="msg__avatar">
-          {backend.group && last && (
+          {last && (
             <button type="button" className="msg__avatar-btn" onClick={openUser} aria-label={`Профиль: ${m.senderName}`}>
-              <ChatAvatar name={m.senderName} seed={m.senderId} src={avatar} size="sm" />
+              <ChatAvatar name={m.senderName} seed={m.senderId} src={m.senderAvatar !== undefined ? m.senderAvatar : avatar} size="sm" />
             </button>
           )}
         </div>
@@ -315,9 +351,11 @@ export const ChatMessageView = memo(function ChatMessageView({
           </div>
         )}
       </div>
-      <button type="button" className="msg__more" aria-label="Действия с сообщением" aria-haspopup="menu" onClick={onDotsClick}>
-        ⋯
-      </button>
+      {actionable && (
+        <button type="button" className="msg__more" aria-label="Действия с сообщением" aria-haspopup="menu" onClick={onDotsClick}>
+          ⋯
+        </button>
+      )}
     </div>
   );
 });
