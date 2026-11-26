@@ -18,18 +18,35 @@ const LIVEKIT_URL = 'wss://lk.redline.surf';
 const CALL_ID = 'call-abc';
 const PARTY = 'tab-alice';
 const BODY = { roomId: ROOM, callId: CALL_ID, party: PARTY };
+const STATS_BODY = {
+  callId: CALL_ID,
+  durationMs: 42000,
+  lossPct: 1.6,
+  rttAvgMs: 45,
+  rttMaxMs: 90,
+  jitterMs: 3,
+  path: 'relay-udp',
+  pathChanges: 2,
+  poorSec: 7,
+  reconnects: 1,
+  video: true,
+  endedReason: 'Завершён',
+  ua: 'Mozilla/5.0',
+};
 // party в клиенте — crypto.randomUUID() (36 символов): должен проходить
 const UUID_PARTY = '3f2b8c1e-9a4d-4e6b-8f1a-2c3d4e5f6a7b';
 const sha256hex = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 let hs, gw, offGw, base, offBase, hsUrl, whoamiCalls = 0;
+const statsLogs = [];
 
 async function call(method, route, body, token, target = base, ip) {
   const headers = { 'content-type': 'application/json' };
   if (token) headers.authorization = `Bearer ${token}`;
   if (ip) headers['x-real-ip'] = ip;
   const r = await fetch(target + route, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  return { status: r.status, json: await r.json(), headers: r.headers };
+  const text = await r.text();
+  return { status: r.status, json: text ? JSON.parse(text) : null, headers: r.headers };
 }
 
 before(async () => {
@@ -57,7 +74,7 @@ before(async () => {
   await new Promise((r) => hs.listen(0, '127.0.0.1', r));
   hsUrl = `http://127.0.0.1:${hs.address().port}`;
 
-  const log = () => undefined;
+  const log = (...args) => statsLogs.push(args);
   const api = createCallApi({ homeserverUrl: hsUrl, prefix: '/api/call/', realm: 'family', apiKey: API_KEY, apiSecret: SECRET, livekitUrl: LIVEKIT_URL, log });
   const mc = createCallApi({ homeserverUrl: hsUrl, prefix: '/mc/api/call/', realm: 'mc', apiKey: API_KEY, apiSecret: SECRET, livekitUrl: LIVEKIT_URL, log });
   const off = createCallApi({ homeserverUrl: hsUrl, prefix: '/api/call/', realm: 'family', log });
@@ -209,4 +226,27 @@ test('префикс mc — отдельный мир, чужие пути не 
 test('party в виде UUID (как шлёт клиент) принимается', async () => {
   const r = await call('POST', '/api/call/token', { ...BODY, party: UUID_PARTY }, 'tokAlice');
   assert.equal(r.status, 200);
+});
+
+test('статистика без входа и с неверным токеном отклоняется', async () => {
+  assert.equal((await call('POST', '/api/call/stats', STATS_BODY)).status, 401);
+  assert.equal((await call('POST', '/api/call/stats', STATS_BODY, 'bad')).status, 401);
+});
+
+test('неверный callId статистики отклоняется', async () => {
+  for (const callId of ['', 'call/abc!', 'x'.repeat(65)]) {
+    const r = await call('POST', '/api/call/stats', { ...STATS_BODY, callId }, 'tokAlice');
+    assert.equal(r.status, 400);
+    assert.equal(r.json.error, 'Неверный запрос');
+  }
+});
+
+test('валидная статистика принимается и пишется в лог', async () => {
+  statsLogs.length = 0;
+  const r = await call('POST', '/api/call/stats', STATS_BODY, 'tokAlice');
+  assert.equal(r.status, 204);
+  const entry = statsLogs.find(([, message]) => message === 'call stats');
+  assert.ok(entry);
+  assert.equal(entry[0], 'info');
+  assert.deepEqual(entry[2], { ...STATS_BODY, user: '@alice:fam', realm: 'family' });
 });

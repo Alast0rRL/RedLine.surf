@@ -1,5 +1,5 @@
 /**
- * Токены LiveKit для звонков 1:1. Маршруты /api/call/* и /mc/api/call/*.
+ * Токены и статистика звонков 1:1. Маршруты /api/call/* и /mc/api/call/*.
  * Секрет подписи и адрес сервера LiveKit живут только на шлюзе, в браузер попадает готовый JWT.
  * Токен выдаётся только участнику комнаты Matrix: не больше 30 раз в минуту
  * пользователю и 60 раз в минуту с одного IP (ещё до обращения к homeserver).
@@ -15,6 +15,10 @@ const TOKEN_TTL = 6 * 60 * 60;
 const MXID_RE = /^@[^:\s]+:[^\s]+$/;
 const CALL_ID_RE = /^[A-Za-z0-9._-]{1,64}$/;
 const PARTY_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const STATS_PATHS = new Set(['udp', 'tcp', 'relay-udp', 'relay-tcp', 'relay-tls', 'unknown']);
+const MS_MAX = 60000;
+const DURATION_MAX = 86400000;
+const COUNT_MAX = 10000;
 
 const send = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -45,6 +49,48 @@ function readBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+function clampedNumber(v, min, max) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+  return Math.min(max, Math.max(min, v));
+}
+
+function validateStats(v) {
+  const durationMs = clampedNumber(v.durationMs, 0, DURATION_MAX);
+  const lossPct = clampedNumber(v.lossPct, 0, 100);
+  const rttAvgMs = clampedNumber(v.rttAvgMs, 0, MS_MAX);
+  const rttMaxMs = clampedNumber(v.rttMaxMs, 0, MS_MAX);
+  const jitterMs = clampedNumber(v.jitterMs, 0, MS_MAX);
+  const pathChanges = clampedNumber(v.pathChanges, 0, COUNT_MAX);
+  const poorSec = clampedNumber(v.poorSec, 0, COUNT_MAX);
+  const reconnects = clampedNumber(v.reconnects, 0, COUNT_MAX);
+  if (
+    typeof v.callId !== 'string' || !CALL_ID_RE.test(v.callId) ||
+    durationMs === null || lossPct === null || rttAvgMs === null || rttMaxMs === null || jitterMs === null ||
+    pathChanges === null || poorSec === null || reconnects === null ||
+    typeof v.path !== 'string' || !STATS_PATHS.has(v.path) ||
+    typeof v.endedReason !== 'string' || v.endedReason.length > 60 ||
+    typeof v.ua !== 'string' || v.ua.length > 120 ||
+    typeof v.video !== 'boolean'
+  ) {
+    return null;
+  }
+  return {
+    callId: v.callId,
+    durationMs,
+    lossPct,
+    rttAvgMs,
+    rttMaxMs,
+    jitterMs,
+    path: v.path,
+    pathChanges,
+    poorSec,
+    reconnects,
+    video: v.video,
+    endedReason: v.endedReason,
+    ua: v.ua,
+  };
 }
 
 const b64url = (v) => Buffer.from(v).toString('base64url').replace(/=+$/, '');
@@ -133,10 +179,25 @@ export function createCallApi({ homeserverUrl, prefix, realm, apiKey = '', apiSe
     return !!data?.joined && typeof data.joined === 'object' && Object.hasOwn(data.joined, userId);
   }
 
+  async function submitStats(req, res) {
+    const m = /^Bearer\s+(\S{1,512})$/.exec(req.headers.authorization ?? '');
+    if (!m) return send(res, 401, { error: 'Нужен вход' });
+    const userId = await whoami(req, m[1]);
+    if (!userId) return send(res, 401, { error: 'Нужен вход' });
+    if (!rateAllowed(userHits, userId, TOKEN_LIMIT)) return send(res, 429, { error: 'Слишком много запросов' });
+    const body = await readBody(req);
+    const validated = validateStats(body);
+    if (!validated) return send(res, 400, { error: 'Неверный запрос' });
+    log('info', 'call stats', { ...validated, user: userId, realm });
+    res.writeHead(204, { 'cache-control': 'no-store' });
+    res.end();
+  }
+
   async function route(req, res, url) {
     const p = url.pathname.slice(prefix.length);
-    if (p !== 'token') return send(res, 404, { error: 'not found' });
+    if (p !== 'token' && p !== 'stats') return send(res, 404, { error: 'not found' });
     if (req.method !== 'POST') return send(res, 405, { error: 'method not allowed' });
+    if (p === 'stats') return submitStats(req, res);
 
     if (!apiKey || !apiSecret || !livekitUrl) return send(res, 503, { error: 'Звонки не настроены' });
     // лимит по IP проверяем до whoami, чтобы не нагружать homeserver лишними запросами

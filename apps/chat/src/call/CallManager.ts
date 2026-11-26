@@ -14,6 +14,7 @@ import { PARTY, sendSignal, subscribeSignals, type CallSignal, type CallSignalEv
 
 export type CallPhase = 'idle' | 'outgoing' | 'incoming' | 'connecting' | 'active' | 'reconnecting' | 'ended';
 export type CallQuality = 'good' | 'poor' | 'lost';
+type StatsPath = 'udp' | 'tcp' | 'relay-udp' | 'relay-tcp' | 'relay-tls';
 
 export interface CallState {
   phase: CallPhase;
@@ -32,6 +33,41 @@ export interface CallState {
   tracksVersion: number;
   /** Браузер запретил автовоспроизведение: нужно нажать «Включить звук». */
   audioBlocked: boolean;
+}
+
+interface CallStats {
+  lost: number;
+  received: number;
+  prevLost?: number;
+  prevReceived?: number;
+  rttSumMs: number;
+  rttCount: number;
+  rttMaxMs: number;
+  jitterSumMs: number;
+  jitterCount: number;
+  path: StatsPath | 'unknown';
+  pathChanges: number;
+  poorSec: number;
+  poorSince?: number;
+  reconnects: number;
+  video: boolean;
+}
+
+interface RtcStat {
+  id?: string;
+  type?: string;
+  kind?: string;
+  packetsLost?: number;
+  packetsReceived?: number;
+  jitter?: number;
+  currentRoundTripTime?: number;
+  nominated?: boolean;
+  state?: string;
+  localCandidateId?: string;
+  selectedCandidatePairId?: string;
+  candidateType?: string;
+  protocol?: string;
+  relayProtocol?: string;
 }
 
 interface ScreenLock {
@@ -65,6 +101,12 @@ interface Session {
   retryRequested: boolean;
   peerGone: boolean;
   screenLock?: ScreenLock;
+  /** Poor держим 3 с, прежде чем показывать индикатор. */
+  qualityTimer?: number;
+  statsTimer?: number;
+  sampling: boolean;
+  everConnected: boolean;
+  stats: CallStats;
 }
 
 const CONNECT_WATCHDOG_MS = 30000;
@@ -73,6 +115,9 @@ const RECONNECT_LIMIT_MS = 60000;
 const PEER_GRACE_MS = 30000;
 const TOKEN_TIMEOUT_MS = 8000;
 const RECONNECT_BACKOFF_MS = [1000, 2000, 3000, 5000];
+const POOR_QUALITY_MS = 3000;
+const STATS_SAMPLE_MS = 5000;
+const STATS_SENT_LIMIT = 200;
 
 interface TokenResponse {
   url: string;
@@ -96,6 +141,7 @@ let unsubscribeSignals: (() => void) | null = null;
 let session: Session | null = null;
 let room: LiveKitRoom | null = null;
 const roomListeners = new WeakMap<LiveKitRoom, () => void>();
+const statsSentCalls = new Set<string>();
 let globalListenersAttached = false;
 
 function isCurrent(s: Session): boolean {
@@ -110,7 +156,13 @@ function isBusy(): boolean {
 function update(patch: Partial<CallState>): void {
   const wasRinging = state.phase === 'incoming' || state.phase === 'outgoing';
   const ringingNow = patch.phase === 'incoming' || patch.phase === 'outgoing';
+  const wasLive = isLivePhase();
+  const liveNow = patch.phase === undefined ? wasLive : patch.phase === 'active' || patch.phase === 'reconnecting';
   state = { ...state, ...patch };
+  if (wasLive !== liveNow && session) {
+    if (wasLive) closePoorPeriod(session);
+    else startPoorPeriod(session);
+  }
   // Звонок всегда прекращает звучать при выходе из ringing-фазы.
   if (wasRinging && patch.phase !== undefined && !ringingNow) stopRinging();
   listeners.forEach((l) => l());
@@ -122,6 +174,223 @@ function bumpTracks(): void {
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/* Качество связи и статистика звонка. */
+
+function isLivePhase(): boolean {
+  return state.phase === 'active' || state.phase === 'reconnecting';
+}
+
+function closePoorPeriod(s: Session): void {
+  if (s.stats.poorSince === undefined) return;
+  s.stats.poorSec += (Date.now() - s.stats.poorSince) / 1000;
+  s.stats.poorSince = undefined;
+}
+
+function startPoorPeriod(s: Session): void {
+  if (s.stats.poorSince !== undefined || !isLivePhase()) return;
+  if (state.quality !== 'poor' && state.quality !== 'lost') return;
+  s.stats.poorSince = Date.now();
+}
+
+function clearQualityTimer(s: Session): void {
+  if (s.qualityTimer !== undefined) window.clearTimeout(s.qualityTimer);
+  s.qualityTimer = undefined;
+}
+
+function applyCallQuality(s: Session, quality: CallQuality): void {
+  if (!isCurrent(s) || state.quality === quality) return;
+  closePoorPeriod(s);
+  update({ quality });
+  startPoorPeriod(s);
+}
+
+function setCallQuality(s: Session, quality: CallQuality): void {
+  if (!isCurrent(s)) return;
+  if (quality === 'poor') {
+    if (state.quality === 'poor' || state.quality === 'lost' || s.qualityTimer !== undefined) return;
+    // Показываем «плохо», только если качество не улучшилось за 3 с.
+    s.qualityTimer = window.setTimeout(() => {
+      s.qualityTimer = undefined;
+      applyCallQuality(s, 'poor');
+    }, POOR_QUALITY_MS);
+    return;
+  }
+  clearQualityTimer(s);
+  applyCallQuality(s, quality);
+}
+
+function createStats(): CallStats {
+  return {
+    lost: 0,
+    received: 0,
+    rttSumMs: 0,
+    rttCount: 0,
+    rttMaxMs: 0,
+    jitterSumMs: 0,
+    jitterCount: 0,
+    path: 'unknown',
+    pathChanges: 0,
+    poorSec: 0,
+    reconnects: 0,
+    video: false,
+  };
+}
+
+function remoteAudioTrack(r: LiveKitRoom): Track | undefined {
+  for (const [identity, participant] of r.remoteParticipants) {
+    if (isOwnIdentity(identity)) continue;
+    const track = participant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
+    if (track) return track;
+  }
+  return undefined;
+}
+
+function reportEntries(report: RTCStatsReport): RtcStat[] {
+  const entries: RtcStat[] = [];
+  report.forEach((value) => entries.push(value as RtcStat));
+  return entries;
+}
+
+function finite(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readInbound(report: RTCStatsReport, stats: CallStats): boolean {
+  let found = false;
+  report.forEach((value) => {
+    const item = value as RtcStat;
+    if (found || item.type !== 'inbound-rtp' || item.kind !== 'audio') return;
+    found = true;
+    const lost = finite(item.packetsLost);
+    const received = finite(item.packetsReceived);
+    const jitter = finite(item.jitter);
+    if (lost !== undefined && received !== undefined && lost >= 0 && received >= 0) {
+      if (stats.prevLost !== undefined && stats.prevReceived !== undefined
+        && lost >= stats.prevLost && received >= stats.prevReceived) {
+        stats.lost += lost - stats.prevLost;
+        stats.received += received - stats.prevReceived;
+      }
+      stats.prevLost = lost;
+      stats.prevReceived = received;
+    }
+    if (jitter !== undefined && jitter >= 0) {
+      stats.jitterSumMs += jitter * 1000;
+      stats.jitterCount += 1;
+    }
+  });
+  return found;
+}
+
+function pathOf(candidate: RtcStat): StatsPath | undefined {
+  const protocol = candidate.protocol === 'tcp' ? 'tcp' : 'udp';
+  if (candidate.candidateType !== 'relay') return protocol;
+  if (candidate.relayProtocol === 'tls') return 'relay-tls';
+  if (candidate.relayProtocol === 'tcp') return 'relay-tcp';
+  if (candidate.relayProtocol === 'udp') return 'relay-udp';
+  return protocol === 'tcp' ? 'relay-tcp' : 'relay-udp';
+}
+
+function readCandidatePair(report: RTCStatsReport, stats: CallStats): void {
+  const entries = reportEntries(report);
+  const byId = new Map<string, RtcStat>();
+  for (const item of entries) {
+    if (item.id) byId.set(item.id, item);
+  }
+  const transport = entries.find((item) => item.type === 'transport' && item.selectedCandidatePairId);
+  const pair = (transport?.selectedCandidatePairId ? byId.get(transport.selectedCandidatePairId) : undefined)
+    ?? entries.find((item) => item.type === 'candidate-pair' && item.nominated === true && finite(item.currentRoundTripTime) !== undefined)
+    ?? entries.find((item) => item.type === 'candidate-pair' && item.state === 'succeeded' && finite(item.currentRoundTripTime) !== undefined);
+  if (!pair) return;
+  const rtt = finite(pair.currentRoundTripTime);
+  if (rtt !== undefined && rtt >= 0) {
+    stats.rttSumMs += rtt * 1000;
+    stats.rttCount += 1;
+    stats.rttMaxMs = Math.max(stats.rttMaxMs, rtt * 1000);
+  }
+  const local = pair.localCandidateId ? byId.get(pair.localCandidateId) : undefined;
+  const path = local ? pathOf(local) : undefined;
+  if (path) {
+    if (stats.path !== 'unknown' && stats.path !== path) stats.pathChanges += 1;
+    stats.path = path;
+  }
+}
+
+async function sampleStats(s: Session, r: LiveKitRoom): Promise<void> {
+  if (s.sampling) return;
+  s.sampling = true;
+  try {
+    const reports: RTCStatsReport[] = [];
+    const remote = remoteAudioTrack(r);
+    if (remote) {
+      const report = await remote.getRTCStatsReport();
+      if (report) reports.push(report);
+    }
+    const local = r.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
+    if (local) {
+      const report = await local.getRTCStatsReport();
+      if (report) reports.push(report);
+    }
+    for (const report of reports) {
+      const inbound = readInbound(report, s.stats);
+      readCandidatePair(report, s.stats);
+      if (inbound) break;
+    }
+  } catch {
+    /* сбор статистики не должен влиять на звонок */
+  } finally {
+    s.sampling = false;
+  }
+}
+
+function startStats(s: Session): void {
+  if (s.statsTimer !== undefined) return;
+  s.statsTimer = window.setInterval(() => {
+    if (!isCurrent(s)) return;
+    const r = s.room ?? room;
+    if (!r || r.state !== ConnectionState.Connected || !isLivePhase()) return;
+    if (state.camOn) s.stats.video = true;
+    void sampleStats(s, r);
+  }, STATS_SAMPLE_MS);
+}
+
+function sendCallStats(s: Session, reason: string): void {
+  if (!s.everConnected || statsSentCalls.has(s.callId)) return;
+  try {
+    const token = matrix?.getAccessToken();
+    if (!token) return;
+    statsSentCalls.add(s.callId);
+    if (statsSentCalls.size > STATS_SENT_LIMIT) {
+      const oldest = statsSentCalls.values().next().value;
+      if (oldest !== undefined) statsSentCalls.delete(oldest);
+    }
+    const stats = s.stats;
+    const packets = stats.lost + stats.received;
+    const payload = {
+      callId: s.callId,
+      durationMs: s.startedAt ? Math.max(0, Math.round(Date.now() - s.startedAt)) : 0,
+      lossPct: packets ? Math.round((stats.lost / packets) * 100) : 0,
+      rttAvgMs: stats.rttCount ? Math.round(stats.rttSumMs / stats.rttCount) : 0,
+      rttMaxMs: Math.round(stats.rttMaxMs),
+      jitterMs: stats.jitterCount ? Math.round(stats.jitterSumMs / stats.jitterCount) : 0,
+      path: stats.path,
+      pathChanges: stats.pathChanges,
+      poorSec: Math.round(stats.poorSec),
+      reconnects: stats.reconnects,
+      video: stats.video,
+      endedReason: reason.slice(0, 60),
+      ua: navigator.userAgent.slice(0, 120),
+    };
+    void fetch(`${apiBase()}/api/call/stats`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => undefined);
+  } catch {
+    /* статистика не должна задерживать завершение звонка */
+  }
 }
 
 /* Звук звонка: WebAudio без внешних файлов. */
@@ -289,6 +558,9 @@ function createSession(
     reconnectStart: Date.now(),
     retryRequested: false,
     peerGone: false,
+    sampling: false,
+    everConnected: false,
+    stats: createStats(),
   };
 }
 
@@ -298,11 +570,14 @@ function clearTimers(s: Session): void {
   if (s.watchdogTimer !== undefined) window.clearTimeout(s.watchdogTimer);
   if (s.reconnectWatchdogTimer !== undefined) window.clearTimeout(s.reconnectWatchdogTimer);
   if (s.reconnectTimer !== undefined) window.clearTimeout(s.reconnectTimer);
+  clearQualityTimer(s);
+  if (s.statsTimer !== undefined) window.clearInterval(s.statsTimer);
   s.inviteTimer = undefined;
   s.graceTimer = undefined;
   s.watchdogTimer = undefined;
   s.reconnectWatchdogTimer = undefined;
   s.reconnectTimer = undefined;
+  s.statsTimer = undefined;
   s.retryRequested = false;
 }
 
@@ -327,9 +602,11 @@ function teardownRoom(r: LiveKitRoom | null = room): void {
   void r.disconnect(true).catch(() => undefined).then(() => void r.dispose().catch(() => undefined));
 }
 
-function cleanup(s: Session): void {
+function cleanup(s: Session, reason = 'Завершён'): void {
   if (s.ending) return;
   s.ending = true;
+  closePoorPeriod(s);
+  sendCallStats(s, reason);
   clearTimers(s);
   stopRinging();
   if (session === s) session = null;
@@ -372,7 +649,7 @@ function finish(reason: string, options: { s?: Session | null; error?: string; s
   const s = options.s ?? session;
   if (!s || s.ending) return;
   const sendHangupSignal = options.signal === true;
-  cleanup(s);
+  cleanup(s, reason);
   if (sendHangupSignal) sendHangup(s);
   update({
     phase: 'ended',
@@ -391,8 +668,8 @@ function fail(message: string, s?: Session | null): void {
   finish(message, { s, error: message, signal: true });
 }
 
-function abort(s: Session): void {
-  cleanup(s);
+function abort(s: Session, reason: string): void {
+  cleanup(s, reason);
   reset();
 }
 
@@ -569,6 +846,7 @@ async function reconnect(s: Session): Promise<void> {
     finish('Связь потеряна', { s, signal: true });
     return;
   }
+  s.stats.reconnects += 1;
   enterReconnecting(s);
   s.reconnecting = true;
   let failure: unknown;
@@ -608,7 +886,9 @@ async function reconnect(s: Session): Promise<void> {
 
 function wireRoom(s: Session, r: LiveKitRoom): void {
   const onReconnecting = () => {
-    if (isCurrent(s)) enterReconnecting(s);
+    if (!isCurrent(s)) return;
+    s.stats.reconnects += 1;
+    enterReconnecting(s);
   };
   const onReconnected = () => {
     if (!isCurrent(s)) return;
@@ -643,9 +923,9 @@ function wireRoom(s: Session, r: LiveKitRoom): void {
   };
   const onQuality = (quality: ConnectionQuality, participant: { identity: string }) => {
     if (!isCurrent(s) || participant.identity !== r.localParticipant.identity) return;
-    if (quality === ConnectionQuality.Excellent || quality === ConnectionQuality.Good) update({ quality: 'good' });
-    else if (quality === ConnectionQuality.Poor) update({ quality: 'poor' });
-    else if (quality === ConnectionQuality.Lost) update({ quality: 'lost' });
+    if (quality === ConnectionQuality.Excellent || quality === ConnectionQuality.Good) setCallQuality(s, 'good');
+    else if (quality === ConnectionQuality.Poor) setCallQuality(s, 'poor');
+    else if (quality === ConnectionQuality.Lost) setCallQuality(s, 'lost');
   };
   const onLocalTrack = () => {
     if (isCurrent(s)) bumpTracks();
@@ -750,6 +1030,8 @@ async function connectRoom(s: Session, url: string, token: string): Promise<void
         return;
       }
       if (previous && previous !== r && room === previous) teardownRoom(previous);
+      s.everConnected = true;
+      startStats(s);
       update({ audioBlocked: !r.canPlaybackAudio });
       bumpTracks();
       if (s.retryRequested) window.setTimeout(() => retryNow(), 0);
@@ -785,7 +1067,10 @@ async function enableMedia(s: Session): Promise<void> {
   if (s.video) {
     try {
       const cam = await r.localParticipant.setCameraEnabled(true);
-      if (cam && isCurrent(s)) update({ camOn: true });
+      if (cam && isCurrent(s)) {
+        update({ camOn: true });
+        s.stats.video = true;
+      }
     } catch {
       if (isCurrent(s)) update({ error: 'Не удалось включить камеру', video: false, camOn: false });
     }
@@ -891,7 +1176,7 @@ function handleGlare(ev: CallSignalEvent, s: Session): boolean {
   // Выигрывает звонок с меньшим call_id: иначе ждём, что примут наш.
   if (s.callId <= ev.content.call_id) return true;
   const video = s.video;
-  cleanup(s);
+  cleanup(s, 'Конфликт звонков');
   if (matrix) {
     void sendSignal(matrix, s.roomId, { call_id: s.callId, action: 'hangup', party: PARTY })
       .catch(() => undefined);
@@ -923,7 +1208,7 @@ function onSignal(ev: CallSignalEvent): void {
 
   // Другое устройство того же человека уже приняло звонок: наше устройство выходит.
   if (ev.own && ev.content.action === 'accept' && s.direction === 'incoming' && state.phase !== 'idle') {
-    cleanup(s);
+    cleanup(s, 'Принят на другом устройстве');
     reset();
     update({ endedReason: 'Принят на другом устройстве' });
     return;
@@ -932,7 +1217,9 @@ function onSignal(ev: CallSignalEvent): void {
   // Другая вкладка того же пользователя уже ответила — звонить больше не нужно.
   if (ev.own) {
     if ((ev.content.action === 'accept' || ev.content.action === 'reject')
-      && (state.phase === 'incoming' || state.phase === 'outgoing')) abort(s);
+      && (state.phase === 'incoming' || state.phase === 'outgoing')) {
+      abort(s, ev.content.action === 'accept' ? 'Принят на другой вкладке' : 'Отклонён на другой вкладке');
+    }
     return;
   }
   if (ev.content.action !== 'accept' && s.peerId && ev.sender !== s.peerId) return;
@@ -1003,8 +1290,8 @@ export function attach(client: MatrixClient): void {
 export function detach(): void {
   unsubscribeSignals?.();
   unsubscribeSignals = null;
+  if (session) cleanup(session, 'Отключён');
   matrix = null;
-  if (session) cleanup(session);
   if (globalListenersAttached) {
     window.removeEventListener('online', onOnline);
     document.removeEventListener('visibilitychange', onVisibility);
@@ -1112,7 +1399,10 @@ export async function toggleCam(): Promise<void> {
   const next = !state.camOn;
   try {
     await r.localParticipant.setCameraEnabled(next);
-    if (isCurrent(s)) update({ camOn: next });
+    if (isCurrent(s)) {
+      update({ camOn: next });
+      if (next) s.stats.video = true;
+    }
   } catch {
     if (isCurrent(s)) update({ error: 'Не удалось переключить камеру' });
   }
