@@ -129,7 +129,11 @@ export function ChatComposer({ backend, context, onClearContext }: {
     const el = textarea.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    // border-box: к scrollHeight добавляем рамку, иначе поле на 1–2px «прокручивается»
+    // и на телефоне слева от микрофона видна серая полоса скроллбара
+    const h = el.scrollHeight + el.offsetHeight - el.clientHeight;
+    el.style.height = `${Math.min(h, 160)}px`;
+    el.style.overflowY = h > 160 ? 'auto' : 'hidden';
   }, [text]);
 
   // таймер записи

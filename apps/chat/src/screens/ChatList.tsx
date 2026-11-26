@@ -186,7 +186,13 @@ function RowMenu({ menu, onClose, onToggle, onLeave }: { menu: MenuState; onClos
 }
 
 /** Меню слева на телефоне: всё, что на компьютере стоит в шапке. */
-function SideMenu({ onClose, onInvite, onNewChat }: { onClose: () => void; onInvite: (() => void) | null; onNewChat: () => void }) {
+export function SideMenu({ onClose, onInvite, onNewChat, onTgSettings }: {
+  onClose: () => void;
+  onInvite?: (() => void) | null;
+  onNewChat?: () => void;
+  /** Вкладка Telegram: подключение и выход из аккаунта TG */
+  onTgSettings?: () => void;
+}) {
   const theme = useTheme();
   const item = (fn: () => void) => () => {
     onClose();
@@ -210,9 +216,16 @@ function SideMenu({ onClose, onInvite, onNewChat }: { onClose: () => void; onInv
             <Icon name="userPlus" size={20} /> Пригласить
           </button>
         )}
-        <button type="button" className="side-menu__item" autoFocus={!onInvite} onClick={item(onNewChat)}>
-          <Icon name="plus" size={20} /> Новый чат
-        </button>
+        {onNewChat && (
+          <button type="button" className="side-menu__item" autoFocus={!onInvite} onClick={item(onNewChat)}>
+            <Icon name="plus" size={20} /> Новый чат
+          </button>
+        )}
+        {onTgSettings && (
+          <button type="button" className="side-menu__item" autoFocus={!onInvite && !onNewChat} onClick={item(onTgSettings)}>
+            <Icon name="settings" size={20} /> Настройки Telegram
+          </button>
+        )}
         <button type="button" className="side-menu__item" onClick={item(() => navigate.settings())}>
           <Icon name="settings" size={20} /> Настройки
         </button>

@@ -6,11 +6,13 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { navigate } from '../hooks/useHashRoute';
 import { formatListTime } from '../lib/events';
 import { useTgDialogs } from './hooks';
+import { SideMenu } from '../screens/ChatList';
 
 /** Список чатов Telegram — в той же колонке, что и обычные чаты. */
 export function TgList({ ready, activeId }: { ready: boolean; activeId?: number }) {
   const { dialogs, error } = useTgDialogs(ready);
   const [query, setQuery] = useState('');
+  const [sideMenu, setSideMenu] = useState(false);
   const q = query.trim().toLocaleLowerCase('ru');
   const shown = useMemo(() => {
     if (!dialogs) return null;
@@ -22,10 +24,13 @@ export function TgList({ ready, activeId }: { ready: boolean; activeId?: number 
   return (
     <section className="pane pane--list" aria-label="Чаты Telegram">
       <header className="topbar">
+        <Button variant="ghost" icon aria-label="Меню" className="topbar__menu" onClick={() => setSideMenu(true)}>
+          <Icon name="menu" />
+        </Button>
         <span className="topbar__logo">Redline</span>
         <span className="topbar__actions">
           <ThemeToggle className="topbar__wide" />
-          <Button variant="ghost" icon aria-label="Настройки Telegram" onClick={() => navigate.tgConnect()}>
+          <Button variant="ghost" icon aria-label="Настройки Telegram" className="topbar__wide" onClick={() => navigate.tgConnect()}>
             <Icon name="settings" />
           </Button>
         </span>
@@ -80,6 +85,7 @@ export function TgList({ ready, activeId }: { ready: boolean; activeId?: number 
           </ul>
         )}
       </div>
+      {sideMenu && <SideMenu onClose={() => setSideMenu(false)} onTgSettings={() => navigate.tgConnect()} />}
     </section>
   );
 }
