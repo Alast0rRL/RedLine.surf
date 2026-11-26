@@ -3,9 +3,10 @@ import { friendlyError } from '../lib/account';
 import { loadConfig, setRealm } from '../config';
 import { checkInviteCode, registerByInvite, type InviteCheck } from '../lib/guestInvites';
 import { bindInvitedLogin, NO_TOKEN, normalizeFamilyLogin } from '../lib/phone';
-import { newPerson, PIN_HINT, PIN_MAX, pinOk, pinPassword, type PersonalLink } from '../lib/pin';
+import { newPerson, PIN_HINT, pinOk, pinPassword, type PersonalLink } from '../lib/pin';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
+import { PinInput } from '../components/PinInput';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 export function JoinFamily({ code }: { code: string }) {
@@ -18,7 +19,6 @@ export function JoinFamily({ code }: { code: string }) {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
 
   useEffect(() => {
     let alive = true;
@@ -109,19 +109,13 @@ export function JoinFamily({ code }: { code: string }) {
                 disabled={busy || !check?.valid}
                 required
               />
-              <Field
+              <PinInput
                 label="Придумайте PIN"
                 name="pin"
                 labelHint={`${PIN_HINT}. Запомните его: PIN нужен для входа на других устройствах`}
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={PIN_MAX}
-                autoComplete="off"
-                className="pin-input"
                 value={pin}
                 error={error}
-                onChange={(e) => setPin(digits(e.target.value))}
+                onChange={(e) => setPin(e.target.value)}
                 disabled={busy || !check?.valid}
                 required
               />

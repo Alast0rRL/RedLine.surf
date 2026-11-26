@@ -2,9 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { hasMcRealm, setRealm } from '../config';
 import { normalizeLogin, registerPlayer } from '../lib/phone';
-import { PIN_HINT, PIN_MAX, pinOk } from '../lib/pin';
+import { PIN_HINT, pinOk } from '../lib/pin';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
+import { PinInput } from '../components/PinInput';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { REG_NICK_KEY } from './Login';
 
@@ -21,7 +22,6 @@ export function McRegister() {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -73,7 +73,7 @@ export function McRegister() {
               onChange={(e) => setNick(e.target.value)}
               disabled={busy}
             />
-            <Field label="Придумай PIN" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" hint={PIN_HINT} error={error} value={pin} onChange={(e) => setPin(digits(e.target.value))} disabled={busy} />
+            <PinInput label="Придумай PIN" name="pin" hint={PIN_HINT} error={error} value={pin} onChange={(e) => setPin(e.target.value)} disabled={busy} />
             <Button type="submit" variant="primary" size="lg" block busy={busy} disabled={busy || !nick.trim() || !pinOk(pin)}>
               Зарегистрироваться
             </Button>

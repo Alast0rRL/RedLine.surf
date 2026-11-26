@@ -106,6 +106,13 @@ function rememberPhone(user: string, phone: string | null, r: Realm = getRealm()
   } catch { /* приватный режим */ }
 }
 
+/** забыть номер этого устройства: другой человек не должен наследовать привязку */
+export function forgetSavedPhone(r: Realm = getRealm()): void {
+  try {
+    localStorage.removeItem(savedPhoneKey(r));
+  } catch { /* приватный режим */ }
+}
+
 /** Второй аккаунт того же человека: ключ и PIN общие, отличается логин и сервер. */
 export interface LinkedAccount {
   realm: Realm;

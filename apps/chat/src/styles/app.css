@@ -134,6 +134,12 @@ a { color: inherit; }
   font-weight: var(--rl-weight-bold);
   letter-spacing: 0.35em;
   text-align: center;
+  -webkit-text-security: disc;
+  text-security: disc;
+}
+.pin-input--reveal .rl-input {
+  -webkit-text-security: none;
+  text-security: none;
 }
 .login__title {
   margin: 0 0 var(--rl-space-2);

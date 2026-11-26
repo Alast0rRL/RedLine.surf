@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import type { Realm } from '../config';
 import { friendlyError } from '../lib/account';
-import { PIN_HINT, PIN_MAX, pinOk } from '../lib/pin';
-import { Button, Field, Modal } from '../components/ui';
+import { PIN_HINT, pinOk } from '../lib/pin';
+import { Button, Modal } from '../components/ui';
+import { PinInput } from '../components/PinInput';
 
 /** PIN для второго мира, если вход в него не случился вместе с основным (на этом устройстве один раз). */
 export function RealmPin({
@@ -50,20 +51,14 @@ export function RealmPin({
       }
     >
       <form onSubmit={(e) => void submit(e)} noValidate>
-        <Field
+        <PinInput
           label="PIN"
           name="pin"
-          type="password"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          maxLength={PIN_MAX}
-          autoComplete="off"
           autoFocus
-          className="pin-input"
           hint={PIN_HINT}
           value={pin}
           error={error}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_MAX))}
+          onChange={(e) => setPin(e.target.value)}
           disabled={busy}
         />
       </form>

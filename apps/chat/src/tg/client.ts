@@ -8,10 +8,43 @@ import { toMsg, type TgMsg } from './data';
 
 const STORAGE = 'rl-tg';
 const FLAG = 'rl.tg.connected';
+const OWNER = 'rl.tg.owner';
 
 let client: TelegramClient | null = null;
 let starting: Promise<TelegramClient> | null = null;
 let updating = false;
+/** Matrix-человек, который сейчас смотрит приложение; без него чужую сессию TG не показываем */
+let viewer: string[] = [];
+let resetResume: (() => void) | null = null;
+
+/** владельца сравниваем по полному Matrix-ID: логины в Семье и Minecraft — разные пространства имён */
+const normUser = (id: string) => id.trim();
+
+function loadOwners(): string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(OWNER) ?? 'null');
+    return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && !!s).map(normUser) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveOwners(ids: string[]): void {
+  try {
+    if (ids.length) localStorage.setItem(OWNER, JSON.stringify(ids));
+    else localStorage.removeItem(OWNER);
+  } catch { /* приватный режим */ }
+}
+
+/** сессия TG доступна только человеку, который её подключил (в любом из его миров) */
+function ownersMatch(owners: string[], ids: string[]): boolean {
+  return !!owners.length && !!ids.length && owners.some((o) => ids.includes(o));
+}
+
+/** сброс кэша «уже подключались» после стирания сессии */
+export function onTgWipe(fn: () => void): void {
+  resetResume = fn;
+}
 
 async function startUpdates(tg: TelegramClient) {
   if (updating) return;
@@ -64,10 +97,42 @@ export function tgAvailable(): boolean {
 
 export function isTgConnected(): boolean {
   try {
-    return tgAvailable() && localStorage.getItem(FLAG) === '1';
+    if (!tgAvailable() || localStorage.getItem(FLAG) !== '1') return false;
+    return ownersMatch(loadOwners(), viewer);
   } catch {
     return false;
   }
+}
+
+/** владелец сессии TG должен совпадать с вошедшим человеком, иначе сессию стираем */
+function enforceTgOwner(adoptLegacy = false): void {
+  if (!viewer.length) return;
+  try {
+    if (localStorage.getItem(FLAG) !== '1') return;
+  } catch {
+    return;
+  }
+  const owners = loadOwners();
+  // сессия, подключённая до появления владельца: присваиваем, только если сервер подтвердил,
+  // что оба мира на устройстве — один человек; иначе она чужая и стирается
+  if (!owners.length && adoptLegacy) {
+    saveOwners(viewer);
+    return;
+  }
+  if (!ownersMatch(owners, viewer)) void disconnectTg();
+}
+
+/**
+ * Вызывать, когда сервер подтвердил, кто вошёл: ids — полные Matrix-ID этого человека во всех мирах.
+ * Пустой список — человек ещё не подтверждён: Telegram скрыт, но не стирается.
+ */
+export function setTgViewer(ids: string[], adoptLegacy = false): void {
+  const next = Array.from(new Set(ids.filter(Boolean).map(normUser)));
+  if (next.join('\n') === viewer.join('\n') && !adoptLegacy) return;
+  viewer = next;
+  enforceTgOwner(adoptLegacy);
+  // вкладка Telegram появляется/пропадает вслед за подтверждением человека
+  emit();
 }
 
 function setConnected(on: boolean) {
@@ -123,11 +188,15 @@ export function getTg(): Promise<TelegramClient> {
 export async function markSignedIn(): Promise<void> {
   const tg = await getTg();
   await startUpdates(tg);
+  // владелец — человек, вошедший в Matrix (вместе со вторым миром, если он связан)
+  saveOwners(viewer);
   setConnected(true);
 }
 
 /** Уже подключённый аккаунт: проверить сессию и слушать обновления. */
 export async function resumeTg(): Promise<TelegramClient> {
+  enforceTgOwner();
+  if (!isTgConnected()) throw new Error('Сессия Telegram завершена — подключите заново');
   const tg = await getTg();
   try {
     await tg.getMe();
@@ -161,7 +230,10 @@ export async function disconnectTg(): Promise<void> {
     const req = indexedDB.deleteDatabase(STORAGE);
     req.onsuccess = req.onerror = req.onblocked = () => resolve();
   });
+  saveOwners([]);
   setConnected(false);
+  // кэш «уже подключались» в hooks больше не действителен
+  resetResume?.();
 }
 
 export function rpcCode(e: unknown): string | null {

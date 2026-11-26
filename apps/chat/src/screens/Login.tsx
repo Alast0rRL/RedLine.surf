@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
-import { PIN_MAX, PIN_HINT, pinOk } from '../lib/pin';
+import { PIN_HINT, pinOk } from '../lib/pin';
 import { fetchLinkByPhone, isWrongCredentials, loginExists, normalizeFamilyLogin, normalizeLogin, normalizePhone } from '../lib/phone';
 import { hasMcRealm, setRealm } from '../config';
 import { useMatrix } from '../state/MatrixContext';
 import { Button, Field, RedLines } from '../components/ui';
+import { PinInput } from '../components/PinInput';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 /** Ник, с которым ушли со входа на регистрацию: экран регистрации подставит его. */
@@ -97,19 +98,13 @@ export function Login({ mode }: { mode: 'family' | 'mc' | 'any' }) {
             disabled={busy}
             required
           />
-          <Field
+          <PinInput
             label="PIN"
             name="pin"
             labelHint={PIN_HINT}
-            type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={PIN_MAX}
-            autoComplete="off"
-            className="pin-input"
             value={pin}
             error={error ?? sessionError}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_MAX))}
+            onChange={(e) => setPin(e.target.value)}
             disabled={busy}
             required
           />

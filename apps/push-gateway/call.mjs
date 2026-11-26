@@ -14,7 +14,7 @@ const TOKEN_WINDOW_MS = 60 * 1000;
 const TOKEN_TTL = 6 * 60 * 60;
 const MXID_RE = /^@[^:\s]+:[^\s]+$/;
 const CALL_ID_RE = /^[A-Za-z0-9._-]{1,64}$/;
-const PARTY_RE = /^[A-Za-z0-9_-]{1,32}$/;
+const PARTY_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const send = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });

@@ -35,6 +35,16 @@ function savePending(link: PersonalLink | null): void {
   }
 }
 
+/** незавершённый переход другого аккаунта на этом устройстве не нужен */
+export function forgetPendingLink(user: string): void {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(PENDING) ?? 'null');
+    if (isPersonalLink(v) && v.user === user) savePending(null);
+  } catch {
+    /* приватный режим */
+  }
+}
+
 export async function switchToPin(
   client: MatrixClient,
   { password, phone, pin }: { password: string; phone: string; pin: string },

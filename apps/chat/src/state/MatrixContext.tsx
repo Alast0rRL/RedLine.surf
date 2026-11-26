@@ -3,8 +3,10 @@ import { ClientEvent, HttpApiEvent, SyncState, type MatrixClient } from 'matrix-
 import { getRealm, hasMcRealm, loadConfig, otherRealm, realmConfig, setRealm, type Realm } from '../config';
 import { ACCOUNT_DELETED, forgetLink, isDeactivated, loadLink, loginWithPin, preparePinSession, saveLink, type PersonalLink, type PinLogin } from '../lib/pin';
 import { loadSession } from '../lib/session';
-import { bindPhone, fetchLinkByPhone, getBoundPhone, getLinkedUser, NO_TOKEN, savedPhone, type LinkedAccount } from '../lib/phone';
+import { bindPhone, fetchLinkByPhone, forgetSavedPhone, getBoundPhone, getLinkedUser, NO_TOKEN, savedPhone, type LinkedAccount } from '../lib/phone';
+import { forgetPendingLink } from '../lib/switchToPin';
 import { claimGuest } from '../lib/guestInvites';
+import { disconnectTg, setTgViewer } from '../tg/client';
 import { PhoneOffer, type PhoneOfferData } from '../screens/PhoneOffer';
 import { RealmPin } from '../screens/RealmPin';
 import { loginWithPassword, logout as doLogout, logoutStored, startMatrix, wipeLocalData } from '../lib/matrix';
@@ -58,6 +60,7 @@ function errorText(e: unknown): string {
   return err?.data?.error || err?.message || 'Неизвестная ошибка';
 }
 
+
 export function MatrixProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AppStatus>('boot');
   const [client, setClient] = useState<MatrixClient | null>(null);
@@ -83,7 +86,74 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   const startRef = useRef<typeof start | null>(null);
   /** Растёт только при выходе: фоновый вход во второй мир после выхода себя отменяет. */
   const outGen = useRef(0);
-  const refreshOther = useCallback(() => setHasOther(otherAvailable()), []);
+  /** сеть не ответила — переключатель второго мира на этот запуск скрыт, данные не трогаем */
+  const hideOtherRef = useRef(false);
+  const refreshOther = useCallback(() => setHasOther(!hideOtherRef.current && otherAvailable()), []);
+
+  const ensureSamePerson = useCallback(
+    async (c: MatrixClient, session: NonNullable<ReturnType<typeof loadSession>>, g: number) => {
+      if (g !== gen.current) return;
+      if (!hasMcRealm()) {
+        hideOtherRef.current = false;
+        setTgViewer([session.userId]);
+        refreshOther();
+        return;
+      }
+      const o = otherRealm();
+      const stored = loadSession(o);
+      const link = loadLink(o);
+      // логины Семьи и Minecraft — разные пространства имён: сравниваем только полные Matrix-ID
+      const fullId = (u: string) => (u.startsWith('@') ? u : `@${u}:${realmConfig(o).serverName}`);
+      const known = [stored?.userId, link?.user].filter((v): v is string => !!v).map(fullId);
+      const token = session.accessToken || c.getAccessToken();
+      if (!token) {
+        hideOtherRef.current = !!known.length;
+        if (known.length) setHasOther(false);
+        return;
+      }
+      let linked: string | null;
+      try {
+        // сервер — источник истины: он знает, чей аккаунт во втором мире
+        linked = await getLinkedUser(token, getRealm());
+      } catch {
+        if (g === gen.current) {
+          hideOtherRef.current = true;
+          setHasOther(false);
+          setOtherUser(null);
+          setAskPin(null);
+        }
+        return;
+      }
+      if (g !== gen.current) return;
+      hideOtherRef.current = false;
+      const linkedId = linked ? fullId(linked) : null;
+      if (!known.length) {
+        // второго мира на устройстве нет: Telegram — только этого человека (в любом его мире)
+        setTgViewer([session.userId, linkedId ?? '']);
+        refreshOther();
+        return;
+      }
+      const same = !!linkedId && known.every((id) => id === linkedId);
+      // старую сессию TG без владельца отдаём, только если оба мира подтверждены как один человек
+      setTgViewer(same ? [session.userId, linkedId] : [session.userId], same);
+      if (same) {
+        refreshOther();
+        return;
+      }
+      // чужой аккаунт: стираем его мир, ключи, номер и незавершённый переход
+      outGen.current += 1;
+      pending.current.delete(o);
+      setAskPin(null);
+      setOtherUser(null);
+      setHasOther(false);
+      await logoutStored(o);
+      forgetLink(o);
+      forgetSavedPhone(o);
+      for (const id of known) forgetPendingLink(id.replace(/^@/, '').split(':')[0]);
+      refreshOther();
+    },
+    [refreshOther],
+  );
 
   const start = useCallback(
     async (session: NonNullable<ReturnType<typeof loadSession>>, beforeReady?: (c: MatrixClient) => Promise<void>) => {
@@ -97,9 +167,20 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       }
       clientRef.current = c;
       setClient(c);
+      // Telegram скрыт, пока сервер не подтвердит человека (ensureSamePerson); проверку не ждём — она догонит фоном
+      setTgViewer([]);
+      // пока не подтвердили владельца, переключатель второго мира скрыт
+      hideOtherRef.current = otherAvailable();
+      if (hideOtherRef.current) {
+        setHasOther(false);
+        setOtherUser(null);
+      }
+      void ensureSamePerson(c, session, g);
 
       c.on(HttpApiEvent.SessionLoggedOut, async (err?: { errcode?: string }) => {
         c.stopClient();
+        void disconnectTg();
+        setTgViewer([]);
         await wipeLocalData(c);
         if (clientRef.current === c) clientRef.current = null;
         setClient(null);
@@ -144,7 +225,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       ensurePusher(c, getRealm()).catch(() => console.warn('Не удалось включить уведомления этого чата'));
       setStatus('ready');
     },
-    [],
+    [ensureSamePerson],
   );
   startRef.current = start;
 
@@ -203,7 +284,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   // переключатель. Ключ у связанных аккаунтов общий, PIN спросим при открытии.
   useEffect(() => {
     setOtherUser(null);
-    if (status !== 'ready' || !client || !hasMcRealm() || otherAvailable()) return;
+    if (status !== 'ready' || !client || !hasMcRealm() || hideOtherRef.current || otherAvailable()) return;
     const own = loadLink();
     const token = client.getAccessToken();
     if (!token) return;
@@ -211,17 +292,17 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     let stop = false;
     getLinkedUser(token, r)
       .then((user) => {
-        if (stop || !user || getRealm() !== r || otherAvailable()) return;
+        if (stop || !user || hideOtherRef.current || getRealm() !== r || otherAvailable()) return;
         if (own) {
           saveLink({ user, key: own.key, token: NO_TOKEN, name: user }, otherRealm(r));
-          setHasOther(true);
+          refreshOther();
         } else setOtherUser({ realm: otherRealm(r), user });
       })
       .catch(() => undefined);
     return () => {
       stop = true;
     };
-  }, [status, client, realm]);
+  }, [status, client, realm, refreshOther]);
 
   const login = useCallback(
     async (username: string, password: string) => {
@@ -269,14 +350,14 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
               if (g !== outGen.current) return void (await logoutStored(lk.realm));
               saveLink(other, lk.realm);
               pending.current.set(lk.realm, { link: other, login });
-              setHasOther(true);
+              refreshOther();
             })
             .catch((e) => {
               console.warn('second realm login failed', e);
               // PIN там другой (сбросили в одном мире) — переключатель всё равно покажем, PIN спросим при открытии
               if (g === outGen.current && !isDeactivated(e)) {
                 saveLink(other, lk.realm);
-                setHasOther(true);
+                refreshOther();
               }
             });
         }
@@ -302,7 +383,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
         setProgress(null);
       }
     },
-    [start],
+    [start, refreshOther],
   );
 
   const logout = useCallback(async () => {
@@ -311,7 +392,9 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     setClient(null);
     setPhoneOffer(null);
     setStatus('logged-out');
-    // один выход на оба мира
+    // один выход на оба мира и Telegram
+    setTgViewer([]);
+    const tgOut = disconnectTg();
     gen.current += 1;
     outGen.current += 1;
     pending.current.clear();
@@ -321,7 +404,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     const o = otherRealm();
     // второй мир первым: его сеанс снимается сразу, и выход текущего уже отпишет push браузера
     const other = hasMcRealm() ? logoutStored(o).then(() => forgetLink(o)) : Promise.resolve();
-    await Promise.all([other, doLogout(c)]);
+    await Promise.all([other, doLogout(c), tgOut]);
   }, []);
 
   const switchRealm = useCallback(
@@ -344,7 +427,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       setPhoneOffer(null);
       setRealm(r);
       setRealmState(r);
-      setHasOther(true);
+      refreshOther();
       history.replaceState(null, '', '/#/');
       window.dispatchEvent(new HashChangeEvent('hashchange'));
       try {
@@ -373,7 +456,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
         setProgress(null);
       }
     },
-    [start],
+    [start, refreshOther],
   );
 
   const unlockOther = useCallback(

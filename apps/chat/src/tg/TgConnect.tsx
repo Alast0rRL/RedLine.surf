@@ -132,7 +132,7 @@ export function TgConnect() {
               <>
                 <p className="settings-card__text">{step.app ? 'Код пришёл в Telegram на другом устройстве (чат «Telegram»).' : 'Код придёт по SMS.'}</p>
                 <form className="stack" onSubmit={signIn} noValidate>
-                  <Field label="Код" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} disabled={busy} autoFocus />
+                  <Field label="Код" name="code" type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} disabled={busy} autoFocus />
                   {error && <p className="rl-hint rl-hint--error" role="alert">{error}</p>}
                   <Button variant="primary" type="submit" busy={busy} disabled={code.length < 5}>Войти</Button>
                   <Button variant="ghost" type="button" disabled={busy} onClick={() => { setStep({ kind: 'phone' }); setError(null); }}>Другой номер</Button>

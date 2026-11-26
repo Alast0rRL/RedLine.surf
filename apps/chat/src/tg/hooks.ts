@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from 'react';
-import { onTgChange, onTgMessage, onTgRead, resumeTg, tgErrorText } from './client';
+import { onTgChange, onTgMessage, onTgRead, onTgWipe, resumeTg, tgErrorText } from './client';
 import { loadDialogs, msgPreview, tgAvatar, type TgDialog } from './data';
 
 /** Перерисовка при входе/выходе и новых сообщениях. */
@@ -13,6 +13,8 @@ type Ready = { state: 'loading' } | { state: 'ready' } | { state: 'error'; error
 
 /** Подключиться к уже вошедшему аккаунту (один раз на запуск приложения). */
 let resumed: Promise<unknown> | null = null;
+// после стирания сессии TG старый «уже подключались» не годится
+onTgWipe(() => { resumed = null; });
 export function useTgReady(): [Ready, () => void] {
   const [ready, setReady] = useState<Ready>({ state: 'loading' });
   const [attempt, retry] = useReducer((x: number) => x + 1, 0);

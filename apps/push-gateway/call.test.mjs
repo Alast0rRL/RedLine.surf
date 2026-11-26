@@ -18,6 +18,8 @@ const LIVEKIT_URL = 'wss://lk.redline.surf';
 const CALL_ID = 'call-abc';
 const PARTY = 'tab-alice';
 const BODY = { roomId: ROOM, callId: CALL_ID, party: PARTY };
+// party в клиенте — crypto.randomUUID() (36 символов): должен проходить
+const UUID_PARTY = '3f2b8c1e-9a4d-4e6b-8f1a-2c3d4e5f6a7b';
 const sha256hex = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 let hs, gw, offGw, base, offBase, hsUrl, whoamiCalls = 0;
@@ -116,7 +118,7 @@ test('неверные callId и party отклоняются', async () => {
     { roomId: ROOM, callId: CALL_ID },
     { ...BODY, party: '' },
     { ...BODY, party: 'tab/1' },
-    { ...BODY, party: 'x'.repeat(33) },
+    { ...BODY, party: 'x'.repeat(65) },
   ];
   for (const bad of badBodies) {
     const r = await call('POST', '/api/call/token', bad, 'tokAlice');
@@ -202,4 +204,9 @@ test('префикс mc — отдельный мир, чужие пути не 
 
   const api = createCallApi({ homeserverUrl: hsUrl, prefix: '/api/call/', realm: 'family' });
   assert.equal(await api({}, {}, new URL('http://gateway/api/phone/bind')), false);
+});
+
+test('party в виде UUID (как шлёт клиент) принимается', async () => {
+  const r = await call('POST', '/api/call/token', { ...BODY, party: UUID_PARTY }, 'tokAlice');
+  assert.equal(r.status, 200);
 });

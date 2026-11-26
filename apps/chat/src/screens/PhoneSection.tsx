@@ -2,8 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { useClient } from '../state/MatrixContext';
 import { bindPhone, getBoundPhone, normalizePhone, unbindPhone, verifyPin } from '../lib/phone';
-import { loadLink, PIN_MAX, PIN_HINT, pinOk } from '../lib/pin';
+import { loadLink, PIN_HINT, pinOk } from '../lib/pin';
 import { Button, Card, Field, Icon, toast } from '../components/ui';
+import { PinInput } from '../components/PinInput';
 
 /** Настройки: вход по номеру телефона и PIN (только для тех, кто входит по ссылке). */
 export function PhoneSection() {
@@ -81,19 +82,13 @@ export function PhoneSection() {
             onChange={(e) => setPhone(e.target.value)}
             disabled={busy}
           />
-          <Field
+          <PinInput
             label="Ваш PIN"
             hint={PIN_HINT}
             name="pin"
-            type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={PIN_MAX}
-            autoComplete="off"
-            className="pin-input"
             value={pin}
             error={error}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_MAX))}
+            onChange={(e) => setPin(e.target.value)}
             disabled={busy}
           />
           <Button type="submit" variant="primary" busy={busy} disabled={busy || !phone.trim() || !pinOk(pin)}>

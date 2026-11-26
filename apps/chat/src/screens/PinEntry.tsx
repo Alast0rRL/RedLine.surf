@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { friendlyError } from '../lib/account';
 import { loadConfig } from '../config';
-import { ACCOUNT_DELETED, forgetLink, linkState, PIN_MAX, PIN_HINT, pinOk, type LinkState, type PersonalLink } from '../lib/pin';
+import { ACCOUNT_DELETED, forgetLink, linkState, PIN_HINT, pinOk, type LinkState, type PersonalLink } from '../lib/pin';
 import { useMatrix } from '../state/MatrixContext';
-import { Button, Field, RedLines } from '../components/ui';
+import { Button, RedLines } from '../components/ui';
+import { PinInput } from '../components/PinInput';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 type ScreenState = 'checking' | 'network-error' | LinkState;
@@ -110,20 +111,15 @@ export function PinEntry({ link }: { link: PersonalLink }) {
         {!deleted && (state === 'create' || state === 'enter') && (
           <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
             <p className="login__note">Привет, {link.name}!</p>
-            <Field
+            <PinInput
               name="pin"
               label={state === 'create' ? 'Придумай PIN' : 'Введи PIN'}
               labelHint={state === 'create' ? `${PIN_HINT}. Запомни его: PIN нужен для входа на других устройствах` : PIN_HINT}
-              type={state === 'create' ? 'text' : 'password'}
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={PIN_MAX}
-              autoComplete="off"
+              reveal={state === 'create'}
               autoFocus
-              className="pin-input"
               value={pin}
               error={shownError || null}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_MAX))}
+              onChange={(e) => setPin(e.target.value)}
               disabled={busy}
             />
             <Button

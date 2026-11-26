@@ -11,6 +11,7 @@ import { disablePush, enablePush, getPushState, type PushState } from '../lib/pu
 import { switchToPin } from '../lib/switchToPin';
 import { getBoundPhone, normalizePhone } from '../lib/phone';
 import { Avatar, Button, Card, Field, Icon, Modal, toast, type IconName } from '../components/ui';
+import { PinInput } from '../components/PinInput';
 import { setThemeMode, useThemeMode, type ThemeMode } from '../lib/theme';
 import { PhoneSection } from './PhoneSection';
 import { MinecraftSection } from './MinecraftSection';
@@ -245,7 +246,6 @@ function SwitchToPinSection() {
   }
 
   const lost = state === 'needs-unlock';
-  const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
 
   return (
     <Card solid className="settings-card">
@@ -267,8 +267,8 @@ function SwitchToPinSection() {
         <form className="stack" onSubmit={(e) => void submit(e)} noValidate>
           <Field label="Текущий пароль" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} />
           <Field label="Номер телефона" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+7 900 123-45-67" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={busy} />
-          <Field label="Новый PIN" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" hint={`${PIN_HINT}. Запомните его`} value={pin} onChange={(e) => setPin(digits(e.target.value))} disabled={busy} />
-          <Field label="PIN ещё раз" name="pin2" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_MAX} autoComplete="off" className="pin-input" value={pin2} onChange={(e) => setPin2(digits(e.target.value))} disabled={busy} />
+          <PinInput label="Новый PIN" name="pin" hint={`${PIN_HINT}. Запомните его`} value={pin} onChange={(e) => setPin(e.target.value)} disabled={busy} />
+          <PinInput label="PIN ещё раз" name="pin2" value={pin2} onChange={(e) => setPin2(e.target.value)} disabled={busy} />
           {lost && <p className="rl-hint rl-hint--error">Старые сообщения на этом устройстве пропадут.</p>}
           {error && <p className="rl-hint rl-hint--error" role="alert">{error}</p>}
           <Button type="submit" variant="primary" size="lg" block busy={busy}>Перейти</Button>

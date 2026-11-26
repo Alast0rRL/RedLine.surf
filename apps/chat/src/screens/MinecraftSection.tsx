@@ -3,11 +3,10 @@ import { hasMcRealm } from '../config';
 import { friendlyError } from '../lib/account';
 import { logoutStored } from '../lib/matrix';
 import { getBindStatus, linkMinecraft, NEED_NICK_PIN, normalizeLogin, unlinkMinecraft, type BindStatus } from '../lib/phone';
-import { forgetLink, loadLink, PIN_HINT, PIN_MAX, pinOk, saveLink } from '../lib/pin';
+import { forgetLink, loadLink, PIN_HINT, pinOk, saveLink } from '../lib/pin';
 import { useClient, useMatrix } from '../state/MatrixContext';
 import { Button, Card, Field, Modal, toast } from '../components/ui';
-
-const digits = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
+import { PinInput } from '../components/PinInput';
 
 /**
  * Настройки семьи: свой ник Minecraft. Роль «Minecraft» выдаёт админ в «Людях»; после связки
@@ -113,35 +112,23 @@ export function MinecraftSection() {
             }}
             disabled={busy}
           />
-          <Field
+          <PinInput
             label="Ваш PIN"
             name="mc-pin"
-            type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={PIN_MAX}
-            autoComplete="off"
-            className="pin-input"
             hint="Тот же, что для входа сюда: он станет PIN и для ника"
             value={pin}
             error={needNickPin ? null : error}
-            onChange={(e) => setPin(digits(e.target.value))}
+            onChange={(e) => setPin(e.target.value)}
             disabled={busy}
           />
           {needNickPin && (
-            <Field
+            <PinInput
               label={`PIN от ника ${nick.trim()}`}
               name="mc-oldpin"
               autoFocus
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={PIN_MAX}
-              autoComplete="off"
-              className="pin-input"
               value={nickPin}
               error={error}
-              onChange={(e) => setNickPin(digits(e.target.value))}
+              onChange={(e) => setNickPin(e.target.value)}
               disabled={busy}
             />
           )}
