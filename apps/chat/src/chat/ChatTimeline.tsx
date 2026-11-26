@@ -220,6 +220,24 @@ export function ChatTimeline({ backend, state, onReply, onEdit, highlight = null
     if (!state.loadOlder()) loadingOlderRef.current = false;
   };
 
+  // Лента не заполняет экран (только что принятый или новый чат): прокручивать нечего, onScroll не сработает —
+  // догружаем историю сами, пока экран не заполнится или не дойдём до начала переписки.
+  // Предохранитель: 8 страниц подряд без новых видимых сообщений (служебные события, ошибки сети) — дальше кнопкой.
+  const autoFill = useRef({ count: -1, tries: 0 });
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || state.messages === null || state.loadingOlder || state.atStart) return;
+    if (el.scrollHeight > el.clientHeight + 300) return;
+    const t = autoFill.current;
+    if (t.count !== messages.length) {
+      t.count = messages.length;
+      t.tries = 0;
+    }
+    if (t.tries >= 8) return;
+    t.tries += 1;
+    loadOlder();
+  });
+
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;
