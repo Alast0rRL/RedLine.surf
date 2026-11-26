@@ -102,25 +102,6 @@ export async function loadDialogs(limit = 100): Promise<TgDialog[]> {
   return out;
 }
 
-/** Последние сообщения (или более старые, чем beforeId) — по возрастанию даты. */
-export async function loadHistory(peerId: number, beforeId?: number, limit = 50): Promise<TgMsg[]> {
-  const tg = await getTg();
-  const page = await tg.getHistory(peerId, { limit, ...(beforeId ? { offset: { id: beforeId, date: 0 } } : {}) });
-  return page.map(toMsg).reverse();
-}
-
-export async function loadChatTitle(peerId: number): Promise<{ name: string; group: boolean }> {
-  const tg = await getTg();
-  const peer = await tg.getPeer(peerId);
-  rememberPhoto(peer);
-  return { name: peer.displayName, group: peer.type === 'chat' && peer.chatType !== 'channel' };
-}
-
-export async function sendText(peerId: number, text: string): Promise<TgMsg> {
-  const tg = await getTg();
-  return toMsg(await tg.sendText(peerId, text));
-}
-
 /** Отметить прочитанным до сообщения maxId (или всё) и обнулить счётчик в списке. */
 export async function markRead(peerId: number, maxId?: number): Promise<void> {
   const tg = await getTg();
