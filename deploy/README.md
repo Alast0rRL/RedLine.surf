@@ -137,8 +137,10 @@ LIVEKIT_API_SECRET=<секрет из панели LiveKit>
 
 `LIVEKIT_API_KEY` и `LIVEKIT_API_SECRET` — пара из панели LiveKit, это настоящие секреты:
 только `.env` на сервере, в репозиторий и в браузер их не писать. `LIVEKIT_URL` — адрес
-WebSocket-сервера, `LIVEKIT_ORIGINS` — те же адреса через пробел для `connect-src` в CSP
-(и `https:`, и `wss:`).
+WebSocket-сервера. `LIVEKIT_ORIGINS` — адреса для `connect-src` в CSP: обязательно указать
+оба — и `https://`, и `wss://`, через пробел, например `"https://lk.redline.surf wss://lk.redline.surf"`.
+Непустой `LIVEKIT_ORIGINS` также включает кнопки звонков в чате: без него `config.json`
+содержит `"calls": false` и кнопки скрыты.
 
 ## Боты (Мари)
 

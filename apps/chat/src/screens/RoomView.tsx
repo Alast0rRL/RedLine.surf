@@ -5,6 +5,7 @@ import { navigate } from '../hooks/useHashRoute';
 import { isDirectRoom } from '../hooks/useRoomList';
 import { setCurrentRoom } from '../lib/notifications';
 import { isBotUser } from '../bots/registry';
+import { callsEnabled } from '../config';
 import { useCall, start as startCall } from '../call/CallManager';
 import { Avatar, Button, Icon } from '../components/ui';
 import { ChatTimeline } from '../chat/ChatTimeline';
@@ -43,7 +44,7 @@ function RoomScreen({ client, room, encrypted }: { client: MatrixClient; room: R
 
   const isDm = isDirectRoom(client, room);
   const peerId = isDm ? room.getAvatarFallbackMember()?.userId : undefined;
-  const canCall = !!peerId && !isBotUser(peerId);
+  const canCall = callsEnabled() && !!peerId && !isBotUser(peerId);
   const callBusy = useCall().phase !== 'idle';
   const typing = state.typing;
 

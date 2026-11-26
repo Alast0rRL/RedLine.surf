@@ -6,7 +6,7 @@ set -eu
 : "${SERVER_NAME:?SERVER_NAME is required}"
 
 # Проверка — до генерации: exit внутри $(...) завершил бы только подоболочку.
-for v in "$HOMESERVER_URL" "$SERVER_NAME" "${PUSH_GATEWAY_URL:-}" "${VAPID_PUBLIC_KEY:-}" "${BOT_USERS:-}" "${MC_HOMESERVER_URL:-}" "${MC_SERVER_NAME:-}" "${TELEGRAM_API_ID:-}" "${TELEGRAM_API_HASH:-}"; do
+for v in "$HOMESERVER_URL" "$SERVER_NAME" "${PUSH_GATEWAY_URL:-}" "${VAPID_PUBLIC_KEY:-}" "${BOT_USERS:-}" "${MC_HOMESERVER_URL:-}" "${MC_SERVER_NAME:-}" "${TELEGRAM_API_ID:-}" "${TELEGRAM_API_HASH:-}" "${LIVEKIT_ORIGINS:-}"; do
   case "$v" in
     *'"'* | *'\'*) echo "40-redline-config: недопустимый символ в значении: $v" >&2; exit 1 ;;
   esac
@@ -30,6 +30,12 @@ if [ -n "${MC_HOMESERVER_URL:-}" ]; then
   \"mc\": { \"homeserverUrl\": $(json_str "$MC_HOMESERVER_URL"), \"serverName\": $(json_str "${MC_SERVER_NAME:-mc.redline.surf}") }"
 fi
 
+# Звонки: адреса LiveKit для CSP заданы — кнопки звонков включены
+calls=false
+if [ -n "${LIVEKIT_ORIGINS:-}" ]; then
+  calls=true
+fi
+
 # Telegram: ключи приложения с my.telegram.org; без них вкладки Telegram нет
 tg=""
 if [ -n "${TELEGRAM_API_ID:-}" ] && [ -n "${TELEGRAM_API_HASH:-}" ]; then
@@ -46,7 +52,8 @@ cat > /usr/share/nginx/html/config.json <<EOF
   "serverName": $(json_str "$SERVER_NAME"),
   "pushGatewayUrl": $(json_str "${PUSH_GATEWAY_URL:-}"),
   "vapidPublicKey": $(json_str "${VAPID_PUBLIC_KEY:-}"),
-  "botUsers": [$bots]$mc$tg
+  "botUsers": [$bots],
+  "calls": $calls$mc$tg
 }
 EOF
 echo "40-redline-config: config.json для $SERVER_NAME готов"

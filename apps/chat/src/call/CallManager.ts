@@ -50,6 +50,8 @@ interface Session {
   ending: boolean;
   activating: boolean;
   connecting?: Promise<void>;
+  /** Своя комната сессии: устаревшая сессия не должна закрывать чужую. */
+  room?: LiveKitRoom;
   startedAt?: number;
   inviteTimer?: number;
   graceTimer?: number;
@@ -308,6 +310,7 @@ function clearTimers(s: Session): void {
 function teardownRoom(r: LiveKitRoom | null = room): void {
   if (!r) return;
   if (room === r) room = null;
+  if (session?.room === r) session.room = undefined;
   const off = roomListeners.get(r);
   if (off) {
     off();
@@ -330,7 +333,8 @@ function cleanup(s: Session): void {
   clearTimers(s);
   stopRinging();
   if (session === s) session = null;
-  teardownRoom();
+  teardownRoom(s.room ?? (session === null ? room : null));
+  s.room = undefined;
   releaseWakeLock(s);
 }
 
@@ -431,12 +435,13 @@ function clearConnectWatchdog(s: Session): void {
 }
 
 function armConnectWatchdog(s: Session): void {
-  if (!isCurrent(s) || !s.accepted) return;
+  // Таймер нужен только до первого соединения: позже за-peer'ы следит peer-gone.
+  if (!isCurrent(s) || !s.accepted || s.startedAt) return;
   if (hasPeer(room)) {
     clearConnectWatchdog(s);
     return;
   }
-  clearConnectWatchdog(s);
+  if (s.watchdogTimer !== undefined) return;
   // Если после accept собеседник не появился — завершаем, а не висим в «Соединение…».
   s.watchdogTimer = window.setTimeout(() => {
     if (!isCurrent(s)) return;
@@ -453,19 +458,23 @@ function clearReconnectWatchdog(s: Session): void {
   s.reconnectWatchdogTimer = undefined;
 }
 
+function armReconnectWatchdog(s: Session): void {
+  if (s.reconnectWatchdogTimer !== undefined) return;
+  // 60 с непрерывного переподключения — предел, дальше звонок бесполезен.
+  s.reconnectWatchdogTimer = window.setTimeout(() => {
+    if (!isCurrent(s)) return;
+    if (state.phase !== 'reconnecting' || hasPeer(room)) {
+      clearReconnectWatchdog(s);
+      return;
+    }
+    finish('Связь потеряна', { s, signal: true });
+  }, RECONNECT_LIMIT_MS);
+}
+
 function enterReconnecting(s: Session): void {
   if (!isCurrent(s)) return;
   if (state.phase !== 'reconnecting') s.reconnectStart = Date.now();
-  if (s.reconnectWatchdogTimer === undefined) {
-    s.reconnectWatchdogTimer = window.setTimeout(() => {
-      if (!isCurrent(s)) return;
-      if (state.phase !== 'reconnecting' || hasPeer(room)) {
-        clearReconnectWatchdog(s);
-        return;
-      }
-      finish('Связь потеряна', { s, signal: true });
-    }, RECONNECT_LIMIT_MS);
-  }
+  armReconnectWatchdog(s);
   update({ phase: 'reconnecting' });
 }
 
@@ -478,7 +487,8 @@ function markActive(s: Session): void {
     s.graceTimer = undefined;
     s.peerGone = false;
   }
-  const patch: Partial<CallState> = { phase: 'active' };
+  s.retryRequested = false;
+  const patch: Partial<CallState> = { phase: 'active', error: undefined };
   // Таймер звонка не сбрасываем при переподключениях.
   if (!s.startedAt) {
     s.startedAt = Date.now();
@@ -488,7 +498,8 @@ function markActive(s: Session): void {
   requestWakeLock();
 }
 
-function maybePeerGone(s: Session, r: LiveKitRoom): void {
+function maybePeerGone(s: Session, r: LiveKitRoom, identity?: string): void {
+  if (identity && isOwnIdentity(identity)) return;
   if (s.peerGone || hasPeer(r)) return;
   if (state.phase !== 'active' && state.phase !== 'connecting' && state.phase !== 'reconnecting') return;
   s.peerGone = true;
@@ -511,43 +522,36 @@ function scheduleReconnect(s: Session, delay?: number): void {
 }
 
 function beginReconnect(s: Session): void {
-  if (!isCurrent(s) || s.reconnecting) return;
+  if (!isCurrent(s) || s.reconnecting || s.reconnectTimer !== undefined) return;
   s.reconnectAttempts = 0;
   s.reconnectStart = Date.now();
-  startReconnectWatchdog(s);
+  armReconnectWatchdog(s);
   scheduleReconnect(s, RECONNECT_BACKOFF_MS[0]);
-}
-
-function startReconnectWatchdog(s: Session): void {
-  if (s.reconnectWatchdogTimer !== undefined) return;
-  s.reconnectWatchdogTimer = window.setTimeout(() => {
-    if (!isCurrent(s)) return;
-    if (state.phase !== 'reconnecting' || hasPeer(room)) {
-      clearReconnectWatchdog(s);
-      return;
-    }
-    finish('Связь потеряна', { s, signal: true });
-  }, RECONNECT_LIMIT_MS);
 }
 
 /** Online и return to tab ускоряют retry, но не создают параллельных попыток. */
 function retryNow(): void {
   const s = session;
   if (!s || !isCurrent(s)) return;
-  if (state.phase !== 'reconnecting' && s.reconnectTimer === undefined && !s.reconnecting) return;
   if (room && room.state === ConnectionState.Connected) {
-    clearReconnectWatchdog(s);
+    if (state.phase === 'reconnecting') {
+      clearReconnectWatchdog(s);
+      update({ phase: s.accepted ? 'connecting' : 'outgoing' });
+      armConnectWatchdog(s);
+    }
     return;
   }
+  if (state.phase === 'idle' || state.phase === 'ended' || state.phase === 'incoming') return;
+  if (!s.reconnecting && state.phase !== 'reconnecting') enterReconnecting(s);
   if (s.reconnectTimer !== undefined) {
     window.clearTimeout(s.reconnectTimer);
     s.reconnectTimer = undefined;
   }
-  if (!s.reconnecting && Date.now() - s.reconnectStart >= RECONNECT_LIMIT_MS) {
+  if (!s.reconnecting && !s.connecting && Date.now() - s.reconnectStart >= RECONNECT_LIMIT_MS) {
     finish('Связь потеряна', { s, signal: true });
     return;
   }
-  if (s.reconnecting) {
+  if (s.reconnecting || s.connecting) {
     s.retryRequested = true;
     return;
   }
@@ -557,10 +561,15 @@ function retryNow(): void {
 async function reconnect(s: Session): Promise<void> {
   s.reconnectTimer = undefined;
   if (!isCurrent(s) || s.reconnecting) return;
+  if (s.connecting) {
+    s.retryRequested = true;
+    return;
+  }
   if (Date.now() - s.reconnectStart >= RECONNECT_LIMIT_MS) {
     finish('Связь потеряна', { s, signal: true });
     return;
   }
+  enterReconnecting(s);
   s.reconnecting = true;
   let failure: unknown;
   try {
@@ -582,11 +591,16 @@ async function reconnect(s: Session): Promise<void> {
   s.retryRequested = false;
   if (failure !== undefined) {
     if (failure instanceof Error && failure.message === 'Нет доступа к микрофону') fail(failure.message, s);
-    else scheduleReconnect(s);
+    else {
+      armConnectWatchdog(s);
+      scheduleReconnect(s);
+    }
   } else if (hasPeer(room)) {
     markActive(s);
   } else {
+    clearReconnectWatchdog(s);
     update({ phase: s.accepted ? 'connecting' : 'outgoing' });
+    armConnectWatchdog(s);
   }
   // Событие сети пришло во время попытки — сразу после неё пробуем ещё раз.
   if (retryRequested) window.setTimeout(() => retryNow(), 0);
@@ -615,15 +629,17 @@ function wireRoom(s: Session, r: LiveKitRoom): void {
     s.peerGone = false;
     markActive(s);
   };
-  const onParticipantDisconnected = () => {
+  const onParticipantDisconnected = (participant: { identity: string }) => {
     if (!isCurrent(s)) return;
     bumpTracks();
-    maybePeerGone(s, r);
+    maybePeerGone(s, r, participant.identity);
   };
-  const onTrackSubscribed = (track: Track, _publication: unknown, participant: { identity: string }) => {
+  const onTrackSubscribed = (track: Track, publication: { isMuted?: boolean }, participant: { identity: string }) => {
     if (!isCurrent(s)) return;
     bumpTracks();
-    if (track.kind === Track.Kind.Audio && !isOwnIdentity(participant.identity)) markActive(s);
+    if (track.kind !== Track.Kind.Audio || isOwnIdentity(participant.identity)) return;
+    if (track.isMuted || publication?.isMuted) return;
+    if (hasSubscribedAudio(room)) markActive(s);
   };
   const onQuality = (quality: ConnectionQuality, participant: { identity: string }) => {
     if (!isCurrent(s) || participant.identity !== r.localParticipant.identity) return;
@@ -712,6 +728,7 @@ async function connectRoom(s: Session, url: string, token: string): Promise<void
         nextRetryDelayInMs: (ctx) => ctx.elapsedMs > 60000 ? null : Math.min(300 * 2 ** ctx.retryCount, 3000),
       },
     });
+    s.room = r;
     if (isCurrent(s)) room = r;
     wireRoom(s, r);
     try {
@@ -729,13 +746,17 @@ async function connectRoom(s: Session, url: string, token: string): Promise<void
       // Устаревшая сессия не должна трогать комнату новой — только свой экземпляр.
       if (!isCurrent(s)) {
         teardownRoom(r);
+        s.room = undefined;
         return;
       }
-      if (previous && previous !== r) teardownRoom(previous);
+      if (previous && previous !== r && room === previous) teardownRoom(previous);
+      update({ audioBlocked: !r.canPlaybackAudio });
       bumpTracks();
+      if (s.retryRequested) window.setTimeout(() => retryNow(), 0);
     } catch (e) {
       // Гонка таймаута не отменяет r.connect — закрываем только нашу комнату.
       teardownRoom(r);
+      s.room = undefined;
       throw e;
     }
   })();
@@ -748,8 +769,10 @@ async function connectRoom(s: Session, url: string, token: string): Promise<void
 }
 
 async function enableMedia(s: Session): Promise<void> {
-  const r = room;
-  if (!r || r.state !== ConnectionState.Connected) throw new Error('Не удалось подключиться к звонку');
+  const r = s.room ?? room;
+  if (!isCurrent(s) || !r || room !== r || r.state !== ConnectionState.Connected) {
+    throw new Error('Не удалось подключиться к звонку');
+  }
   try {
     const mic = await r.localParticipant.setMicrophoneEnabled(true);
     if (!isCurrent(s)) return;
@@ -770,15 +793,38 @@ async function enableMedia(s: Session): Promise<void> {
   bumpTracks();
 }
 
+/** Accept может прийти до завершения warmup — используем уже идущее подключение. */
+async function ensureRoomConnected(s: Session): Promise<void> {
+  if (s.connecting) await s.connecting;
+  if (!isCurrent(s)) return;
+  const r = s.room ?? room;
+  if (r && room === r && r.state === ConnectionState.Connected) return;
+  const tokens = await fetchToken(s.roomId, s.callId);
+  if (!isCurrent(s)) return;
+  await connectRoom(s, tokens.url, tokens.token);
+}
+
 async function activateAccepted(s: Session): Promise<void> {
   if (!isCurrent(s) || s.activating) return;
-  if (!room || room.state !== ConnectionState.Connected) return;
   s.activating = true;
   try {
+    if (s.reconnecting || s.reconnectTimer !== undefined) {
+      armConnectWatchdog(s);
+      return;
+    }
+    await ensureRoomConnected(s);
+    if (!isCurrent(s)) return;
     await enableMedia(s);
-    if (isCurrent(s) && hasSubscribedAudio(room)) markActive(s);
+    if (!isCurrent(s)) return;
+    if (hasSubscribedAudio(room)) markActive(s);
+    else armConnectWatchdog(s);
   } catch (e) {
-    if (isCurrent(s)) fail(errorText(e), s);
+    if (!isCurrent(s)) return;
+    if (e instanceof Error && e.message === 'Нет доступа к микрофону') fail(e.message, s);
+    else {
+      armConnectWatchdog(s);
+      if (!s.reconnecting && s.reconnectTimer === undefined) beginReconnect(s);
+    }
   } finally {
     s.activating = false;
   }
@@ -786,12 +832,17 @@ async function activateAccepted(s: Session): Promise<void> {
 
 async function warmup(s: Session): Promise<void> {
   try {
-    const tokens = await fetchToken(s.roomId);
+    const tokens = await fetchToken(s.roomId, s.callId);
     if (!isCurrent(s)) return;
     await connectRoom(s, tokens.url, tokens.token);
+    if (!isCurrent(s)) return;
     if (s.accepted) await activateAccepted(s);
   } catch (e) {
-    if (isCurrent(s)) fail(errorText(e), s);
+    if (!isCurrent(s)) return;
+    // До accept обрыв не должен срывать звонок: ответ всё ещё может прийти.
+    enterReconnecting(s);
+    beginReconnect(s);
+    update({ error: errorText(e) });
   }
 }
 
@@ -884,7 +935,7 @@ function onSignal(ev: CallSignalEvent): void {
       && (state.phase === 'incoming' || state.phase === 'outgoing')) abort(s);
     return;
   }
-  if (s.peerId && ev.sender !== s.peerId) return;
+  if (ev.content.action !== 'accept' && s.peerId && ev.sender !== s.peerId) return;
 
   switch (ev.content.action) {
     case 'accept':
@@ -999,11 +1050,7 @@ export async function start(roomId: string, video: boolean): Promise<void> {
 
   const checkNoAnswer = () => {
     if (!isCurrent(s) || s.accepted) return;
-    // Фаза может быть connectivity/reconnecting без accept — таймер всё равно должен сработать.
-    if (state.phase !== 'outgoing') {
-      s.inviteTimer = window.setTimeout(checkNoAnswer, 1000);
-      return;
-    }
+    // Фаза connect/reconnect без accept тоже считается отсутствием ответа.
     if (matrix) {
       void sendSignal(matrix, s.roomId, { call_id: s.callId, action: 'hangup', party: PARTY })
         .catch(() => undefined);
@@ -1021,20 +1068,10 @@ export async function accept(video: boolean): Promise<void> {
   if (s.inviteTimer !== undefined) window.clearTimeout(s.inviteTimer);
   s.inviteTimer = undefined;
   update({ phase: 'connecting', video, camOn: false });
+  armConnectWatchdog(s);
+  void activateAccepted(s);
   try {
     await sendSignal(matrix, s.roomId, { call_id: s.callId, action: 'accept', video, party: PARTY });
-  } catch (e) {
-    if (isCurrent(s)) fail(errorText(e), s);
-    return;
-  }
-  if (!isCurrent(s)) return;
-  try {
-    const tokens = await fetchToken(s.roomId);
-    if (!isCurrent(s)) return;
-    await connectRoom(s, tokens.url, tokens.token);
-    if (!isCurrent(s)) return;
-    await enableMedia(s);
-    if (isCurrent(s) && hasSubscribedAudio(room)) markActive(s);
   } catch (e) {
     if (isCurrent(s)) fail(errorText(e), s);
   }
@@ -1096,5 +1133,17 @@ export async function flipCamera(): Promise<void> {
     if (isCurrent(s)) update({ error: changed ? undefined : 'Не удалось переключить камеру' });
   } catch {
     if (isCurrent(s)) update({ error: 'Не удалось переключить камеру' });
+  }
+}
+
+/** Пользовательский жест для снятия блокировки автовоспроизведения. */
+export async function startAudio(): Promise<void> {
+  const r = room;
+  if (!r) return;
+  try {
+    await r.startAudio();
+    update({ audioBlocked: false });
+  } catch {
+    /* браузер всё ещё запрещает звук */
   }
 }

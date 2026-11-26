@@ -44,6 +44,8 @@ export interface CallSignalEvent {
 }
 
 const ACTIONS: CallSignal['action'][] = ['invite', 'accept', 'reject', 'hangup', 'busy'];
+const MAX_SEEN_IDS = 500;
+const INVITE_DEBOUNCE_MS = 300;
 
 function readSignal(raw: unknown): CallSignal | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -60,7 +62,26 @@ export async function sendSignal(client: MatrixClient, roomId: string, content: 
 /** Подписка на живые сигнальные события комнаты. */
 export function subscribeSignals(client: MatrixClient, handler: (ev: CallSignalEvent) => void): () => void {
   const seen = new Set<string>();
+  const seenOrder: string[] = [];
   const pending = new Map<MatrixEvent, () => void>();
+  const pendingInvites = new Map<string, number>();
+
+  const markSeen = (id: string): boolean => {
+    if (seen.has(id)) return false;
+    if (seenOrder.length >= MAX_SEEN_IDS) {
+      const oldest = seenOrder.shift();
+      if (oldest) seen.delete(oldest);
+    }
+    seen.add(id);
+    seenOrder.push(id);
+    return true;
+  };
+
+  const cancelInvite = (callId: string): void => {
+    const timer = pendingInvites.get(callId);
+    if (timer !== undefined) window.clearTimeout(timer);
+    pendingInvites.delete(callId);
+  };
 
   const process = (event: MatrixEvent, room: MatrixRoom): void => {
     const id = event.getId();
@@ -70,20 +91,36 @@ export function subscribeSignals(client: MatrixClient, handler: (ev: CallSignalE
     if (event.getType() !== CALL_EVENT) return;
     const content = readSignal(event.getContent());
     if (!content) return;
-    if (id) seen.add(id);
+    if (id) markSeen(id);
 
     const ts = event.getTs() || Date.now();
+    // Возраст event.getLocalAge() учитывает задержку доставки и расшифровки.
+    const age = typeof event.getLocalAge === 'function' ? event.getLocalAge() : Date.now() - ts;
     // Просроченные приглашения игнорируем, чтобы не звонить по старым событиям.
-    if (content.action === 'invite' && ts + (content.lifetime ?? 60000) < Date.now()) return;
+    if (content.action === 'invite' && age > (content.lifetime ?? 60000)) return;
 
-    handler({
+    const ev: CallSignalEvent = {
       roomId: room.roomId || event.getRoomId() || '',
       sender: event.getSender() || '',
       own: !!client.getUserId() && event.getSender() === client.getUserId(),
       fromThisParty: content.party === PARTY,
       ts,
       content,
-    });
+    };
+    if (content.action === 'invite') {
+      // Ответ/отбой, пришедший в эти 300 мс, отменяет доставку приглашения.
+      cancelInvite(content.call_id);
+      const timer = window.setTimeout(() => {
+        pendingInvites.delete(content.call_id);
+        handler(ev);
+      }, INVITE_DEBOUNCE_MS);
+      pendingInvites.set(content.call_id, timer);
+      return;
+    }
+    if (content.action === 'accept' || content.action === 'reject' || content.action === 'hangup') {
+      cancelInvite(content.call_id);
+    }
+    handler(ev);
   };
 
   const onTimeline = (
@@ -113,5 +150,7 @@ export function subscribeSignals(client: MatrixClient, handler: (ev: CallSignalE
     client.off(RoomEvent.Timeline, onTimeline);
     pending.forEach((cb, event) => event.off(MatrixEventEvent.Decrypted, cb));
     pending.clear();
+    pendingInvites.forEach((timer) => window.clearTimeout(timer));
+    pendingInvites.clear();
   };
 }

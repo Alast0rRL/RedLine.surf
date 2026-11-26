@@ -10,6 +10,7 @@ import {
   getRoom,
   hangup,
   reject,
+  startAudio,
   toggleCam,
   toggleMic,
   useCall,
@@ -21,6 +22,61 @@ type Attachable = {
   attach(element: HTMLMediaElement): HTMLMediaElement;
   detach(element: HTMLMediaElement): HTMLMediaElement;
 };
+
+type Attachment = { track: Attachable; element: HTMLMediaElement };
+
+type VideoHolder = { current: Attachment | null };
+
+function detachAttachment(attachment: Attachment | null): void {
+  if (!attachment) return;
+  try {
+    attachment.track.detach(attachment.element);
+  } catch {
+    /* дорожка уже отключена */
+  }
+  if (attachment.element instanceof HTMLAudioElement) {
+    attachment.element.pause();
+    attachment.element.remove();
+  }
+}
+
+function detachAudio(elements: Map<string, HTMLAudioElement>, tracks: Map<string, Attachable>, sid: string): void {
+  const element = elements.get(sid);
+  const track = tracks.get(sid);
+  if (element && track) {
+    try {
+      track.detach(element);
+    } catch {
+      /* дорожка уже отключена */
+    }
+  }
+  element?.pause();
+  element?.remove();
+  elements.delete(sid);
+  tracks.delete(sid);
+}
+
+/** Меняем элемент только при смене дорожки: существующий <audio> переиспользуем. */
+function syncVideo(holder: VideoHolder, element: HTMLVideoElement | null, track: Attachable | null): boolean {
+  const current = holder.current;
+  if (current && (current.track !== track || current.element !== element)) {
+    detachAttachment(current);
+    holder.current = null;
+  }
+  if (track && element && !holder.current) {
+    try {
+      track.attach(element);
+      holder.current = { track, element };
+    } catch {
+      /* дорожка недоступна для воспроизведения */
+    }
+  }
+  return !!holder.current;
+}
+
+function hasLiveVideo(publication: { isMuted: boolean } | undefined, track: Track | undefined): boolean {
+  return !!track && !publication?.isMuted && !track.isMuted && track.mediaStreamTrack.readyState === 'live';
+}
 
 function statusText(state: CallState): string {
   switch (state.phase) {
@@ -40,10 +96,12 @@ export function CallOverlay() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const audioHostRef = useRef<HTMLDivElement>(null);
-  const attached = useRef<{ track: Attachable; element: HTMLMediaElement }[]>([]);
+  const audioElements = useRef(new Map<string, HTMLAudioElement>());
+  const audioTracks = useRef(new Map<string, Attachable>());
+  const remoteAttachment = useRef<Attachment | null>(null);
+  const localAttachment = useRef<Attachment | null>(null);
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
   const [hasLocalVideo, setHasLocalVideo] = useState(false);
-  const [audioBlocked, setAudioBlocked] = useState(false);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -52,77 +110,99 @@ export function CallOverlay() {
     return () => window.clearInterval(id);
   }, [state.startedAt, state.phase]);
 
-  useEffect(() => {
-    for (const { track, element } of attached.current) {
-      try {
-        track.detach(element);
-      } catch {
-        /* дорожка уже отключена */
-      }
-      if (element instanceof HTMLAudioElement) {
-        element.pause();
-        element.remove();
-      }
+  useEffect(() => () => {
+    // При размонтировании снимаем все дорожки, включая аудио в скрытом контейнере.
+    for (const sid of [...audioElements.current.keys()]) {
+      detachAudio(audioElements.current, audioTracks.current, sid);
     }
-    attached.current = [];
+    detachAttachment(remoteAttachment.current);
+    detachAttachment(localAttachment.current);
+    remoteAttachment.current = null;
+    localAttachment.current = null;
+  }, []);
 
+  useEffect(() => {
     const room = getRoom();
-    if (!room) {
+    const host = audioHostRef.current;
+    if (!room || !host) {
+      for (const sid of [...audioElements.current.keys()]) {
+        detachAudio(audioElements.current, audioTracks.current, sid);
+      }
+      detachAttachment(remoteAttachment.current);
+      detachAttachment(localAttachment.current);
+      remoteAttachment.current = null;
+      localAttachment.current = null;
       setHasRemoteVideo(false);
       setHasLocalVideo(false);
-      setAudioBlocked(false);
       return;
     }
 
-    const bind = (track: Attachable, element: HTMLMediaElement) => {
-      try {
-        track.attach(element);
-        attached.current.push({ track, element });
-      } catch {
-        /* дорожка недоступна для воспроизведения */
-      }
-    };
+    const ownId = client.getUserId();
+    const liveAudio = new Set<string>();
+    let remoteTrack: Track | undefined;
+    let remotePublication: { isMuted: boolean } | undefined;
 
-    let audioCount = 0;
-    let remoteVideo: Attachable | null = null;
     for (const participant of room.remoteParticipants.values()) {
+      // Своя вторая вкладка приходит с identity `${userId}|${party}` — не проигрываем её.
+      if (ownId && participant.identity.startsWith(`${ownId}|`)) continue;
       for (const publication of participant.audioTrackPublications.values()) {
         const track = publication.audioTrack;
-        const host = audioHostRef.current;
-        if (!track || !host) continue;
-        const element = document.createElement('audio');
-        element.autoplay = true;
-        host.appendChild(element);
-        bind(track, element);
-        audioCount += 1;
-        void element.play().then(() => setAudioBlocked(false)).catch(() => setAudioBlocked(true));
+        if (!track) continue;
+        const sid = String(publication.trackSid || track.sid);
+        liveAudio.add(sid);
+        let element = audioElements.current.get(sid);
+        if (!element) {
+          element = document.createElement('audio');
+          element.autoplay = true;
+          host.appendChild(element);
+          audioElements.current.set(sid, element);
+        }
+        const previous = audioTracks.current.get(sid);
+        if (previous !== track) {
+          if (previous) {
+            try {
+              previous.detach(element);
+            } catch {
+              /* дорожка уже отключена */
+            }
+          }
+          try {
+            track.attach(element);
+            audioTracks.current.set(sid, track);
+          } catch {
+            /* дорожка недоступна для воспроизведения */
+          }
+        }
+        void element.play().catch(() => undefined);
       }
-      const track = participant.getTrackPublication(Track.Source.Camera)?.videoTrack;
-      if (track && !remoteVideo) remoteVideo = track;
+      const camera = participant.getTrackPublication(Track.Source.Camera);
+      const candidate = camera?.videoTrack;
+      if (!remoteTrack && candidate && hasLiveVideo(camera, candidate)) {
+        remoteTrack = candidate;
+        remotePublication = camera;
+      }
     }
 
-    const remoteElement = remoteVideoRef.current;
-    if (remoteVideo && remoteElement) bind(remoteVideo, remoteElement);
-    setHasRemoteVideo(!!remoteVideo && !!remoteElement);
-
-    const localTrack = room.localParticipant.getTrackPublication(Track.Source.Camera)?.videoTrack;
-    const localElement = localVideoRef.current;
-    if (localTrack && localElement) {
-      localElement.muted = true;
-      bind(localTrack, localElement);
+    for (const sid of [...audioElements.current.keys()]) {
+      if (!liveAudio.has(sid)) detachAudio(audioElements.current, audioTracks.current, sid);
     }
-    setHasLocalVideo(!!localTrack && !!localElement);
-    if (!audioCount) setAudioBlocked(false);
-  }, [state.tracksVersion, state.phase]);
+
+    const remoteVisible = hasLiveVideo(remotePublication, remoteTrack)
+      && syncVideo(remoteAttachment, remoteVideoRef.current, remoteTrack ?? null);
+    setHasRemoteVideo(remoteVisible);
+
+    const localCamera = room.localParticipant.getTrackPublication(Track.Source.Camera);
+    const localTrack = localCamera?.videoTrack;
+    const localVisible = hasLiveVideo(localCamera, localTrack)
+      && syncVideo(localAttachment, localVideoRef.current, localTrack ?? null);
+    if (localVideoRef.current) localVideoRef.current.muted = true;
+    setHasLocalVideo(localVisible);
+  }, [state.tracksVersion, state.phase, client]);
 
   const enableSound = useCallback(() => {
-    const room = getRoom();
-    if (!room) return;
-    void room.startAudio().catch(() => undefined);
-    const plays = attached.current
-      .filter(({ element }) => element instanceof HTMLAudioElement)
-      .map(({ element }) => element.play().catch(() => undefined));
-    void Promise.all(plays).then(() => setAudioBlocked(false));
+    void startAudio();
+    const plays = [...audioElements.current.values()].map((element) => element.play().catch(() => undefined));
+    void Promise.all(plays);
   }, []);
 
   if (state.phase === 'idle') return null;
@@ -150,7 +230,7 @@ export function CallOverlay() {
         <p className="call__status" role="status">{statusText(state)}</p>
         {showQuality && <span className="call__badge">Плохая связь</span>}
         {state.error && <p className="call__error" role="alert">{state.error}</p>}
-        {audioBlocked && state.phase !== 'ended' && (
+        {state.audioBlocked && state.phase !== 'ended' && (
           <Button className="call__sound" onClick={enableSound}>Включить звук</Button>
         )}
       </div>

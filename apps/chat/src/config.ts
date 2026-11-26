@@ -14,6 +14,8 @@ export interface AppConfig {
   vapidPublicKey: string;
   /** Пользователи-боты: их сообщения рисуются как карточки бота */
   botUsers: string[];
+  /** Кнопки звонков показываются только когда заданы адреса LiveKit */
+  calls: boolean;
 }
 
 /** Мир: сервер семьи или отдельный сервер Minecraft (своя база, общей связи нет). */
@@ -83,6 +85,7 @@ export async function loadConfig(): Promise<AppConfig> {
     pushGatewayUrl: raw.pushGatewayUrl ?? '',
     vapidPublicKey: raw.vapidPublicKey ?? '',
     botUsers: (raw.botUsers ?? []).filter(Boolean),
+    calls: raw.calls === true,
   };
   mc = raw.mc?.homeserverUrl && raw.mc.serverName
     ? { homeserverUrl: raw.mc.homeserverUrl.replace(/\/+$/, ''), serverName: raw.mc.serverName }
@@ -94,6 +97,11 @@ export async function loadConfig(): Promise<AppConfig> {
 
 export function telegramConfig(): { apiId: number; apiHash: string } | null {
   return telegram;
+}
+
+/** Звонки включены на сервере: mc-мир наследует флаг основного config.json. */
+export function callsEnabled(): boolean {
+  return current().calls;
 }
 
 export function getConfig(): AppConfig {
